@@ -80,6 +80,8 @@ export class GameView {
       panel.el.classList.toggle('is-wide', !!box && box.innerW / box.innerH >= 1.25);
     }
     placeRect(this.menuSlot, L.menu);
+    // The stage changed size: re-decide whether the dice still fit next to the prompt.
+    this.stage.fitDice();
   }
 
   render(vs: GameState): void {

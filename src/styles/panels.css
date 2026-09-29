@@ -78,7 +78,7 @@
   line-height: 1.15;
   color: var(--ink);
 }
-.pp-name-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-name-t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pp-cpu {
   flex: none;
   padding: 0 0.45em;
@@ -101,6 +101,7 @@
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .pp-coin { width: 0.85em; height: 0.85em; flex: none; }
 .pp-assets { font-size: clamp(11px, min(5.6cqw, 4.2cqh), 17px); font-weight: 700; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -108,6 +109,32 @@
 .pp-card.flash-down .pp-cash-n { animation: lr-flash-down 0.8s var(--ease-out); }
 @keyframes lr-flash-up { 0%, 40% { color: #25A55A; } 100% { color: var(--ink); } }
 @keyframes lr-flash-down { 0%, 40% { color: #D2443D; } 100% { color: var(--ink); } }
+/* Money in / out also washes the whole panel (green / red rim + tint): readable from across
+   the table without reading the number. */
+.pp-card.flash-up::after,
+.pp-card.flash-down::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: lr-wash-up 1s var(--ease-out) both;
+}
+.pp-card.flash-down::after { animation-name: lr-wash-down; }
+@keyframes lr-wash-up {
+  0% { box-shadow: inset 0 0 0 0 rgba(61, 187, 110, 0); background: rgba(61, 187, 110, 0); }
+  25% { box-shadow: inset 0 0 0 clamp(4px, 2.6cqmin, 9px) #3DBB6E; background: rgba(61, 187, 110, 0.16); }
+  100% { box-shadow: inset 0 0 0 0 rgba(61, 187, 110, 0); background: rgba(61, 187, 110, 0); }
+}
+@keyframes lr-wash-down {
+  0% { box-shadow: inset 0 0 0 0 rgba(232, 86, 79, 0); background: rgba(232, 86, 79, 0); }
+  25% { box-shadow: inset 0 0 0 clamp(4px, 2.6cqmin, 9px) #E8564F; background: rgba(232, 86, 79, 0.12); }
+  100% { box-shadow: inset 0 0 0 0 rgba(232, 86, 79, 0); background: rgba(232, 86, 79, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-card.flash-up::after,
+  .pp-card.flash-down::after { animation: none; }
+}
 
 /* Set grid: one line per color group (+ hubs). Orientation chosen in PlayerPanel.setBox. */
 .pp-sets {
@@ -160,14 +187,13 @@
 .slot-pips i { width: 20%; aspect-ratio: 1; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12); }
 .slot-star { display: grid; place-items: center; height: 100%; color: #fff; font-size: calc(var(--slot) * 0.6); line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
 
+.pp-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6cqmin 1.5cqmin; min-width: 0; }
+.pp-sub .pp-assets { flex: 0 1 auto; min-width: 0; }
 .pp-badges {
-  position: absolute;
-  top: clamp(8px, 4cqmin, 16px);
-  right: clamp(8px, 4cqmin, 16px);
+  flex: none;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1.4cqmin;
+  align-items: center;
+  gap: 1cqmin;
 }
 .pp-badges:empty { display: none; }
 .bdg {
@@ -198,6 +224,23 @@
   text-shadow: 0 2px 0 #fff, 0 0 10px rgba(255, 255, 255, 0.9);
 }
 .pp-float.is-down { color: #D2443D; }
+.pp-float {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.pp-float-note {
+  margin-top: 0.12em;
+  padding: 0.12em 0.5em;
+  border-radius: var(--r-pill);
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: max(12px, 0.36em);
+  text-shadow: none;
+}
+.pp-float.is-up .pp-float-note { background: #3DBB6E; color: #fff; }
+.pp-float.is-down .pp-float-note { background: #E8564F; color: #fff; }
 
 /* Strip (wide) variant: token and text scale with the short side. */
 .pp.is-wide .pp-tok { width: clamp(32px, min(20cqw, 30cqh), 104px); height: clamp(32px, min(20cqw, 30cqh), 104px); }
@@ -206,7 +249,9 @@
 .pp.is-wide .pp-assets { font-size: clamp(11px, min(3.8cqw, 6cqh), 17px); }
 
 /* Bankrupt */
-.pp.is-bankrupt .pp-card { filter: grayscale(1); opacity: 0.72; }
+/* Grey out the contents, not the "파산" stamp (a filter on the card would grey the stamp too). */
+.pp.is-bankrupt .pp-card { background: #E9ECF1; box-shadow: inset 0 clamp(4px, 2.2cqmin, 8px) 0 #A9B1BE, 0 10px 28px rgba(0, 0, 0, 0.38); }
+.pp.is-bankrupt .pp-card > :not(.pp-broken):not(.pp-floats) { filter: grayscale(1); opacity: 0.55; }
 .pp-broken { display: none; }
 .pp.is-bankrupt .pp-broken {
   position: absolute;

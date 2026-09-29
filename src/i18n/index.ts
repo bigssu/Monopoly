@@ -57,6 +57,14 @@ export function loc(v: { ko: string; en: string }): string {
 }
 
 /** Format money: 1500 → '1,500' (unit suffix is handled by callers via t('money.unit')). */
+const numberFormats = new Map<Lang, Intl.NumberFormat>();
+
 export function fmtMoney(n: number): string {
-  return new Intl.NumberFormat(current === 'ko' ? 'ko-KR' : 'en-US').format(n);
+  // Constructing an Intl.NumberFormat is slow; the cash tween calls this every frame.
+  let f = numberFormats.get(current);
+  if (!f) {
+    f = new Intl.NumberFormat(current === 'ko' ? 'ko-KR' : 'en-US');
+    numberFormats.set(current, f);
+  }
+  return f.format(n);
 }

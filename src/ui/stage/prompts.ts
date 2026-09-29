@@ -58,6 +58,9 @@ function button(label: string, ctx: PromptCtx, action: Action | null, o: BtnOpts
   const b = h('button', {
     class: `pbtn${o.primary ? ' is-primary' : ''}${o.tone ? ` tone-${o.tone}` : ''}`,
     type: 'button',
+    // Stable hooks for tests / accessibility tooling (labels are localized).
+    'data-action': action?.type,
+    'data-space': action && 'spaceIndex' in action ? action.spaceIndex : undefined,
   });
   if (o.icon) b.append(iconEl(o.icon, 'ico pbtn-ico'));
   b.append(h('span', { class: 'pbtn-label', text: label }));
@@ -170,7 +173,7 @@ function spaceTitle(i: number): string {
 
 function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): PromptResult {
   const p = ctx.state.players[ph.playerId]!;
-  const rollBtn = h('button', { class: 'roll-btn', type: 'button' });
+  const rollBtn = h('button', { class: 'roll-btn', type: 'button', 'data-action': 'Roll' });
   rollBtn.append(iconEl('dice-face-5', 'ico roll-ico'), h('span', { class: 'roll-label', text: t('g.roll') }));
   const roll: Action = { type: 'Roll', playerId: ph.playerId };
   if (ctx.cpu) rollBtn.disabled = true;
@@ -383,14 +386,15 @@ function pickList(
   const list = h('div', { class: 'pick-list' });
   for (const i of options) {
     const sp = BOARD[i]!;
-    const row = h('button', { class: 'pick-row', type: 'button' });
+    const act = make(i);
+    const row = h('button', { class: 'pick-row', type: 'button', 'data-action': act.type, 'data-space': i });
     row.style.setProperty('--gc', groupColor(sp) ?? '#CBD2DE');
     row.append(iconEl(spaceIcon(sp), 'ico pick-ico'), h('span', { class: 'pick-name', text: loc(sp.short) }), h('span', { class: 'pick-detail', text: detail(i) }));
     if (ctx.cpu) row.disabled = true;
     else
       row.addEventListener('click', () => {
         sfx.play('tap');
-        ctx.act(make(i));
+        ctx.act(act);
       });
     list.append(row);
   }
@@ -455,7 +459,7 @@ function travelPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'travel' }>): P
   for (const i of ph.options) {
     const sp = BOARD[i]!;
     const owner = ctx.state.properties[i]?.owner ?? null;
-    const b = h('button', { class: `tg-cell${owner !== null ? ' is-owned' : ''}`, type: 'button', title: loc(sp.name) });
+    const b = h('button', { class: `tg-cell${owner !== null ? ' is-owned' : ''}`, type: 'button', title: loc(sp.name), 'data-action': 'ChooseTravel', 'data-space': i });
     b.style.setProperty('--gc', groupColor(sp) ?? '#CBD2DE');
     if (owner !== null) setPlayerVars(b, ctx.state.players[owner]!.colorId);
     b.append(iconEl(spaceIcon(sp), 'ico tg-ico'), h('span', { class: 'tg-name', text: loc(sp.short) }));

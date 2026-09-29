@@ -186,13 +186,13 @@ Play 스토어에는 별도 키워드 필드가 없으므로, 아래 단어를 *
 
    ```bash
    # 알파 제거(흰 배경 합성) + 정확한 크기로 리사이즈
-   magick e2e/__screenshots__/game-2560x1600.png -background "#1b1b2f" -alpha remove -alpha off \
+   magick e2e/__screenshots__/game-mid-2560x1600.png -background "#1E2A3A" -alpha remove -alpha off \
      -resize 2560x1600 store/tablet10-02-game.png
    # 24비트 JPEG 로 저장하려면 확장자를 .jpg 로
    ```
 
    (ImageMagick 6 이하는 `magick` 대신 `convert` 를 사용)
-3. **피처 그래픽 1024 x 500**: 앱 색상 배경(`#1b1b2f`) 위에 LOT & ROLL 엠블럼(`src/content/icons/` 또는 `docs/assets/icon-sheet.png` 에서 잘라내기)과
+3. **피처 그래픽 1024 x 500**: 앱 색상 배경(`#1E2A3A`) 위에 LOT & ROLL 엠블럼(`src/content/icons/` 또는 `docs/assets/icon-sheet.png` 에서 잘라내기)과
    게임 화면 일부를 배치합니다. HTML 로 만들고 Playwright 로 캡처하면 폰트(Jua)와 색이 앱과 정확히 일치합니다.
 
    ```js

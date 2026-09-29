@@ -5,15 +5,20 @@
 import '@/i18n/game';
 import { GROUP_NAMES } from '@/content/board';
 import { loc, t, fmtMoney } from '@/i18n';
-import type { GameState } from '@/engine';
+import type { GameState, Seat } from '@/engine';
 import { registerScreen } from '@/ui/router';
 import { go } from '@/ui/shell/nav';
+import { rotateStart } from '@/ui/shell/setupModel';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { Particles } from '@/ui/fx/particles';
 import { anim } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
+
+const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];
+/** Vertical px kept free at the bottom (S edge) for the rotate pill. */
+const PILL_ROOM = 46;
 
 function victoryDetail(state: GameState): string {
   const ph = state.phase;
@@ -77,7 +82,9 @@ registerScreen('result', (root, { state }) => {
   again.addEventListener('click', () => {
     sfx.play('tap');
     haptic('light');
-    go('game', { settings: state.settings, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0 });
+    // Same table and house rules; a random player starts this time (DESIGN §4.1).
+    const settings = { ...state.settings, players: rotateStart(state.settings.players) };
+    go('game', { settings, seed: (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0 });
   });
   home.addEventListener('click', () => {
     sfx.play('tap');
@@ -86,20 +93,48 @@ registerScreen('result', (root, { state }) => {
   const side = h('div', { class: 'rs-side' }, h('div', { class: 'rs-h', text: t('r.ranking') }), rows, legend, stats, h('div', { class: 'rs-btns' }, again, home));
   const card = h('div', { class: 'rs-card', 'data-seat': winner.seat }, hero, side);
   const fx = h('div', { class: 'fx-layer' });
-  const screen = h('div', { class: 'result' }, card, fx);
+  // Always-upright pill on the S edge: turns the card toward the next seat so everyone at the
+  // table can read the ranking (cycles through the occupied seats S → E → N → W).
+  const seats = SEAT_CYCLE.filter((x) => state.players.some((p) => p.seat === x));
+  const rotate = h('button', { class: 'rs-rotate', type: 'button', 'aria-label': t('r.rotate') }, iconEl('rotate', 'ico'), h('span', { text: t('r.rotate') }));
+  const screen = h('div', { class: 'result' }, card, seats.length > 1 ? rotate : null, fx);
   root.append(screen);
 
-  const stop = watchViewport((W, H) => {
-    const sideways = winner.seat === 'E' || winner.seat === 'W';
-    const aw = sideways ? H : W;
-    const ah = sideways ? W : H;
-    const w = Math.min(aw * 0.94, 980);
-    const hh = Math.min(ah * 0.92, sideways ? 900 : 680);
+  let seat: Seat = winner.seat;
+  let angle = SEAT_ANGLE[seat];
+  let size = { W: window.innerWidth, H: window.innerHeight };
+  const room = seats.length > 1 ? PILL_ROOM : 0;
+  const layout = (): void => {
+    const { W, H } = size;
+    const sideways = seat === 'E' || seat === 'W';
+    // The card sits in the area above the rotate pill.
+    const avH = H - room;
+    const w = sideways ? Math.min(avH * 0.94, 980) : Math.min(W * 0.94, 980);
+    const hh = sideways ? Math.min(W * 0.92, 900) : Math.min(avH * 0.92, 680);
     card.style.width = `${w}px`;
     card.style.height = `${hh}px`;
-    card.style.transform = `translate(-50%, -50%) rotate(${SEAT_ANGLE[winner.seat]}deg)`;
+    card.style.top = `${avH / 2}px`;
+    card.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
     card.classList.toggle('is-tall', hh / w > 1.05);
+    card.dataset.seat = seat;
+  };
+  const stop = watchViewport((W, H) => {
+    size = { W, H };
+    layout();
   });
+  rotate.addEventListener('click', () => {
+    sfx.play('tap');
+    haptic('light');
+    const next = seats[(seats.indexOf(seat) + 1) % seats.length]!;
+    // Shortest arc from the current angle.
+    let delta = (((SEAT_ANGLE[next] - angle) % 360) + 540) % 360 - 180;
+    if (delta === -180) delta = 180;
+    angle += delta;
+    seat = next;
+    card.classList.add('is-turning');
+    layout();
+  });
+  card.addEventListener('transitionend', () => card.classList.remove('is-turning'));
 
   const particles = new Particles(fx);
   sfx.play('win');

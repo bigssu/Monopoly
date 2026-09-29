@@ -23,6 +23,7 @@ export class Stage {
   private promptSlot: HTMLElement;
   private toastLayer: HTMLElement;
   private popLayer: HTMLElement;
+  private noticeLayer: HTMLElement;
   private rankStrip: HTMLElement;
   private thinking: HTMLElement;
   private diceWrap: HTMLElement;
@@ -30,6 +31,8 @@ export class Stage {
   private seat: Seat = 'S';
   private timerId = 0;
   private tickId = 0;
+  private countId = 0;
+  private fitRaf = 0;
   private cardDone: (() => void) | null = null;
 
   constructor() {
@@ -41,7 +44,8 @@ export class Stage {
     this.promptSlot = h('div', { class: 'st-prompt' });
     this.toastLayer = h('div', { class: 'st-toasts' });
     this.popLayer = h('div', { class: 'st-pop' });
-    const top = h('div', { class: 'st-top' }, this.banner, this.round);
+    this.noticeLayer = h('div', { class: 'st-notices' });
+    const top = h('div', { class: 'st-top' }, this.banner, this.round, this.noticeLayer);
     const diceWrap = h('div', { class: 'st-dice' }, this.dice.el, this.thinking);
     this.diceWrap = diceWrap;
     this.rot = h('div', { class: 'stage-rot' }, top, this.rankStrip, diceWrap, this.promptSlot, this.toastLayer, this.popLayer);
@@ -130,7 +134,15 @@ export class Stage {
         html: `<svg viewBox="0 0 36 36"><circle class="tr-bg" cx="18" cy="18" r="15"/><circle class="tr-fg" cx="18" cy="18" r="15" pathLength="100"/></svg>`,
       });
       ring.style.setProperty('--timer', `${timer}s`);
+      // Seconds left, in the middle of the ring.
+      const num = h('b', { class: 'tr-n', text: String(timer) });
+      ring.append(num);
       card.append(ring);
+      let left = timer;
+      this.countId = window.setInterval(() => {
+        left = Math.max(0, left - 1);
+        num.textContent = String(left);
+      }, 1000);
       const cb = opts.onTimeout;
       this.timerId = window.setTimeout(() => {
         this.clearTimer();
@@ -149,9 +161,21 @@ export class Stage {
     });
   }
 
-  /** Hide the dice when a prompt leaves too little room for them (small screens). */
+  /**
+   * Hide the dice when a prompt leaves too little room for them (small screens). Measured in the
+   * next animation frame (coalesced) so building a prompt never forces a synchronous layout.
+   */
   fitDice(): void {
+    if (this.fitRaf) return;
+    this.fitRaf = requestAnimationFrame(() => {
+      this.fitRaf = 0;
+      this.measureDice();
+    });
+  }
+
+  private measureDice(): void {
     this.el.classList.remove('no-dice');
+    if (!this.el.classList.contains('has-prompt')) return;
     const free = this.diceWrap.clientHeight;
     const need = this.dice.el.offsetHeight;
     if (free > 0 && need > 0 && free < need * 0.9) this.el.classList.add('no-dice');
@@ -160,6 +184,7 @@ export class Stage {
   clearTimer(): void {
     window.clearTimeout(this.timerId);
     window.clearTimeout(this.tickId);
+    window.clearInterval(this.countId);
     this.timerId = 0;
   }
 
@@ -186,6 +211,22 @@ export class Stage {
     });
     await sleep(ms);
     await anim(el, [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-20%)' }], { duration: 200 });
+    el.remove();
+  }
+
+  /**
+   * A small non-blocking notice pinned under the turn banner (e.g. "time's up — auto-picked").
+   * Unlike `toast` it is not part of the event sequence, so nothing waits for it.
+   */
+  async notice(text: string, iconId?: string): Promise<void> {
+    const el = h('div', { class: 'st-toast st-notice is-autopass tone-info', role: 'status' });
+    if (iconId) el.append(iconEl(iconId, 'ico st-toast-ico'));
+    el.append(h('span', { text }));
+    this.noticeLayer.append(el);
+    // Real time (not the animation clock): it must stay readable even at test speeds.
+    await new Promise((r) => window.setTimeout(r, 1600));
+    el.classList.add('is-leaving');
+    await new Promise((r) => window.setTimeout(r, 260));
     el.remove();
   }
 
@@ -303,6 +344,7 @@ export class Stage {
   }
 
   dispose(): void {
+    cancelAnimationFrame(this.fitRaf);
     this.clearTimer();
     this.dice.dispose();
   }

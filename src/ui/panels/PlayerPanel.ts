@@ -44,6 +44,9 @@ export class PlayerPanel {
     const badge = h('span', { class: 'pp-tok', html: svg(player.tokenId) });
     this.rank = h('span', { class: 'pp-rank' });
     const name = h('div', { class: 'pp-name' }, h('span', { class: 'pp-name-t', text: player.name }), player.isCpu ? h('span', { class: 'pp-cpu', text: t('g.cpu') }) : null);
+    // Status badges (island, travel, express, cards) ride at the end of the assets line, so they
+    // never sit on top of the name or the cash.
+    this.badges = h('div', { class: 'pp-badges' });
     this.cashNum = h('span', { class: 'pp-cash-n' });
     const cash = h('div', { class: 'pp-cash' }, iconEl('coin', 'ico pp-coin'), this.cashNum);
     this.assets = h('div', { class: 'pp-assets' });
@@ -61,10 +64,9 @@ export class PlayerPanel {
         this.slots.set(i, slot);
       });
     });
-    this.badges = h('div', { class: 'pp-badges' });
     this.floats = h('div', { class: 'pp-floats' });
-    const head = h('div', { class: 'pp-head' }, h('div', { class: 'pp-tokwrap' }, badge, this.rank), h('div', { class: 'pp-id' }, name, cash, this.assets));
-    this.cardEl = h('div', { class: 'pp-card' }, head, this.badges, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats);
+    const head = h('div', { class: 'pp-head' }, h('div', { class: 'pp-tokwrap' }, badge, this.rank), h('div', { class: 'pp-id' }, name, cash, h('div', { class: 'pp-sub' }, this.assets, this.badges)));
+    this.cardEl = h('div', { class: 'pp-card' }, head, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats);
     this.el.append(this.cardEl);
     this.shown = player.cash;
     this.target = player.cash;
@@ -154,20 +156,36 @@ export class PlayerPanel {
     this.raf = requestAnimationFrame(step);
   }
 
-  /** "+300" / "−120" float rising from the panel (rotated with it). */
-  float(delta: number): void {
+  /** "+300" / "−120" float rising from the panel (rotated with it), with an optional caption. */
+  float(delta: number, note?: string): void {
     if (instant() || delta === 0) return;
     const el = h('span', { class: `pp-float ${delta > 0 ? 'is-up' : 'is-down'}`, text: signedMoney(delta) });
+    if (note) el.append(h('small', { class: 'pp-float-note', text: note }));
     this.floats.append(el);
     void anim(
       el,
       [
         { transform: 'translate(-50%, 20%) scale(.6)', opacity: 0 },
-        { transform: 'translate(-50%, -40%) scale(1.1)', opacity: 1, offset: 0.25 },
-        { transform: 'translate(-50%, -160%) scale(1)', opacity: 0 },
+        { transform: 'translate(-50%, -40%) scale(1.1)', opacity: 1, offset: 0.2 },
+        { transform: 'translate(-50%, -85%) scale(1)', opacity: 1, offset: 0.65 },
+        { transform: 'translate(-50%, -150%) scale(1)', opacity: 0 },
       ],
-      { duration: 1300, easing: 'cubic-bezier(.22,1,.36,1)' },
+      { duration: note ? 1700 : 1300, easing: 'cubic-bezier(.22,1,.36,1)' },
     ).then(() => el.remove());
+  }
+
+  /** A short "you got paid" bump of the whole panel. */
+  async bump(): Promise<void> {
+    await anim(
+      this.cardEl,
+      [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.045)', offset: 0.35 },
+        { transform: 'scale(0.99)', offset: 0.7 },
+        { transform: 'scale(1)' },
+      ],
+      { duration: 520, easing: 'cubic-bezier(.34,1.56,.64,1)' },
+    );
   }
 
   /** Bankruptcy: shake + break. */

@@ -15,6 +15,7 @@ import {
   type GameEvent,
   type GameState,
 } from '@/engine';
+import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
 import { animSpeed, D, endSkip, instant, skip } from '@/ui/fx/time';
@@ -63,9 +64,15 @@ export class GameController {
     this.view.stage.setTurn(cur, s);
     this.view.stage.dice.show(s.lastDice);
     this.view.board.setActiveToken(s.current);
-    if (fresh) await this.play(s, initialEvents(s), s);
-    else await this.view.stage.rotateTo(this.actingSeat());
-    this.advance();
+    // Busy while the opening plays: no prompt is up yet, so nothing may act (dev hook too).
+    this.busy = true;
+    try {
+      if (fresh) await this.play(s, initialEvents(s), s);
+      else await this.view.stage.rotateTo(this.actingSeat());
+    } finally {
+      this.busy = false;
+    }
+    if (!this.disposed) this.advance();
   }
 
   isBusy(): boolean {
@@ -171,7 +178,10 @@ export class GameController {
         timer,
         onTimeout: () => {
           const a = defaultAction(this.state);
-          if (a) void this.dispatch(a);
+          if (!a) return;
+          // Tell the table why the prompt vanished (the safe default was picked).
+          void stage.notice(t('g.timer.auto'), 'timer');
+          void this.dispatch(a);
         },
       });
       if (res.focus !== undefined) board.setFocus(res.focus);

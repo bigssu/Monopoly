@@ -157,6 +157,16 @@ export function validateDraft(d: SetupDraft): string | null {
 }
 
 /**
+ * Rotate a turn order by a random offset: a random player starts, the order around the table
+ * is kept. Used by Setup and by the result screen's "play again".
+ */
+export function rotateStart<T>(list: readonly T[], random: () => number = Math.random): T[] {
+  if (list.length === 0) return [];
+  const start = Math.floor(random() * list.length) % list.length;
+  return [...list.slice(start), ...list.slice(0, start)];
+}
+
+/**
  * Engine settings for a draft. Players are listed in seat order S, E, N, W; the list is
  * rotated by a random offset so the starting seat is random (DESIGN §4.1) while the
  * turn order around the table is kept.
@@ -178,10 +188,8 @@ export function buildSettings(
       cpuLevel: s.controller === 'easy' ? 'easy' : 'normal',
     };
   });
-  const start = Math.floor(random() * players.length) % players.length;
-  const rotated = [...players.slice(start), ...players.slice(0, start)];
   const settings = defaultSettings({
-    players: rotated,
+    players: rotateStart(players, random),
     roundLimit: d.roundLimit,
     startCash: d.startCash,
     takeover: d.takeover,

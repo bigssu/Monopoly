@@ -3,6 +3,7 @@ import { validateSettings } from '@/engine';
 import {
   activeSeats,
   buildSettings,
+  rotateStart,
   defaultDraft,
   normalizeDraft,
   pick,
@@ -89,5 +90,16 @@ describe('setup draft', () => {
     expect(seed).toBe(0x80000000);
     const first = buildSettings(d, name, () => 0);
     expect(first.settings.players.map((p) => p.seat)).toEqual(['S', 'E', 'N', 'W']);
+  });
+});
+
+describe('rotateStart', () => {
+  it('keeps the order around the table and picks the start from random()', () => {
+    const ring = ['S', 'E', 'N', 'W'];
+    expect(rotateStart(ring, () => 0)).toEqual(['S', 'E', 'N', 'W']);
+    expect(rotateStart(ring, () => 0.26)).toEqual(['E', 'N', 'W', 'S']);
+    expect(rotateStart(ring, () => 0.99)).toEqual(['W', 'S', 'E', 'N']);
+    expect(rotateStart([], () => 0.5)).toEqual([]);
+    expect(ring).toEqual(['S', 'E', 'N', 'W']);
   });
 });

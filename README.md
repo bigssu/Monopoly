@@ -18,10 +18,10 @@
 
 | 타이틀 | 세팅 | 게임 | 결과 |
 |---|---|---|---|
-| ![title](docs/assets/screenshot-title.png) | ![setup](docs/assets/screenshot-setup.png) | ![game](docs/assets/screenshot-game.png) | ![result](docs/assets/screenshot-result.png) |
+| ![title](docs/assets/screenshot-title-1600x1000.png) | ![setup](docs/assets/screenshot-setup-1600x1000.png) | ![game](docs/assets/screenshot-game-1600x1000.png) | ![result](docs/assets/screenshot-result-1600x1000.png) |
 
-> 위 `docs/assets/screenshot-*.png` 는 자리표시자입니다. `npm run e2e` 가 만드는 `e2e/__screenshots__/` 에서 골라 복사하세요
-> (자세한 방법은 [docs/PLAY_LISTING.md](docs/PLAY_LISTING.md) 5.1장). 현재 저장소에 있는 이미지는 `docs/assets/icon-sheet.png` (아이콘 시트) 입니다.
+> `npm run e2e` 가 만든 `e2e/__screenshots__/` 의 이미지(1600×1000)를 `docs/assets/screenshot-*.png` 로 복사한 것입니다
+> (타이틀·세팅: `shell-*`, 게임: `human-4p-mid-1600x1000.png`, 결과: `human-result-facing-S-1600x1000.png`). 스토어용 규격은 [docs/PLAY_LISTING.md](docs/PLAY_LISTING.md) 5.1장을 보세요.
 
 ## 실행하기
 

@@ -27,6 +27,7 @@ const ko: Record<string, string> = {
   'g.tapToContinue': '탭하여 계속',
   'g.tapToClose': '탭하여 닫기',
   'g.pass': '패스',
+  'g.timer.auto': '시간 초과! 자동으로 골랐어요',
   'g.toll': '통행료',
   'g.toll.now': '현재 통행료',
   'g.toll.paid': '통행료',
@@ -107,6 +108,7 @@ const ko: Record<string, string> = {
   'g.panel.noProps': '아직 땅이 없어요',
   'g.panel.bankrupt': '파산',
   'g.kind.start': '출발',
+  'g.kind.hub': '여행 허브',
   'g.kind.event': '이벤트',
   'g.kind.island': '무인도',
   'g.kind.donation': '기부함',
@@ -155,6 +157,7 @@ const ko: Record<string, string> = {
   'r.bankruptcies': '파산',
   'r.again': '다시 하기',
   'r.title': '타이틀로',
+  'r.rotate': '화면 돌리기',
 };
 
 const en: Record<string, string> = {
@@ -180,6 +183,7 @@ const en: Record<string, string> = {
   'g.tapToContinue': 'Tap to continue',
   'g.tapToClose': 'Tap to close',
   'g.pass': 'Pass',
+  'g.timer.auto': "Time's up — auto-picked",
   'g.toll': 'Toll',
   'g.toll.now': 'Toll now',
   'g.toll.paid': 'Toll',
@@ -260,6 +264,7 @@ const en: Record<string, string> = {
   'g.panel.noProps': 'No property yet',
   'g.panel.bankrupt': 'Bankrupt',
   'g.kind.start': 'Start',
+  'g.kind.hub': 'Travel hub',
   'g.kind.event': 'Event',
   'g.kind.island': 'Island',
   'g.kind.donation': 'Donation',
@@ -308,6 +313,7 @@ const en: Record<string, string> = {
   'r.bankruptcies': 'Bankrupt',
   'r.again': 'Play again',
   'r.title': 'Title',
+  'r.rotate': 'Turn to next seat',
 };
 
 registerStrings({ ko, en });

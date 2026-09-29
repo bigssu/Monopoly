@@ -165,7 +165,8 @@
 
 /* Prompt slot (bottom = the acting player's side) */
 .st-prompt {
-  flex: none;
+  /* May shrink (the card body then scrolls) so a tall card never spills off the stage. */
+  flex: 0 1 auto;
   width: min(calc(var(--u) * 19.5), 100%);
   max-height: 100%;
   min-height: 0;
@@ -209,7 +210,9 @@
   gap: calc(var(--u) * 0.4);
   margin-top: calc(var(--u) * 0.45);
   min-height: 0;
+  overflow-y: auto;
 }
+.pc-head, .pc-buttons { flex: none; }
 .pc-row { display: flex; align-items: center; gap: calc(var(--u) * 0.35); min-width: 0; }
 .pc-sub { font-weight: 700; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-price { margin-left: auto; font-family: var(--font-num); font-weight: 800; }
@@ -334,30 +337,49 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: calc(var(--u) * 0.45);
-  min-height: max(56px, calc(var(--u) * 3.1));
-  min-width: max(160px, calc(var(--u) * 9));
-  padding: 0 calc(var(--u) * 1.3) 0 calc(var(--u) * 0.8);
+  justify-content: center;
+  gap: calc(var(--u) * 0.5);
+  min-height: max(60px, calc(var(--u) * 3.7));
+  min-width: max(180px, calc(var(--u) * 11));
+  padding: 0 calc(var(--u) * 1.5) 0 calc(var(--u) * 1);
   border: 0;
   border-radius: var(--r-pill);
   background: linear-gradient(180deg, #FFD15C 0%, #F5A91C 100%);
   color: #5A3A00 !important;
   font-family: var(--font-display) !important;
-  font-size: max(20px, calc(var(--u) * 1.45)) !important;
+  font-size: max(22px, calc(var(--u) * 1.75)) !important;
   box-shadow:
     inset 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.55),
     0 calc(var(--u) * 0.26) 0 #C27E0F,
     0 calc(var(--u) * 0.5) calc(var(--u) * 1.2) rgba(120, 70, 0, 0.35);
   cursor: pointer;
   touch-action: none;
-  animation: lr-invite 1.8s ease-in-out infinite;
+}
+/* "Your move" pulse: a ring that breathes out of the button. It lives on a pseudo-element so
+   the button itself never moves (stable hit box for fingers and for tests). */
+.roll-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 0 rgba(255, 196, 64, 0.75);
+  animation: lr-invite 1.6s ease-out infinite;
+  pointer-events: none;
 }
 .roll-btn .roll-ico { width: 1.4em; height: 1.4em; }
-.roll-btn.is-held { animation: none; transform: translateY(calc(var(--u) * 0.2)) scale(0.97); box-shadow: inset 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.55), 0 calc(var(--u) * 0.06) 0 #C27E0F; }
-.roll-btn:disabled { animation: none; filter: saturate(0.4); opacity: 0.8; }
-@keyframes lr-invite { 50% { scale: 1.04; } }
-.roll-hint { font-size: max(11px, calc(var(--u) * 0.55)); color: #A08868; font-weight: 700; }
-.pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -0.2); top: auto; bottom: calc(var(--u) * 2.4); }
+.roll-btn.is-held { transform: translateY(calc(var(--u) * 0.2)) scale(0.97); box-shadow: inset 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.55), 0 calc(var(--u) * 0.06) 0 #C27E0F; }
+.roll-btn.is-held::before,
+.roll-btn:disabled::before { animation: none; }
+.roll-btn:disabled { filter: saturate(0.4); opacity: 0.8; }
+@keyframes lr-invite {
+  0% { box-shadow: 0 0 0 0 rgba(255, 196, 64, 0.75); }
+  70%, 100% { box-shadow: 0 0 0 calc(var(--u) * 0.9) rgba(255, 196, 64, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roll-btn::before { animation: none; }
+}
+.roll-hint { font-size: max(12px, calc(var(--u) * 0.55)); color: #A08868; font-weight: 700; }
+.pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -0.6); top: auto; bottom: calc(var(--u) * 2.6); }
 
 /* Lists (festival / upgrade / debt) */
 .pick-list {
@@ -390,7 +412,8 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 .pick-ico { width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6); min-width: 26px; min-height: 26px; flex: none; margin-left: calc(var(--u) * 0.2); }
 .pick-name { font-family: var(--font-display); font-size: 1.1em; white-space: nowrap; flex: none; }
 .pick-detail { margin-left: auto; font-weight: 800; color: var(--ink-3); font-size: 0.9em; white-space: nowrap; }
-.debt-row .pbtn { flex: none; min-width: max(64px, calc(var(--u) * 3.6)); min-height: 44px; font-size: 1em !important; }
+.debt-row .pbtn { flex: none; min-width: max(64px, calc(var(--u) * 3.6)); min-height: 48px; padding-block: 4px; font-size: 1em !important; }
+.debt-row .pick-detail { white-space: normal; text-align: right; line-height: 1.15; }
 .debt-row.is-best { background: #FFF6DC; }
 .debt-meter { display: flex; flex-direction: column; gap: calc(var(--u) * 0.15); }
 .dm-bar { height: max(8px, calc(var(--u) * 0.45)); border-radius: var(--r-pill); background: #FDE8E7; overflow: hidden; }
@@ -401,7 +424,7 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 /* Travel grid */
 .travel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(max(54px, calc(var(--u) * 2.9)), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(max(66px, calc(var(--u) * 3.1)), 1fr));
   grid-auto-rows: max-content;
   gap: calc(var(--u) * 0.2);
   overflow-y: auto;
@@ -426,23 +449,50 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 .tg-cell.is-owned { background: var(--pc-tint); box-shadow: inset 0 calc(var(--u) * 0.2) 0 var(--gc), inset 0 0 0 2px var(--pc); }
 .tg-cell:active { transform: scale(0.95); }
 .tg-ico { width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); min-width: 24px; min-height: 24px; }
-.tg-name { flex: none; line-height: 1.2; font-size: max(11px, 0.78em); font-weight: 800; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* Up to two lines ("TAX / OFFICE", "Cape / Town") rather than an ellipsis. */
+.tg-name {
+  flex: none;
+  max-width: 100%;
+  line-height: 1.1;
+  font-size: max(12px, 0.78em);
+  font-weight: 800;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 
 /* Timer ring */
 .timer-ring {
   position: absolute;
-  top: calc(var(--u) * 0.45);
-  right: calc(var(--u) * 0.45);
-  width: max(22px, calc(var(--u) * 1.35));
-  height: max(22px, calc(var(--u) * 1.35));
+  top: calc(var(--u) * 0.4);
+  right: calc(var(--u) * 0.4);
+  width: max(30px, calc(var(--u) * 1.75));
+  height: max(30px, calc(var(--u) * 1.75));
+  display: grid;
+  place-items: center;
   pointer-events: none;
 }
-.timer-ring svg { width: 100%; height: 100%; display: block; transform: rotate(-90deg); }
-.tr-bg { fill: none; stroke: #E8ECF2; stroke-width: 4; }
+.timer-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transform: rotate(-90deg); }
+.tr-n {
+  position: relative;
+  font-family: var(--font-num);
+  font-weight: 900;
+  font-size: max(12px, calc(var(--u) * 0.62));
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.timer-ring.is-urgent .tr-n { color: var(--danger); }
+.tr-bg { fill: #fff; stroke: #E8ECF2; stroke-width: 4.5; }
 .tr-fg {
   fill: none;
   stroke: var(--success);
-  stroke-width: 4;
+  stroke-width: 4.5;
   stroke-linecap: round;
   stroke-dasharray: 100;
   stroke-dashoffset: 0;
@@ -578,3 +628,16 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
   box-shadow: var(--sh-3);
 }
 .info-close { text-align: center; color: var(--ink-3); font-size: 0.85em; font-weight: 700; }
+
+/* Non-blocking notices under the turn banner (auto-pick when the soft timer runs out). */
+.st-notices { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 0.2); }
+.st-notices:empty { display: none; }
+.st-notice {
+  font-size: max(12px, calc(var(--u) * 0.66));
+  padding: calc(var(--u) * 0.2) calc(var(--u) * 0.7) calc(var(--u) * 0.2) calc(var(--u) * 0.35);
+  animation: lr-notice-in 260ms var(--ease-out) both;
+  transition: opacity 240ms ease, transform 240ms ease;
+}
+.st-notice .st-toast-ico { width: 1.5em; height: 1.5em; min-width: 18px; min-height: 18px; }
+.st-notice.is-leaving { opacity: 0; transform: translateY(-30%); }
+@keyframes lr-notice-in { from { opacity: 0; transform: translateY(-40%) scale(0.9); } }

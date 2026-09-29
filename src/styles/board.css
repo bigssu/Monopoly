@@ -153,7 +153,8 @@
   opacity: 0;
 }
 
-/* "One away" toast, one copy per seat, each rotated to face it. */
+/* "One away" toast, one copy per seat, each rotated to face it. It sits on the board ring (the
+   middle of each side), outside the Stage, so it never covers the turn banner or a prompt. */
 .edge-toast {
   position: absolute;
   left: 50%;
@@ -166,7 +167,7 @@
   background: #1B2430;
   color: #fff;
   box-shadow: 0 0 0 calc(var(--u) * 0.14) var(--gc), var(--sh-2);
-  transform: translate(-50%, -50%) rotate(var(--rot)) translateY(calc(var(--u) * 9.4));
+  transform: translate(-50%, -50%) rotate(var(--rot)) translateY(calc(var(--u) * 13));
   white-space: nowrap;
   font-family: var(--font-display);
   font-size: max(12px, calc(var(--u) * 0.72));

@@ -166,6 +166,16 @@ export class SynthSfx implements Sfx {
 
   // ------------------------------------------------------------------ primitives
 
+  /**
+   * Clamp a frequency into the nominal range of AudioParams (0 < f ≤ min(20 kHz, ~Nyquist)).
+   * Pitched-up voices (hop pitch, pluck filter at f × 8…) would otherwise exceed it and Chrome
+   * logs an "outside nominal range" warning per node.
+   */
+  private hz(f: number): number {
+    const top = Math.min(20000, this.ctx!.sampleRate * 0.49);
+    return Math.min(top, Math.max(1, f));
+  }
+
   private tone(o: ToneOpts, out: AudioNode): void {
     const c = this.ctx!;
     // Partials above ~16 kHz are inaudible on tablet speakers and alias near Nyquist.
@@ -173,8 +183,8 @@ export class SynthSfx implements Sfx {
     if (o.f >= ceiling) return;
     const osc = c.createOscillator();
     osc.type = o.type ?? 'sine';
-    osc.frequency.setValueAtTime(o.f, o.t);
-    if (o.f2) osc.frequency.exponentialRampToValueAtTime(Math.min(ceiling, Math.max(1, o.f2)), o.t + (o.glide ?? o.d));
+    osc.frequency.setValueAtTime(this.hz(o.f), o.t);
+    if (o.f2) osc.frequency.exponentialRampToValueAtTime(Math.min(ceiling, this.hz(o.f2)), o.t + (o.glide ?? o.d));
     if (o.detune) osc.detune.value = o.detune;
     const env = c.createGain();
     const g = o.g ?? 0.3;
@@ -191,9 +201,9 @@ export class SynthSfx implements Sfx {
       f.type = 'lowpass';
       f.Q.value = 0.8;
       if (o.lp0) {
-        f.frequency.setValueAtTime(o.lp0, o.t);
-        f.frequency.exponentialRampToValueAtTime(o.lp, o.t + (o.lpT ?? o.d));
-      } else f.frequency.value = o.lp;
+        f.frequency.setValueAtTime(this.hz(o.lp0), o.t);
+        f.frequency.exponentialRampToValueAtTime(this.hz(o.lp), o.t + (o.lpT ?? o.d));
+      } else f.frequency.value = this.hz(o.lp);
       node.connect(f);
       node = f;
       nodes.push(f);
@@ -223,8 +233,8 @@ export class SynthSfx implements Sfx {
     const filt = c.createBiquadFilter();
     filt.type = o.type ?? 'bandpass';
     filt.Q.value = o.q ?? 1;
-    filt.frequency.setValueAtTime(o.f ?? 2000, o.t);
-    if (o.f2) filt.frequency.exponentialRampToValueAtTime(o.f2, o.t + o.d);
+    filt.frequency.setValueAtTime(this.hz(o.f ?? 2000), o.t);
+    if (o.f2) filt.frequency.exponentialRampToValueAtTime(this.hz(o.f2), o.t + o.d);
     const env = c.createGain();
     const g = o.g ?? 0.3;
     env.gain.setValueAtTime(0.0001, o.t);

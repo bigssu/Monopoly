@@ -121,9 +121,20 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
     case 'MoneyChanged': {
       vs.players[ev.playerId]!.cash = ev.balance;
       render(view, vs);
-      view.panel(ev.playerId)?.float(ev.delta);
+      // Toll: caption the float so the receiver (and payer) see what the money was for.
+      const toll = ev.reason === 'toll';
+      const panel = view.panel(ev.playerId);
+      panel?.float(ev.delta, toll ? t('g.toll') : undefined);
       if (fast) return;
-      if (ev.reason !== 'toll') sfx.play(ev.delta > 0 ? 'cash-in' : 'cash-out');
+      if (!toll) sfx.play(ev.delta > 0 ? 'cash-in' : 'cash-out');
+      if (toll && ev.delta > 0) {
+        // The receiver is usually not the acting player: give their panel a moment of its own
+        // (bump + green wash + captioned float) before the next prompt takes the table's eye.
+        sfx.play('cash-in');
+        void panel?.bump();
+        await sleep(620);
+        return;
+      }
       await sleep(ev.reason === 'bankruptcy' ? 80 : 180);
       return;
     }
