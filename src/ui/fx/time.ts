@@ -10,12 +10,16 @@
  * ~30 distinct frames per second instead of 60, roughly halving CPU/GPU work:
  * - JS-driven animation registers with `onFrame(fn)`: ONE requestAnimationFrame loop that only
  *   ticks every 1000/hz ms and stops itself as soon as nothing is registered (zero idle cost).
- * - `anim()` (Web Animations) quantizes the eased curve into a 30 Hz staircase
- *   (`steps()` / `linear()` easing), so the compositor only commits ~30 value changes per second;
+ * - `anim()` (Web Animations) samples the eased curve every 1000/hz ms and animates the samples as
+ *   `step-end` keyframes (see `quantize.ts`), so the browser/compositor changes the value only
+ *   ~30 times per second, on one global time grid shared by every animation and by `onFrame`;
  *   `{ smooth: true }` opts out (e.g. the stage rotation).
- * - CSS keyframe animations are quantized the same way when they start
- *   (`installCssAnimationQuantizer()`).
+ * - CSS animations/transitions from the stylesheets are quantized when they start
+ *   (`installCssAnimationQuantizer()`): `steps(n)` effect timing on the same grid.
+ * - `setFrameRate(60)` restores every running animation to its original keyframes/timing.
  */
+import { quantizedEasing, stepKeyframes } from './quantize';
+
 let speed = 1;
 let skipping = false;
 const SKIP_RATE = 5;
@@ -76,7 +80,7 @@ function arm(s: Sleeper, left: number): void {
     s.id = setTimeout(() => wake(s), left);
     return;
   }
-  const p = 1000 / fps;
+  const p = period();
   s.id = setTimeout(() => {
     s.stopTick = onFrame((now) => {
       if (now < s.end - p / 2) return true;
@@ -130,17 +134,21 @@ export type AnimOptions = KeyframeAnimationOptions & {
 export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyframes, opts: AnimOptions): Promise<void> {
   if (instant() || typeof (el as HTMLElement).animate !== 'function') return Promise.resolve();
   const { smooth, ...timing } = opts;
-  let duration = opts.duration / speed;
   const easing = String(opts.easing ?? 'linear');
-  // Budgeted animations last a whole number of frame periods, so (start aligned) they also end on
-  // the grid and the code awaiting them updates the DOM in a budgeted frame.
-  if (!smooth && fps < 60) duration = Math.max(2, Math.round(duration / (1000 / fps))) * (1000 / fps);
-  const q = smooth ? null : quantizedEasing(easing, duration);
-  const a = el.animate(keyframes, { ...timing, duration, easing: q ?? easing });
-  if (smooth) smoothSet.add(a);
-  else {
-    originalEasing.set(a, easing);
-    if (q) alignToGrid(a);
+  let duration = opts.duration / speed;
+  let a: Animation;
+  if (smooth) {
+    a = el.animate(keyframes, { ...timing, duration });
+    smoothSet.add(a);
+  } else {
+    // Budgeted animations last a whole number of frame periods, so (start aligned) they also end
+    // on the grid and the code awaiting them updates the DOM in a budgeted frame.
+    if (fps < 60) duration = Math.max(2, Math.round(duration / period())) * period();
+    const stepped = stepKeyframes(keyframes, easing, duration, fps);
+    const q = stepped ? null : quantizedEasing(easing, duration, fps, supportsLinearEasing);
+    a = el.animate(stepped ?? keyframes, { ...timing, duration, easing: stepped ? 'linear' : (q ?? easing) });
+    originals.set(a, { keyframes, easing, duration: opts.duration / speed, waapi: true });
+    if (stepped || q) alignToGrid(a);
   }
   if (skipping) a.playbackRate = SKIP_RATE;
   running.add(a);
@@ -187,18 +195,56 @@ export function flushAll(): void {
   skipping = false;
 }
 
-/** Next animation frame (resolves immediately when instant). */
+/** Next budgeted frame (resolves immediately when instant). */
 export function frame(): Promise<void> {
   if (instant()) return Promise.resolve();
-  return new Promise((r) => requestAnimationFrame(() => r()));
+  return new Promise((r) =>
+    onFrame(() => {
+      r();
+      return false;
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Frame budget: one on-demand clock + quantized easing
+// Frame budget: one on-demand clock + quantized animations on a shared grid
 // ---------------------------------------------------------------------------
 
 export type FrameRate = 30 | 60;
 let fps: FrameRate = 30;
+
+/** Length of one budgeted frame in ms. */
+function period(): number {
+  return 1000 / fps;
+}
+
+/**
+ * The frame grid is `gridOffset + k * period()` on the document timeline (= rAF time). The
+ * offset is phase-locked to the display so that grid lines fall halfway between two vsyncs:
+ * then every quantized animation (compositor or main thread) and every `onFrame` tick change
+ * values in the same vsync, with half a refresh interval of margin against timestamp jitter or
+ * rounding. Re-centred from rAF timestamps whenever the display clock drifts.
+ */
+let gridOffset = 0;
+let calibrated = false;
+
+/** Index of the grid slot containing time `t`. */
+function slotOf(t: number): number {
+  return Math.floor((t - gridOffset) / period());
+}
+
+/** Keep `now` (a vsync timestamp) mid-way between grid lines; realign animations if moved. */
+function lockPhase(now: number): void {
+  const p = period();
+  const phase = (((now - gridOffset) % p) + p) % p;
+  // Distance to the nearest ideal position (v/2 + j*v inside the slot).
+  const j = Math.floor(phase / vsync);
+  const err = phase - (j + 0.5) * vsync;
+  if (calibrated && Math.abs(err) < vsync * 0.25) return;
+  gridOffset = (((gridOffset + err) % p) + p) % p;
+  if (calibrated) realignAll();
+  calibrated = true;
+}
 
 /** Target rate of distinct animation frames (30 = battery saver, the default). */
 export function setFrameRate(hz: FrameRate): void {
@@ -215,42 +261,95 @@ export function frameRate(): FrameRate {
 export type FrameTick = (now: number) => boolean | void;
 const ticks = new Set<FrameTick>();
 let clockRaf = 0;
-let lastTick = -Infinity;
+let lastSlot = -Infinity;
+let lastNow = -Infinity;
+/** Display refresh interval, estimated from consecutive rAF timestamps. */
+let vsync = 1000 / 60;
+/** The loop was idle before this callback (its first frame may fall anywhere in a slot). */
+let fresh = true;
+
+let postRaf = 0;
+let inLoop = false;
+/** The last clock frame ran JS steps (which may have started CSS animations/transitions). */
+let ticked = false;
+
+function schedule(): void {
+  if (clockRaf || inLoop || typeof requestAnimationFrame !== 'function') return;
+  clockRaf = requestAnimationFrame(clockLoop);
+  // Registered after the clock, so it runs in the same frame once the steps and every promise
+  // continuation they resolved have run (see `postTick`).
+  if (!postRaf) postRaf = requestAnimationFrame(postTick);
+}
 
 function clockLoop(now: number): void {
   clockRaf = 0;
-  if (!ticks.size) return;
-  // Update once per period of the target rate, on the same global grid the quantized Web/CSS
-  // animations step on, so every change of a frame lands in the same vsync.
-  const slot = Math.floor(now / (1000 / fps));
-  if (fps >= 60 || skipping || slot !== lastTick) {
-    lastTick = slot;
-    for (const fn of [...ticks]) {
-      let keep: boolean | void;
-      try {
-        keep = fn(now);
-      } catch (e) {
-        keep = false;
-        console.error('[clock]', e);
+  if (!ticks.size) {
+    fresh = true;
+    return;
+  }
+  const dt = now - lastNow;
+  if (!fresh && dt > 3 && dt < vsync * 1.5) vsync += (dt - vsync) * 0.2;
+  lastNow = now;
+  if (fps < 60) lockPhase(now);
+  const p = period();
+  const slot = slotOf(now);
+  // Compositor-side stepped animations change value at the first vsync after each grid line.
+  // Run JS updates in that same vsync: after a fresh start, wait for a slot's first vsync.
+  let due: boolean;
+  if (fps >= 60 || skipping) due = true;
+  else if (slot === lastSlot) due = false;
+  else due = !fresh || now - gridOffset - slot * p < vsync;
+  fresh = false;
+  if (due) {
+    lastSlot = slot;
+    ticked = true;
+    inLoop = true;
+    try {
+      for (const fn of [...ticks]) {
+        let keep: boolean | void;
+        try {
+          keep = fn(now);
+        } catch (e) {
+          keep = false;
+          console.error('[clock]', e);
+        }
+        if (keep === false) ticks.delete(fn);
       }
-      if (keep === false) ticks.delete(fn);
+    } finally {
+      inLoop = false;
     }
   }
-  if (ticks.size) clockRaf = requestAnimationFrame(clockLoop);
+  if (ticks.size) schedule();
+  else fresh = true;
 }
 
 /**
- * Register a JS animation step on the shared clock. The single rAF loop runs only while at least
- * one step is registered. Returns an unregister function.
+ * Second rAF callback of a clock frame. The DOM changes of this frame are done, so CSS
+ * animations/transitions they trigger can be created now (`getAnimations()` flushes style) and
+ * quantized before the frame is painted: otherwise their first frames would run unquantized and
+ * be re-timed a frame later (an extra, off-grid frame for every CSS animation start).
+ */
+function postTick(): void {
+  postRaf = 0;
+  if (!ticked) return;
+  ticked = false;
+  sweepCss();
+}
+
+/**
+ * Register a JS animation step on the shared clock (called once per budgeted frame, on the same
+ * grid as the quantized animations). The single rAF loop runs only while at least one step is
+ * registered. Returns an unregister function.
  */
 export function onFrame(fn: FrameTick): () => void {
   ticks.add(fn);
-  if (!clockRaf && typeof requestAnimationFrame === 'function') clockRaf = requestAnimationFrame(clockLoop);
+  schedule();
   return () => {
     ticks.delete(fn);
     if (!ticks.size && clockRaf) {
       cancelAnimationFrame(clockRaf);
       clockRaf = 0;
+      fresh = true;
     }
   };
 }
@@ -260,73 +359,17 @@ export function activeFrameTicks(): number {
   return ticks.size;
 }
 
+interface Original {
+  keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
+  easing: string;
+  duration: number;
+  waapi: boolean;
+}
 const smoothSet = new WeakSet<Animation>();
-const originalEasing = new WeakMap<Animation, string>();
+/** Unquantized timing (and keyframes for `anim()`), to switch the frame rate live. */
+const originals = new WeakMap<Animation, Original>();
 const supportsLinearEasing =
   typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('animation-timing-function', 'linear(0, 1)');
-
-function cubic(x1: number, y1: number, x2: number, y2: number): (x: number) => number {
-  const bez = (t: number, a: number, b: number): number => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
-  return (x) => {
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 30; i++) {
-      const m = (lo + hi) / 2;
-      if (bez(m, x1, x2) < x) lo = m;
-      else hi = m;
-    }
-    return bez((lo + hi) / 2, y1, y2);
-  };
-}
-
-const KEYWORDS: Record<string, [number, number, number, number]> = {
-  ease: [0.25, 0.1, 0.25, 1],
-  'ease-in': [0.42, 0, 1, 1],
-  'ease-out': [0, 0, 0.58, 1],
-  'ease-in-out': [0.42, 0, 0.58, 1],
-};
-
-function easingFunction(easing: string): ((x: number) => number) | null {
-  const e = easing.trim();
-  if (e === 'linear') return (x) => x;
-  const k = KEYWORDS[e];
-  if (k) return cubic(...k);
-  const m = /^cubic-bezier\(([^)]+)\)$/.exec(e);
-  if (!m) return null;
-  const n = m[1]!.split(',').map(Number);
-  return n.length === 4 && n.every(Number.isFinite) ? cubic(n[0]!, n[1]!, n[2]!, n[3]!) : null;
-}
-
-const r4 = (x: number): string => String(Math.round(x * 1e4) / 1e4);
-
-/**
- * `easing` resampled as a staircase at `hz`: the value is held for one frame period (1000/hz ms of
- * active time) and then jumps, or null when no quantization is needed (60 Hz, shorter than two
- * periods, or an easing we do not understand). Step boundaries fall at multiples of the period
- * from the start of the active interval (see `alignToGrid`).
- */
-export function quantizedEasing(easing: string, durationMs: number, hz: number = fps): string | null {
-  if (hz >= 60 || !(durationMs > 0)) return null;
-  const n = durationMs / (1000 / hz);
-  const steps = Math.ceil(n - 1e-6);
-  if (steps < 2) return null;
-  const e = easing.trim();
-  if (e === 'linear' && Math.abs(n - Math.round(n)) < 1e-6) return `steps(${steps}, end)`;
-  if (!supportsLinearEasing || steps > 360) return null;
-  const f = easingFunction(e);
-  if (!f) return null;
-  const pts: string[] = [];
-  for (let k = 0; k < steps; k++) {
-    const x0 = k / n;
-    const x1 = Math.min(1, (k + 1) / n);
-    const y = r4(f(x0));
-    pts.push(`${y} ${r4(x0 * 100)}%`, `${y} ${r4(x1 * 100)}%`);
-  }
-  pts.push('1 100%');
-  return `linear(${pts.join(', ')})`;
-}
 
 /**
  * Shift a quantized animation's start (by less than one period) so its active interval begins on
@@ -340,8 +383,8 @@ function alignToGrid(a: Animation): void {
   const start = typeof a.startTime === 'number' ? a.startTime : t;
   if (start === null) return;
   const delay = a.effect?.getTiming().delay ?? 0;
-  const p = 1000 / fps;
-  const aligned = Math.floor((start + delay) / p) * p - delay;
+  const p = period();
+  const aligned = slotOf(start + delay) * p + gridOffset - delay;
   if (Math.abs(aligned - start) > 0.01) {
     try {
       a.startTime = aligned;
@@ -351,16 +394,54 @@ function alignToGrid(a: Animation): void {
   }
 }
 
+/** (Re)apply the current frame budget to one running animation. */
 function quantize(a: Animation): void {
-  const effect = a.effect;
+  const effect = a.effect as KeyframeEffect | null;
   if (!effect || smoothSet.has(a)) return;
   const timing = effect.getTiming();
-  if (!originalEasing.has(a)) originalEasing.set(a, String(timing.easing ?? 'linear'));
-  const base = originalEasing.get(a)!;
-  const dur = typeof timing.duration === 'number' ? timing.duration : 0;
-  const next = quantizedEasing(base, dur) ?? base;
-  if (next !== timing.easing) effect.updateTiming({ easing: next });
-  if (next !== base) alignToGrid(a);
+  let o = originals.get(a);
+  if (!o) {
+    o = { keyframes: null, easing: String(timing.easing ?? 'linear'), duration: typeof timing.duration === 'number' ? timing.duration : 0, waapi: false };
+    originals.set(a, o);
+  }
+  if (!(o.duration > 0)) return;
+  if (fps >= 60) {
+    if (o.keyframes && typeof effect.setKeyframes === 'function') effect.setKeyframes(o.keyframes);
+    effect.updateTiming({ easing: o.easing, duration: o.duration });
+    return;
+  }
+  const p = period();
+  const duration = Math.max(2, Math.round(o.duration / p)) * p;
+  const stepped = o.keyframes ? stepKeyframes(o.keyframes, o.easing, duration, fps) : null;
+  if (stepped && typeof effect.setKeyframes === 'function') {
+    effect.setKeyframes(stepped);
+    effect.updateTiming({ easing: 'linear', duration });
+  } else {
+    // CSS animations keep their per-keyframe timing functions; the effect easing (linear for
+    // CSS) becomes steps(n) over a whole number of periods.
+    const q = quantizedEasing(o.easing, duration, fps, supportsLinearEasing);
+    if (!q) return;
+    effect.updateTiming({ easing: q, duration });
+  }
+  alignToGrid(a);
+}
+
+/** Move every quantized animation onto the current grid (after `lockPhase` re-centred it). */
+function realignAll(): void {
+  if (typeof document === 'undefined' || typeof document.getAnimations !== 'function') return;
+  for (const a of document.getAnimations()) if (originals.has(a) && !smoothSet.has(a)) alignToGrid(a);
+}
+
+/** Calibrate the grid phase from one real frame (boot); later the clock loop keeps it locked. */
+export function calibrateFrameGrid(): void {
+  if (typeof requestAnimationFrame !== 'function') return;
+  requestAnimationFrame((t0) =>
+    requestAnimationFrame((t1) => {
+      const dt = t1 - t0;
+      if (dt > 3 && dt < 25) vsync = dt;
+      lockPhase(t1);
+    }),
+  );
 }
 
 function requantizeAll(): void {
@@ -369,22 +450,31 @@ function requantizeAll(): void {
 }
 
 let cssQuantizer = false;
+
+/** Quantize CSS animations/transitions that are not on the frame budget yet. */
+function sweepCss(): void {
+  if (!cssQuantizer || fps >= 60) return;
+  for (const a of document.getAnimations()) if (!originals.has(a) && !smoothSet.has(a)) quantize(a);
+}
+
 /**
  * Quantize CSS animations and transitions as they start (their per-keyframe timing function is
- * kept; only the iteration clock is stepped at the frame budget, on the global grid). Idempotent.
+ * kept; only the iteration clock is stepped at the frame budget, on the global grid): right
+ * after clock frames (`postTick`) and, for ones started elsewhere (input, screen changes), on
+ * their start events. Idempotent.
  */
 export function installCssAnimationQuantizer(): void {
   if (cssQuantizer || typeof document === 'undefined' || typeof document.getAnimations !== 'function') return;
   cssQuantizer = true;
   let queued = false;
-  const sweep = (): void => {
+  const onStart = (): void => {
     if (queued || fps >= 60) return;
     queued = true;
     queueMicrotask(() => {
       queued = false;
-      for (const a of document.getAnimations()) if (!originalEasing.has(a) && !smoothSet.has(a)) quantize(a);
+      sweepCss();
     });
   };
-  document.addEventListener('animationstart', sweep, { capture: true, passive: true });
-  document.addEventListener('transitionstart', sweep, { capture: true, passive: true });
+  document.addEventListener('animationstart', onStart, { capture: true, passive: true });
+  document.addEventListener('transitionstart', onStart, { capture: true, passive: true });
 }
