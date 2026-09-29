@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOARD, BUILDING_LEVEL_NAMES, GROUP_COLORS } from '../../content/board';
 import { CARDS, getCard } from '../../content/cards';
+import { ICON_IDS } from '../../content/icons';
 import {
   CITY_INDICES,
   HUB_INDICES,
@@ -64,6 +65,11 @@ describe('board content (DESIGN §3)', () => {
     expect(new Set(icons).size).toBe(19);
     expect(BOARD[1]!.iconId).toBe('city-manila');
     expect(BUILDING_LEVEL_NAMES.landmark).toEqual({ ko: '명소', en: 'Landmark' });
+  });
+
+  it('uses only icon ids that exist in the icon set', () => {
+    const known = new Set(ICON_IDS);
+    for (const s of BOARD) expect(known.has(s.iconId), s.iconId).toBe(true);
   });
 
   it('avoids forbidden trademark words in content', () => {

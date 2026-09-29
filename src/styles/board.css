@@ -1,0 +1,177 @@
+/* Board: warm paper ring on the felt table. Everything scales with --u (board / 32). */
+
+.board {
+  position: absolute;
+  border-radius: calc(var(--u) * 0.75);
+  background: #E9DDC6;
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.16) #CDBB98,
+    0 0 0 calc(var(--u) * 0.3) #8C6F4E,
+    0 calc(var(--u) * 0.6) calc(var(--u) * 1.6) rgba(0, 0, 0, 0.45),
+    0 calc(var(--u) * 1.4) calc(var(--u) * 4) rgba(0, 0, 0, 0.35);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.board-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.board-face { fill: #EEE3CD; }
+.board-inner-rim { fill: #E3D5BA; }
+
+.sp { cursor: pointer; transition: opacity var(--t-med) var(--ease-out); }
+.sp-bg { stroke: #E2D6BF; stroke-width: 3; }
+.sp-name {
+  font-family: var(--font-display);
+  fill: var(--ink);
+  letter-spacing: -0.01em;
+}
+.sp-name.on-owner { fill: #fff; }
+.sp-corner-name { fill: var(--ink); }
+.sp-price {
+  font-family: var(--font-num);
+  font-weight: 800;
+  fill: #fff;
+  letter-spacing: 0.01em;
+}
+.sp-sub { font-family: var(--font-body); font-weight: 800; fill: var(--ink-2); }
+.sp-pot text { font-family: var(--font-num); font-weight: 800; }
+.sp-x2 text { font-family: var(--font-num); font-weight: 900; }
+
+.sp-ring {
+  fill: none;
+  stroke-width: 18;
+  stroke-dasharray: 40 22;
+  animation: lr-ring 1.3s ease-in-out infinite;
+}
+@keyframes lr-ring { 50% { opacity: 0.25; } }
+
+.sp-glow { animation: lr-glow 2.2s ease-in-out infinite; }
+@keyframes lr-glow { 50% { opacity: 0.35; } }
+
+.board.is-picking .sp:not(.is-pick) { opacity: 0.32; }
+.sp.is-pick .sp-bg { stroke: var(--brand); stroke-width: 16; animation: lr-pick 1s ease-in-out infinite; }
+@keyframes lr-pick { 50% { stroke-opacity: 0.35; } }
+.sp.is-focus .sp-bg { stroke: var(--brand); stroke-width: 18; }
+
+/* Stage host = inner square (INNER / VB = 460 / 3200). */
+.stage-host {
+  position: absolute;
+  left: 14.375%;
+  top: 14.375%;
+  width: 71.25%;
+  height: 71.25%;
+}
+
+.token-layer,
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.board-overlay { z-index: 4; }
+.token-layer { z-index: 3; }
+
+.token {
+  position: absolute;
+  width: calc(var(--u) * 1.9);
+  height: calc(var(--u) * 1.9);
+  margin-left: calc(var(--u) * -0.95);
+  margin-top: calc(var(--u) * -1.1);
+  z-index: 1;
+  transition: scale var(--t-med) var(--ease-out), opacity var(--t-slow) var(--ease-out);
+}
+.token.is-shared { scale: 0.8; }
+.token.is-active { z-index: 2; }
+.token.is-moving { z-index: 3; scale: 1.05; }
+.token.is-out { opacity: 0; }
+.token-body { position: relative; width: 100%; height: 100%; transform-origin: 50% 100%; }
+.token-shadow {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -14%;
+  height: 26%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(20, 16, 10, 0.45), rgba(20, 16, 10, 0));
+}
+
+/* Generic token badge (board, stage, prompts). */
+.tok-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--pc, #4A6CF7);
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.13) var(--pc, #4A6CF7),
+    0 calc(var(--u) * 0.12) calc(var(--u) * 0.28) rgba(0, 0, 0, 0.35);
+}
+.tok-badge svg { width: 84%; height: 84%; display: block; }
+.token .tok-badge { width: 100%; height: 100%; }
+.token.is-active .tok-badge {
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.14) var(--pc),
+    0 0 0 calc(var(--u) * 0.3) #fff,
+    0 0 calc(var(--u) * 0.9) calc(var(--u) * 0.2) var(--pc),
+    0 calc(var(--u) * 0.15) calc(var(--u) * 0.3) rgba(0, 0, 0, 0.35);
+}
+
+.space-flash {
+  position: absolute;
+  border-radius: calc(var(--u) * 0.4);
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.22) #FFD66B,
+    0 0 calc(var(--u) * 0.9) calc(var(--u) * 0.2) rgba(255, 214, 107, 0.9);
+}
+.space-flash.fx-stamp {
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.26) #fff,
+    0 0 calc(var(--u) * 1.2) calc(var(--u) * 0.3) rgba(255, 255, 255, 0.95);
+}
+.space-flash.fx-shake {
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.22) var(--danger),
+    0 0 calc(var(--u) * 0.8) rgba(232, 86, 79, 0.8);
+}
+
+.land-ripple {
+  position: absolute;
+  width: calc(var(--u) * 4.4);
+  height: calc(var(--u) * 4.4);
+  border-radius: 50%;
+  border: calc(var(--u) * 0.22) solid var(--pc);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+/* "One away" toast, one copy per seat, each rotated to face it. */
+.edge-toast {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+  padding: calc(var(--u) * 0.22) calc(var(--u) * 0.6) calc(var(--u) * 0.22) calc(var(--u) * 0.25);
+  border-radius: var(--r-pill);
+  background: #1B2430;
+  color: #fff;
+  box-shadow: 0 0 0 calc(var(--u) * 0.14) var(--gc), var(--sh-2);
+  transform: translate(-50%, -50%) rotate(var(--rot)) translateY(calc(var(--u) * 9.4));
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: max(12px, calc(var(--u) * 0.72));
+}
+.edge-toast .et-tok { width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); }
+.edge-toast .et-ico { width: calc(var(--u) * 1.5); height: calc(var(--u) * 1.5); display: block; }
+.edge-toast .et-ico svg { width: 100%; height: 100%; }
+.edge-toast .et-arrow { opacity: 0.7; }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark felt "table" colour: launch/splash background. Keep in sync with capacitor.config.ts and src/styles/tokens.css (felt token). -->
+    <color name="table_bg">#1E2A3A</color>
+</resources>

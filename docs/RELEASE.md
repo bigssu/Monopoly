@@ -40,11 +40,10 @@ npm run build              # tsc + vite build  ->  dist/
 npx cap sync android       # dist/ 를 android/app/src/main/assets/public 으로 복사, 플러그인 동기화
 ```
 
-`android/` 폴더가 아직 없다면 한 번만 생성합니다 (이후 커밋합니다).
-
-```bash
-npx cap add android
-```
+`android/` 폴더는 이미 저장소에 커밋되어 있습니다 (Capacitor 8.5 템플릿 + 아래 7장의 수정). 새로 만들 필요가 없으며,
+`npx cap add android` 를 다시 실행하면 수정한 매니페스트/`MainActivity`/스타일이 덮어써질 수 있으니 실행하지 마세요.
+`android/app/src/main/assets/public/`, `assets/capacitor.config.json`, `assets/capacitor.plugins.json`, `res/xml/config.xml`,
+`capacitor-cordova-android-plugins/` 는 `cap sync` 가 매번 생성하는 파일이라 `android/.gitignore` 로 제외되어 있습니다.
 
 ### 2.1 Android Studio로 열기
 
@@ -109,9 +108,10 @@ keyPassword=여기에_키_비밀번호
 - 비밀번호에 백슬래시(`\`)가 들어가면 `\\` 로 이스케이프해야 합니다.
 - CI(GitHub Actions)는 이 파일과 키스토어를 시크릿에서 자동으로 만듭니다 (6장 참고).
 
-### 3.2 `android/app/build.gradle` 서명 설정 (패키징 담당이 추가)
+### 3.2 `android/app/build.gradle` 서명 설정 (이미 적용되어 있음)
 
-`android/app/build.gradle` 은 `keystore.properties` 가 **있을 때만** 릴리스 서명을 적용합니다.
+`android/app/build.gradle` 에는 아래 내용이 **이미 들어 있습니다** (참고용으로 남겨 둠).
+`keystore.properties` 가 **있을 때만** 릴리스 서명을 적용합니다.
 없으면 서명 없이도 debug 빌드가 그대로 동작합니다. 파일 맨 위 `apply plugin: 'com.android.application'` 바로 아래에:
 
 ```groovy
@@ -177,13 +177,14 @@ Play는 업로드마다 **`versionCode` 가 이전보다 커야** 합니다 (같
 ```groovy
 defaultConfig {
     applicationId "com.bigssu.lotandroll"
-    minSdkVersion rootProject.ext.minSdkVersion
-    targetSdkVersion rootProject.ext.targetSdkVersion
+    minSdkVersion rootProject.ext.minSdkVersion      // 24  (android/variables.gradle)
+    targetSdkVersion rootProject.ext.targetSdkVersion // 36
     versionCode 1          // 업로드마다 +1  (정수)
     versionName "0.1.0"    // package.json 의 version 과 맞춤
     // ...
 }
 ```
+(현재 값: `versionCode 1`, `versionName "0.1.0"`. `namespace` 도 `com.bigssu.lotandroll`.)
 
 권장 규칙: `versionName = MAJOR.MINOR.PATCH`, `versionCode = MAJOR*10000 + MINOR*100 + PATCH`
 (예: 0.1.0 -> `100`, 1.0.0 -> `10000`, 1.2.3 -> `10203`). 같은 버전을 재업로드해야 하면 PATCH를 올립니다.
@@ -273,16 +274,20 @@ debug APK만 빌드됩니다. 포크의 PR에는 GitHub이 시크릿을 전달�
 
 ## 7. 매니페스트: 가로 고정 + 게임 카테고리 + 몰입형 전체 화면
 
-### 7.1 `android/app/src/main/AndroidManifest.xml`
+### 7.1 `android/app/src/main/AndroidManifest.xml` (적용 완료)
 
 Android 16(API 36)부터 `targetSdk 36` 앱은 화면 최소 너비가 600dp 이상인 기기(태블릿, 펼친 폴더블)에서
 `android:screenOrientation` 등 방향 고정이 **무시됩니다.** 예외가 **게임**이며, 게임 여부는 Play 스토어 카테고리가 아니라
 매니페스트의 `android:appCategory="game"` 로 판단합니다 (Android 17에서도 유지). 그래서 `<application>` 에 반드시 넣어야 합니다.
 
 ```xml
+<supports-screens android:smallScreens="true" android:normalScreens="true"
+    android:largeScreens="true" android:xlargeScreens="true" android:anyDensity="true" />
+
 <application
     android:appCategory="game"
     android:allowBackup="false"
+    android:hardwareAccelerated="true"
     android:icon="@mipmap/ic_launcher"
     android:roundIcon="@mipmap/ic_launcher_round"
     android:label="@string/app_name"
@@ -303,12 +308,14 @@ Android 16(API 36)부터 `targetSdk 36` 앱은 화면 최소 너비가 600dp 이
 
 - `sensorLandscape`: 사용자가 자동 회전을 꺼도 두 가로 방향을 센서로 허용 (게임에 적합). `landscape` / `userLandscape` 와 구분하세요.
 - `allowBackup="false"`: 새 기기에서 오래된 SharedPreferences/WebView 데이터가 자동 복원되는 것을 방지.
-- 완전 오프라인 게임이므로 템플릿의 `INTERNET` 권한은 제거해도 됩니다 (라이브 리로드 개발 서버를 쓸 때만 필요).
+- 완전 오프라인 게임이지만 템플릿의 `INTERNET` 권한은 **현재 그대로 남겨 두었습니다** (Capacitor WebView가 `https://localhost` 가상 origin으로
+  에셋을 제공하는 데는 필요 없지만, 라이브 리로드 개발 서버를 쓸 때 필요). 개발 서버를 쓰지 않는다면 제거해도 됩니다 — 다만 Play 스토어
+  등록정보/데이터 보안 답변("네트워크 사용 안 함")과 맞추려면 출시 전에 제거를 권장합니다.
   `@capacitor/haptics` 가 `VIBRATE` 권한을 자동 추가합니다.
-- `<supports-screens>` 는 필요 없습니다 (targetSdk 13 이상은 기본으로 모든 화면 허용).
+- `<supports-screens>` 는 필수는 아니지만(targetSdk 13 이상은 기본 허용) 태블릿 대상임을 명시하려고 large/xlarge 를 넣어 두었습니다.
 - 선택 사항: 런타임에서 `ScreenOrientation.lock({ orientation: 'landscape' })` (`@capacitor/screen-orientation`)로 이중 안전장치.
 
-### 7.2 `capacitor.config.ts`
+### 7.2 `capacitor.config.ts` (저장소 루트, 적용 완료)
 
 ```ts
 import type { CapacitorConfig } from '@capacitor/cli';
@@ -317,16 +324,22 @@ const config: CapacitorConfig = {
   appId: 'com.bigssu.lotandroll',
   appName: '랏앤롤',
   webDir: 'dist',
-  android: { backgroundColor: '#1b1b2f' },
+  server: { androidScheme: 'https' },            // 절대 바꾸지 말 것 (localStorage origin)
+  android: { allowMixedContent: false, backgroundColor: '#1E2A3A' },
   plugins: {
-    SystemBars: { hidden: true, style: 'DARK', insetsHandling: 'css', initialViewportFitValueHint: 'cover' },
-    SplashScreen: { launchAutoHide: false, backgroundColor: '#1b1b2f' }
+    SplashScreen: { launchAutoHide: false, backgroundColor: '#1E2A3A', showSpinner: false }
   }
 };
 export default config;
 ```
 
-### 7.3 몰입형 전체 화면 `MainActivity.java`
+- 배경색 `#1E2A3A` 는 앱의 펠트 색(`--felt`)이며 `android/app/src/main/res/values/colors.xml` 의 `table_bg` 와 같은 값입니다.
+- `launchAutoHide: false` 라서 스플래시는 웹 쪽이 `SplashScreen.hide()` 를 부를 때까지 유지됩니다 (`src/ui/shell/capacitor.ts` 의 `hideNativeSplash`).
+- `SystemBars` 플러그인 설정은 넣지 않았습니다. 시스템 바 숨김은 `MainActivity` 가 네이티브로 처리하고, 인셋은 core 의 `SystemBars`
+  기본값(`insetsHandling: 'css'`)이 `--safe-area-inset-*` CSS 변수로 제공합니다.
+- `capacitor.config.ts` 는 tsconfig `include` 에 없어서 `npm run typecheck` / vitest 대상이 아닙니다 (Capacitor CLI가 직접 읽음).
+
+### 7.3 몰입형 전체 화면 `MainActivity.java` (적용 완료, Java)
 
 시스템 바는 가장자리 스와이프, 다이얼로그, 작업 전환 뒤에 다시 나타나므로 포커스를 얻을 때마다 다시 숨깁니다.
 경로: `android/app/src/main/java/com/bigssu/lotandroll/MainActivity.java`
@@ -365,12 +378,39 @@ public class MainActivity extends BridgeActivity {
 }
 ```
 
-노치/펀치홀(가로 모드)까지 화면을 채우려면 `android/app/src/main/res/values-v27/styles.xml` 의
-`AppTheme.NoActionBar` 와 런치 테마에 다음 항목을 추가합니다 (`windowLayoutInDisplayCutoutMode` 는 API 27+).
+노치/펀치홀(가로 모드)까지 화면을 채우도록 `android/app/src/main/res/values/styles.xml` 의 `AppTheme.NoActionBar` 와
+`AppTheme.NoActionBarLaunch` 에 다음 항목을 넣어 두었습니다 (`values-v27/` 을 따로 만들지 않고 `values/` 에 둠. API 27 미만에서는 무시되고
+lint 경고만 납니다).
 
 ```xml
 <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
 ```
+
+같은 파일에서 `AppTheme.NoActionBar` 는 `android:windowBackground` 를 `@color/table_bg` 로 두어 회전/리사이즈 때 흰 깜빡임을 막고,
+`AppTheme.NoActionBarLaunch` 는 Android 12+ 시스템 스플래시용 `windowSplashScreenBackground` = `@color/table_bg`,
+`windowSplashScreenAnimatedIcon` = `@drawable/splash_icon` 을 지정합니다.
+
+### 7.4 아이콘 / 스플래시 / Play 그래픽 (`scripts/gen-android-icons.mjs`)
+
+모든 런처 아이콘과 스플래시는 `src/content/icons/logo.ts` 의 `LOGO_SVG` 에서 생성합니다 (Playwright + Chromium 필요).
+
+```bash
+node scripts/gen-android-icons.mjs              # Android 리소스 + Play 그래픽 모두
+node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽만
+```
+
+| 산출물 | 경로 |
+|---|---|
+| 적응형 아이콘 전경 (108dp, 로고 62%) | `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_foreground.png` (108/162/216/324/432 px) |
+| 적응형 아이콘 배경 (펠트 방사형 그라디언트) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
+| 적응형 아이콘 정의 | `res/mipmap-anydpi-v26/ic_launcher{,_round}.xml` (템플릿 파일을 배경 drawable 참조로 수정, 스크립트는 건드리지 않음) |
+| 구형 아이콘 (API 24-25) | `res/mipmap-*dpi/ic_launcher.png`, `ic_launcher_round.png` (48-192 px) |
+| Android 12+ 스플래시 아이콘 | `res/drawable-*dpi/splash_icon.png` (288dp 캔버스) |
+| Android 11 이하 스플래시 | `res/drawable/splash.png`, `res/drawable-{land,port}-*dpi/splash.png` (어두운 펠트 + 로고) |
+| Play 아이콘 512x512 | `docs/assets/play-icon-512.png` |
+| Play 피처 그래픽 1024x500 (알파 없음) | `docs/assets/feature-graphic-1024x500.png` (Jua 폰트로 렌더링) |
+
+배경을 금색(`#F2B633`)이 아니라 어두운 펠트로 한 이유: 로고의 노란 혜성 꼬리가 금색 배경에서는 거의 보이지 않습니다.
 
 웹 쪽은 `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">`
 와 `env(safe-area-inset-*)` / `--safe-area-inset-*` 패딩을 함께 사용합니다.
@@ -464,6 +504,7 @@ npx cap sync android
 cd android && ./gradlew clean bundleRelease --no-daemon
 ```
 
+- [ ] `android/gradlew` 실행 권한(`git ls-files -s android/gradlew` 이 100755)이 유지되고 있다.
 - [ ] `AndroidManifest.xml` 에 `android:appCategory="game"`, `sensorLandscape`, `allowBackup="false"` 가 있다.
 - [ ] `git status` 에 `*.keystore`, `*.jks`, `keystore.properties` 가 없다.
 - [ ] `versionCode` 와 `versionName` 이 올라갔다.
