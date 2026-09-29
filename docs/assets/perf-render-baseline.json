@@ -1,0 +1,1519 @@
+{
+ "generatedAt": "2026-09-29T23:02:13.802Z",
+ "chromium": "141.0.7390.37",
+ "config": {
+  "base": "http://localhost:4183",
+  "seconds": 45,
+  "titleSeconds": 8,
+  "throttle": 4,
+  "dpr": 2,
+  "viewport": [
+   1600,
+   1000
+  ]
+ },
+ "scenarios": [
+  {
+   "name": "title",
+   "url": "http://localhost:4183/?dev=1",
+   "windowSec": 8,
+   "throttle": 4,
+   "dpr": 2,
+   "layers": {
+    "samples": 1,
+    "layerTreeChangedEvents": 0,
+    "layerPaintedEvents": 0,
+    "count": {
+     "min": 28,
+     "median": 28,
+     "max": 28,
+     "final": 28
+    },
+    "memoryMB": {
+     "min": 43.27,
+     "median": 43.27,
+     "max": 43.27,
+     "final": 43.27,
+     "note": "sum(width*height*4) of drawsContent layers, in the pixel units CDP reports (DPR-scaled if width matches viewport*DPR)"
+    },
+    "rootLayerSize": [
+     1600,
+     1500
+    ],
+    "snapshot": "layer set at peak layer memory",
+    "peakCount": 28,
+    "peakDrawing": 22,
+    "peakDeviceMemoryMB": 173.07,
+    "withTransform": 20,
+    "willChange": 0,
+    "transformOrAnimationPromoted": {
+     "transformReasons": 14,
+     "animationReasons": 14
+    },
+    "compositingReasons": {
+     "ActiveTransformAnimation": 14,
+     "Overlap": 9,
+     "3DTransform": 8,
+     "ActiveOpacityAnimation": 6,
+     "OverflowScrolling": 3,
+     "Viewport": 2,
+     "RootScroller": 1
+    },
+    "top10BySize": [
+     {
+      "layerId": "22",
+      "node": "div.title-rays",
+      "w": 1500,
+      "h": 1500,
+      "mb": 8.58,
+      "deviceMB": 34.33,
+      "drawsContent": true,
+      "paints": 0,
+      "hasTransform": true,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "8",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "Viewport",
+       "OverflowScrolling"
+      ]
+     },
+     {
+      "layerId": "9",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "OverflowScrolling"
+      ]
+     },
+     {
+      "layerId": "10",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": true,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "RootScroller",
+       "OverflowScrolling"
+      ]
+     },
+     {
+      "layerId": "11",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": true,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "17",
+      "node": "div.screen.title-screen",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "ActiveTransformAnimation",
+       "ActiveOpacityAnimation"
+      ]
+     },
+     {
+      "layerId": "31",
+      "node": "div.title-main.safe-pad",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "1",
+      "node": null,
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "Viewport"
+      ]
+     },
+     {
+      "layerId": "18",
+      "node": "span.title-blob.b1",
+      "w": 1120,
+      "h": 1120,
+      "mb": 4.79,
+      "deviceMB": 19.14,
+      "drawsContent": true,
+      "paints": 0,
+      "hasTransform": true,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "19",
+      "node": "span.title-blob.b2",
+      "w": 1120,
+      "h": 1120,
+      "mb": 4.79,
+      "deviceMB": 19.14,
+      "drawsContent": true,
+      "paints": 0,
+      "hasTransform": true,
+      "reasons": [
+       "Overlap"
+      ]
+     }
+    ],
+    "top12MostRepainted": [],
+    "paintsByNode": {}
+   },
+   "trace": {
+    "frames": 184,
+    "framesPerSec": 23,
+    "events": {
+     "Paint": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "RasterTask": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "CompositeLayers": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "Commit": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "UpdateLayerTree": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "Layout": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "RecalculateStyles": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "PrePaint": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "PaintImage": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "DecodeImage": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "ImageDecodeTask": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "DrawFrame": {
+      "count": 184,
+      "totalMs": 0,
+      "perSec": 22.98,
+      "msPerSec": 0,
+      "perFrame": 1,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "FunctionCall": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "GPUTask": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "UpdateLayer": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     }
+    },
+    "slowest": {},
+    "totalTraceEvents": 20942
+   },
+   "svg": {
+    "atEnd": {
+     "domElements": 194,
+     "svgElements": 13,
+     "svgTopLevel": 13,
+     "svgChildElements": 125,
+     "distinctIcons": 9,
+     "iconGroups": [
+      {
+       "key": "html:<rect x=\"4\" y=\"8\" width=\"56\" height=\"54\" rx=\"13\" fill=\"#B7C3",
+       "count": 3,
+       "children": 16
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"60\" rx=\"20\" ry=\"2.4\" fill=\"#2B3245\" opa",
+       "count": 2,
+       "children": 14
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"59.5\" rx=\"20\" ry=\"2.6\" fill=\"#2B3245\" o",
+       "count": 2,
+       "children": 26
+      },
+      {
+       "key": "html:<g transform=\"rotate(38 32 32)\"><path d=\"M26 47Q32 68 38 47Z",
+       "count": 1,
+       "children": 15
+      },
+      {
+       "key": "html:<path d=\"M4 43V48L32 60L60 48V43L32 55Z\" fill=\"#7A5343\" stro",
+       "count": 1,
+       "children": 46
+      },
+      {
+       "key": "html:<path d=\"M8 5.5L18.5 12L8 18.5Z\"></path>",
+       "count": 1,
+       "children": 1
+      },
+      {
+       "key": "html:<circle cx=\"12\" cy=\"12\" r=\"9.5\"></circle><path d=\"M9.2 9.5Q9",
+       "count": 1,
+       "children": 3
+      },
+      {
+       "key": "html:<path d=\"M9.97 4.68L10.39 2.13L13.61 2.13L14.03 4.68L15.75 5",
+       "count": 1,
+       "children": 2
+      },
+      {
+       "key": "html:<circle cx=\"12\" cy=\"8\" r=\"3.8\"></circle><path d=\"M4.5 20Q4.5",
+       "count": 1,
+       "children": 2
+      }
+     ],
+     "effects": {
+      "filter": {
+       "total": 1,
+       "top": [
+        {
+         "selector": ".title-logo-wrap > div.title-logo",
+         "count": 1
+        }
+       ]
+      },
+      "backdrop-filter": {
+       "total": 0,
+       "top": []
+      },
+      "box-shadow": {
+       "total": 4,
+       "top": [
+        {
+         "selector": ".title-menu-row > button.btn.btn-ghost",
+         "count": 2
+        },
+        {
+         "selector": ".title-words > div.title-alt",
+         "count": 1
+        },
+        {
+         "selector": ".title-menu > button.btn.btn-primary.btn-xl",
+         "count": 1
+        }
+       ]
+      },
+      "mix-blend-mode": {
+       "total": 0,
+       "top": []
+      },
+      "will-change": {
+       "total": 0,
+       "top": []
+      },
+      "animated": {
+       "total": 20,
+       "top": [
+        {
+         "selector": ".title-bg > span.floaty",
+         "count": 8
+        },
+        {
+         "selector": "#app > div.screen.title-screen",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b1",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b2",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b3",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b4",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > div.title-rays",
+         "count": 1
+        },
+        {
+         "selector": ".title-hero > div.title-logo-wrap",
+         "count": 1
+        }
+       ]
+      },
+      "text-shadow": {
+       "total": 1,
+       "top": [
+        {
+         "selector": ".title-words > h1.title-word",
+         "count": 1
+        }
+       ]
+      },
+      "opacity": {
+       "total": 33,
+       "top": [
+        {
+         "selector": ".floaty > path",
+         "count": 10
+        },
+        {
+         "selector": ".title-bg > span.floaty",
+         "count": 8
+        },
+        {
+         "selector": ".floaty > ellipse",
+         "count": 4
+        },
+        {
+         "selector": ".floaty > circle",
+         "count": 2
+        },
+        {
+         "selector": ".floaty > rect",
+         "count": 2
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b1",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b2",
+         "count": 1
+        },
+        {
+         "selector": ".title-bg > span.title-blob.b3",
+         "count": 1
+        }
+       ]
+      }
+     }
+    },
+    "atStart": {
+     "svgElements": 13,
+     "svgChildElements": 125,
+     "domElements": 194
+    }
+   },
+   "counters": {
+    "before": {
+     "LayoutCount": 5,
+     "RecalcStyleCount": 18,
+     "LayoutDurationMs": 1276.2,
+     "RecalcStyleDurationMs": 96.1,
+     "JSHeapUsedMB": 2.22,
+     "JSHeapTotalMB": 3.04,
+     "Nodes": 336,
+     "Documents": 5,
+     "JSEventListeners": 21,
+     "domCounters": {
+      "documents": 5,
+      "nodes": 336,
+      "jsEventListeners": 21
+     },
+     "jsHeapMB": 2.78
+    },
+    "after": {
+     "LayoutCount": 5,
+     "RecalcStyleCount": 20,
+     "LayoutDurationMs": 1276.2,
+     "RecalcStyleDurationMs": 100,
+     "JSHeapUsedMB": 2.55,
+     "JSHeapTotalMB": 3.29,
+     "Nodes": 336,
+     "Documents": 5,
+     "JSEventListeners": 21,
+     "domCounters": {
+      "documents": 5,
+      "nodes": 336,
+      "jsEventListeners": 21
+     },
+     "jsHeapMB": 3.12
+    },
+    "delta": {
+     "LayoutCount": 0,
+     "RecalcStyleCount": 2,
+     "LayoutDurationMs": 0,
+     "RecalcStyleDurationMs": 0,
+     "ScriptDurationMs": 0,
+     "TaskDurationMs": 50,
+     "layoutPerSec": 0,
+     "recalcStylePerSec": 0.25
+    }
+   },
+   "consoleErrors": []
+  },
+  {
+   "name": "play",
+   "url": "http://localhost:4183/?dev=1#game",
+   "windowSec": 45,
+   "throttle": 4,
+   "dpr": 2,
+   "play": {
+    "turnsStart": 1,
+    "turnsEnd": 7,
+    "gamesStarted": 1
+   },
+   "layers": {
+    "samples": 1215,
+    "layerTreeChangedEvents": 1214,
+    "layerPaintedEvents": 2388,
+    "count": {
+     "min": 17,
+     "median": 36,
+     "max": 58,
+     "final": 40
+    },
+    "memoryMB": {
+     "min": 21.79,
+     "median": 29.48,
+     "max": 34.62,
+     "final": 32.31,
+     "note": "sum(width*height*4) of drawsContent layers, in the pixel units CDP reports (DPR-scaled if width matches viewport*DPR)"
+    },
+    "rootLayerSize": [
+     2441,
+     1000
+    ],
+    "snapshot": "layer set at peak layer memory",
+    "peakCount": 26,
+    "peakDrawing": 19,
+    "peakDeviceMemoryMB": 138.49,
+    "withTransform": 19,
+    "willChange": 0,
+    "transformOrAnimationPromoted": {
+     "transformReasons": 5,
+     "animationReasons": 9
+    },
+    "compositingReasons": {
+     "Overlap": 12,
+     "ActiveOpacityAnimation": 7,
+     "ActiveTransformAnimation": 5,
+     "OverflowScrolling": 3,
+     "Viewport": 2,
+     "RootScroller": 1
+    },
+    "top10BySize": [
+     {
+      "layerId": "8",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "Viewport",
+       "OverflowScrolling"
+      ]
+     },
+     {
+      "layerId": "9",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "OverflowScrolling"
+      ]
+     },
+     {
+      "layerId": "10",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": true,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "RootScroller",
+       "OverflowScrolling"
+      ]
+     },
+     {
+      "layerId": "11",
+      "node": "#document",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": true,
+      "paints": 35,
+      "hasTransform": false,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "134",
+      "node": "div.pp.is-narrow",
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": true,
+      "paints": 3,
+      "hasTransform": false,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "1",
+      "node": null,
+      "w": 1600,
+      "h": 1000,
+      "mb": 6.1,
+      "deviceMB": 24.41,
+      "drawsContent": false,
+      "paints": 0,
+      "hasTransform": false,
+      "reasons": [
+       "Viewport"
+      ]
+     },
+     {
+      "layerId": "209",
+      "node": "g.sp.sp-city.is-focus",
+      "w": 2441,
+      "h": 464,
+      "mb": 4.32,
+      "deviceMB": 17.28,
+      "drawsContent": true,
+      "paints": 1,
+      "hasTransform": true,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "208",
+      "node": "div.token-layer",
+      "w": 972,
+      "h": 972,
+      "mb": 3.6,
+      "deviceMB": 14.42,
+      "drawsContent": true,
+      "paints": 2,
+      "hasTransform": true,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "213",
+      "node": "div.pcard.pc-build.is-cpu",
+      "w": 833,
+      "h": 669,
+      "mb": 2.13,
+      "deviceMB": 8.5,
+      "drawsContent": true,
+      "paints": 1,
+      "hasTransform": true,
+      "reasons": [
+       "ActiveTransformAnimation",
+       "ActiveOpacityAnimation"
+      ]
+     },
+     {
+      "layerId": "210",
+      "node": "div.stage-host",
+      "w": 707,
+      "h": 694,
+      "mb": 1.87,
+      "deviceMB": 7.49,
+      "drawsContent": true,
+      "paints": 1,
+      "hasTransform": true,
+      "reasons": [
+       "Overlap"
+      ]
+     }
+    ],
+    "top12MostRepainted": [
+     {
+      "layerId": "444",
+      "node": "div.pp.is-narrow.is-turn",
+      "paints": 78,
+      "w": 410,
+      "h": 572,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "410",
+      "node": "::after",
+      "paints": 60,
+      "w": 1600,
+      "h": 1000,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "133",
+      "node": "div.pp.is-narrow",
+      "paints": 54,
+      "w": 370,
+      "h": 564,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "814",
+      "node": "::after",
+      "paints": 52,
+      "w": 332,
+      "h": 986,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "862",
+      "node": "::after",
+      "paints": 52,
+      "w": 479,
+      "h": 286,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "533",
+      "node": "::after",
+      "paints": 51,
+      "w": 1600,
+      "h": 1000,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "916",
+      "node": "::after",
+      "paints": 51,
+      "w": 479,
+      "h": 286,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "111",
+      "node": "::after",
+      "paints": 50,
+      "w": 332,
+      "h": 986,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "906",
+      "node": "div.pp.is-narrow",
+      "paints": 47,
+      "w": 362,
+      "h": 1000,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "238",
+      "node": "::after",
+      "paints": 46,
+      "w": 479,
+      "h": 286,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "408",
+      "node": "div.pp.is-narrow.is-turn",
+      "paints": 46,
+      "w": 410,
+      "h": 572,
+      "reasons": [
+       "Overlap"
+      ]
+     },
+     {
+      "layerId": "812",
+      "node": "div.pp.is-narrow.is-turn",
+      "paints": 46,
+      "w": 410,
+      "h": 604,
+      "reasons": [
+       "Overlap"
+      ]
+     }
+    ],
+    "paintsByNode": {
+     "::after": 689,
+     "div.pp.is-narrow": 325,
+     "div.pp.is-narrow.is-turn": 268,
+     "div.token-body": 144,
+     "div.pp-card.flash-down": 64,
+     "div.st-toasts": 60,
+     "div.st-dice": 48,
+     "div.face.f1": 46,
+     "div.face.f2": 46,
+     "div.face.f3": 46,
+     "div.face.f4": 46,
+     "div.face.f5": 46,
+     "div.face.f6": 46,
+     "div.token-layer": 40,
+     "div.stage-bg": 40
+    }
+   },
+   "trace": {
+    "frames": 2618,
+    "framesPerSec": 58.2,
+    "events": {
+     "Paint": {
+      "count": 2752,
+      "totalMs": 4517.3,
+      "perSec": 61.13,
+      "msPerSec": 100.3,
+      "perFrame": 1.05,
+      "msPerFrame": 1.73,
+      "maxMs": 29.98
+     },
+     "RasterTask": {
+      "count": 6445,
+      "totalMs": 5739.3,
+      "perSec": 143.16,
+      "msPerSec": 127.5,
+      "perFrame": 2.46,
+      "msPerFrame": 2.19,
+      "maxMs": 28.38
+     },
+     "CompositeLayers": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "Commit": {
+      "count": 1340,
+      "totalMs": 1494.8,
+      "perSec": 29.77,
+      "msPerSec": 33.2,
+      "perFrame": 0.51,
+      "msPerFrame": 0.57,
+      "maxMs": 6.95
+     },
+     "UpdateLayerTree": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "Layout": {
+      "count": 525,
+      "totalMs": 3959.2,
+      "perSec": 11.66,
+      "msPerSec": 87.9,
+      "perFrame": 0.2,
+      "msPerFrame": 1.51,
+      "maxMs": 653.23
+     },
+     "RecalculateStyles": {
+      "count": 1362,
+      "totalMs": 1700.3,
+      "perSec": 30.25,
+      "msPerSec": 37.8,
+      "perFrame": 0.52,
+      "msPerFrame": 0.65,
+      "maxMs": 20.47
+     },
+     "PrePaint": {
+      "count": 1340,
+      "totalMs": 1093.3,
+      "perSec": 29.77,
+      "msPerSec": 24.3,
+      "perFrame": 0.51,
+      "msPerFrame": 0.42,
+      "maxMs": 13.08
+     },
+     "PaintImage": {
+      "count": 571,
+      "totalMs": 28.4,
+      "perSec": 12.68,
+      "msPerSec": 0.6,
+      "perFrame": 0.22,
+      "msPerFrame": 0.01,
+      "maxMs": 3.07
+     },
+     "DecodeImage": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "ImageDecodeTask": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "DrawFrame": {
+      "count": 2618,
+      "totalMs": 0,
+      "perSec": 58.15,
+      "msPerSec": 0,
+      "perFrame": 1,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "FunctionCall": {
+      "count": 1548,
+      "totalMs": 1938,
+      "perSec": 34.39,
+      "msPerSec": 43,
+      "perFrame": 0.59,
+      "msPerFrame": 0.74,
+      "maxMs": 664.93
+     },
+     "GPUTask": {
+      "count": 0,
+      "totalMs": 0,
+      "perSec": 0,
+      "msPerSec": 0,
+      "perFrame": 0,
+      "msPerFrame": 0,
+      "maxMs": 0
+     },
+     "UpdateLayer": {
+      "count": 25935,
+      "totalMs": 154.3,
+      "perSec": 576.1,
+      "msPerSec": 3.4,
+      "perFrame": 9.91,
+      "msPerFrame": 0.06,
+      "maxMs": 3.15
+     }
+    },
+    "slowest": {
+     "Layout": [
+      {
+       "ms": 653.2,
+       "atSec": 1.5,
+       "dirty": 72,
+       "total": 1476
+      },
+      {
+       "ms": 412,
+       "atSec": 40,
+       "dirty": 49,
+       "total": 1583
+      },
+      {
+       "ms": 248,
+       "atSec": 5.9,
+       "dirty": 226,
+       "total": 1634
+      },
+      {
+       "ms": 228.9,
+       "atSec": 33.6,
+       "dirty": 11,
+       "total": 1563
+      },
+      {
+       "ms": 202.8,
+       "atSec": 2.6,
+       "dirty": 11,
+       "total": 1453
+      }
+     ],
+     "FunctionCall": [
+      {
+       "ms": 664.9,
+       "atSec": 1.5,
+       "fn": "",
+       "url": "index-BVhBkryZ.js",
+       "line": 36
+      },
+      {
+       "ms": 269.9,
+       "atSec": 5.9,
+       "fn": "",
+       "url": "index-BVhBkryZ.js",
+       "line": 36
+      },
+      {
+       "ms": 145.9,
+       "atSec": 7.4,
+       "fn": "",
+       "url": "index-BVhBkryZ.js",
+       "line": 36
+      },
+      {
+       "ms": 119.3,
+       "atSec": 35.5,
+       "fn": "",
+       "url": "index-BVhBkryZ.js",
+       "line": 36
+      },
+      {
+       "ms": 111.1,
+       "atSec": 16.9,
+       "fn": "",
+       "url": "index-BVhBkryZ.js",
+       "line": 36
+      }
+     ],
+     "RecalculateStyles": [
+      {
+       "ms": 20.5,
+       "atSec": 5.9
+      },
+      {
+       "ms": 16.1,
+       "atSec": 7.6
+      },
+      {
+       "ms": 14.7,
+       "atSec": 25
+      },
+      {
+       "ms": 12.7,
+       "atSec": 26.9
+      },
+      {
+       "ms": 10,
+       "atSec": 1.5
+      }
+     ],
+     "Paint": [
+      {
+       "ms": 30,
+       "atSec": 7.1
+      },
+      {
+       "ms": 21.4,
+       "atSec": 2.3
+      },
+      {
+       "ms": 20.9,
+       "atSec": 33.2
+      },
+      {
+       "ms": 20.1,
+       "atSec": 7.2
+      },
+      {
+       "ms": 19.1,
+       "atSec": 7.6
+      }
+     ],
+     "RasterTask": [
+      {
+       "ms": 28.4,
+       "atSec": 41
+      },
+      {
+       "ms": 25.1,
+       "atSec": 41
+      },
+      {
+       "ms": 23.5,
+       "atSec": 14.4
+      },
+      {
+       "ms": 21.2,
+       "atSec": 29.6
+      },
+      {
+       "ms": 19.8,
+       "atSec": 23.5
+      }
+     ]
+    },
+    "totalTraceEvents": 551439
+   },
+   "svg": {
+    "atEnd": {
+     "domElements": 1716,
+     "svgElements": 85,
+     "svgTopLevel": 48,
+     "svgChildElements": 1365,
+     "distinctIcons": 41,
+     "iconGroups": [
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"60\" rx=\"20\" ry=\"2.4\" fill=\"#2B3245\" opa",
+       "count": 23,
+       "children": 182
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"59.5\" rx=\"20\" ry=\"2.6\" fill=\"#2B3245\" o",
+       "count": 7,
+       "children": 143
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"59\" rx=\"22\" ry=\"2.6\" fill=\"#2B3245\" opa",
+       "count": 5,
+       "children": 85
+      },
+      {
+       "key": "html:<circle cx=\"28\" cy=\"28\" r=\"9\" fill=\"#2B3245\"></circle><circl",
+       "count": 4,
+       "children": 12
+      },
+      {
+       "key": "html:<path d=\"M0 48H64V60Q64 62 62 62H2Q0 62 0 60Z\" fill=\"#3E9CC6",
+       "count": 2,
+       "children": 30
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"59\" rx=\"28\" ry=\"2.6\" fill=\"#2B3245\" opa",
+       "count": 2,
+       "children": 40
+      },
+      {
+       "key": "html:<circle cx=\"32\" cy=\"30\" r=\"27\" fill=\"#D6F1EA\"></circle><path",
+       "count": 2,
+       "children": 42
+      },
+      {
+       "key": "html:<circle cx=\"50\" cy=\"50\" r=\"11\" fill=\"#EF5B5B\"></circle>",
+       "count": 2,
+       "children": 2
+      },
+      {
+       "key": "html:<circle cx=\"26\" cy=\"26\" r=\"9\" fill=\"#2B3245\"></circle><circl",
+       "count": 2,
+       "children": 6
+      },
+      {
+       "key": "html:<circle cx=\"27\" cy=\"27\" r=\"9\" fill=\"#2B3245\"></circle><circl",
+       "count": 2,
+       "children": 10
+      },
+      {
+       "key": "html:<circle cx=\"28\" cy=\"24\" r=\"9\" fill=\"#2B3245\"></circle><circl",
+       "count": 2,
+       "children": 12
+      },
+      {
+       "key": "html:<rect x=\"4\" y=\"8\" width=\"56\" height=\"54\" rx=\"13\" fill=\"#B7C3",
+       "count": 2,
+       "children": 14
+      },
+      {
+       "key": "html:<g transform=\"rotate(38 32 32)\"><path d=\"M26 47Q32 68 38 47Z",
+       "count": 2,
+       "children": 30
+      },
+      {
+       "key": "html:<defs><radialGradient id=\"lr-glow\"><stop offset=\"0\" stop-col",
+       "count": 1,
+       "children": 955
+      },
+      {
+       "key": "html:<ellipse cx=\"28\" cy=\"59\" rx=\"18\" ry=\"2.4\" fill=\"#2B3245\" opa",
+       "count": 1,
+       "children": 7
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"57\" rx=\"27\" ry=\"3\" fill=\"#2B3245\" opaci",
+       "count": 1,
+       "children": 18
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"60\" rx=\"14\" ry=\"2.2\" fill=\"#2B3245\" opa",
+       "count": 1,
+       "children": 13
+      },
+      {
+       "key": "html:<circle cx=\"47\" cy=\"17\" r=\"9\" fill=\"#FF9A4D\"></circle><circl",
+       "count": 1,
+       "children": 11
+      },
+      {
+       "key": "html:<path d=\"M0 50H64V60Q64 62 62 62H2Q0 62 0 60Z\" fill=\"#3E9CC6",
+       "count": 1,
+       "children": 27
+      },
+      {
+       "key": "html:<circle cx=\"29\" cy=\"8\" r=\"5\" fill=\"#FFC94A\"></circle><ellips",
+       "count": 1,
+       "children": 24
+      },
+      {
+       "key": "html:<circle cx=\"12\" cy=\"15\" r=\"6\" fill=\"#FFC94A\"></circle><path ",
+       "count": 1,
+       "children": 8
+      },
+      {
+       "key": "html:<ellipse cx=\"30\" cy=\"59\" rx=\"20\" ry=\"2.6\" fill=\"#2B3245\" opa",
+       "count": 1,
+       "children": 27
+      },
+      {
+       "key": "html:<ellipse cx=\"32\" cy=\"61\" rx=\"21\" ry=\"2.4\" fill=\"#2B3245\" opa",
+       "count": 1,
+       "children": 12
+      },
+      {
+       "key": "html:<circle cx=\"32\" cy=\"32\" r=\"27\" fill=\"#CDEBF8\"></circle><path",
+       "count": 1,
+       "children": 12
+      },
+      {
+       "key": "html:<circle cx=\"32\" cy=\"32\" r=\"28\" fill=\"#CDEBF8\"></circle><circ",
+       "count": 1,
+       "children": 22
+      }
+     ],
+     "effects": {
+      "filter": {
+       "total": 0,
+       "top": []
+      },
+      "backdrop-filter": {
+       "total": 0,
+       "top": []
+      },
+      "box-shadow": {
+       "total": 131,
+       "top": [
+        {
+         "selector": ".pp-sets > span.slot",
+         "count": 68
+        },
+        {
+         "selector": ".pp-sets > span.slot.is-hub",
+         "count": 15
+        },
+        {
+         "selector": ".pp-sets > span.slot.is-mine",
+         "count": 6
+        },
+        {
+         "selector": ".slot-pips > i",
+         "count": 5
+        },
+        {
+         "selector": ".token-body > span.tok-badge",
+         "count": 4
+        },
+        {
+         "selector": ".pp-tokwrap > span.pp-tok",
+         "count": 4
+        },
+        {
+         "selector": ".pp-tokwrap > span.pp-rank",
+         "count": 4
+        },
+        {
+         "selector": ".pp > div.pp-card.flash-down",
+         "count": 3
+        }
+       ]
+      },
+      "mix-blend-mode": {
+       "total": 0,
+       "top": []
+      },
+      "will-change": {
+       "total": 16,
+       "top": [
+        {
+         "selector": ".fx-layer > div.pt",
+         "count": 16
+        }
+       ]
+      },
+      "animated": {
+       "total": 11,
+       "top": [
+        {
+         "selector": ".pp-cash > span.pp-cash-n",
+         "count": 4
+        },
+        {
+         "selector": ".sp > rect.sp-ring",
+         "count": 2
+        },
+        {
+         "selector": ".pp-sets > span.slot.is-missing",
+         "count": 2
+        },
+        {
+         "selector": ".dice > div.dice-pair",
+         "count": 1
+        },
+        {
+         "selector": ".st-dice > div.st-thinking",
+         "count": 1
+        },
+        {
+         "selector": ".ro-inner > span.ico.ro-ico",
+         "count": 1
+        }
+       ]
+      },
+      "text-shadow": {
+       "total": 0,
+       "top": []
+      },
+      "opacity": {
+       "total": 152,
+       "top": [
+        {
+         "selector": ".tok-badge > path",
+         "count": 22
+        },
+        {
+         "selector": "ellipse",
+         "count": 21
+        },
+        {
+         "selector": ".pp-tok > path",
+         "count": 16
+        },
+        {
+         "selector": ".pt-coin > ellipse",
+         "count": 16
+        },
+        {
+         "selector": ".pt-coin > path",
+         "count": 16
+        },
+        {
+         "selector": ".sp-bld > path",
+         "count": 10
+        },
+        {
+         "selector": ".tok-badge > ellipse",
+         "count": 6
+        },
+        {
+         "selector": ".sp > rect",
+         "count": 5
+        }
+       ]
+      }
+     }
+    },
+    "atStart": {
+     "svgElements": 60,
+     "svgChildElements": 1081,
+     "domElements": 1360
+    }
+   },
+   "counters": {
+    "before": {
+     "LayoutCount": 11,
+     "RecalcStyleCount": 47,
+     "LayoutDurationMs": 4545.6,
+     "RecalcStyleDurationMs": 168.3,
+     "JSHeapUsedMB": 2.54,
+     "JSHeapTotalMB": 3.79,
+     "Nodes": 1920,
+     "Documents": 5,
+     "JSEventListeners": 30,
+     "domCounters": {
+      "documents": 5,
+      "nodes": 1920,
+      "jsEventListeners": 30
+     },
+     "jsHeapMB": 3.1
+    },
+    "after": {
+     "LayoutCount": 626,
+     "RecalcStyleCount": 1696,
+     "LayoutDurationMs": 8678.4,
+     "RecalcStyleDurationMs": 2281.2,
+     "JSHeapUsedMB": 2.68,
+     "JSHeapTotalMB": 4.04,
+     "Nodes": 2194,
+     "Documents": 1,
+     "JSEventListeners": 27,
+     "domCounters": {
+      "documents": 1,
+      "nodes": 2194,
+      "jsEventListeners": 27
+     },
+     "jsHeapMB": 3.27
+    },
+    "delta": {
+     "LayoutCount": 615,
+     "RecalcStyleCount": 1649,
+     "LayoutDurationMs": 4130,
+     "RecalcStyleDurationMs": 2110,
+     "ScriptDurationMs": 450,
+     "TaskDurationMs": 23210,
+     "layoutPerSec": 13.66,
+     "recalcStylePerSec": 36.63
+    }
+   },
+   "consoleErrors": []
+  }
+ ]
+}
