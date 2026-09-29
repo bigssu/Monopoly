@@ -234,6 +234,15 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
   23. 축제 초대: festival marker moves to a random own city (no-op if none)
   24. 세계 일주 완료 보너스: +100 × number of hubs you own
 
+### 4.1 Accepted deviations after balancing (see `docs/BALANCE.md`)
+
+* City toll rates are **0.10 / 1.00 / 2.00 / 3.00 / 4.00 × P** for L0–L4 (not the §4 draft numbers).
+* `endOnFirstBankruptcy` (default **on**): the first bankruptcy ends the game; richest solvent player
+  wins (victory kind `bankruptcy`). Off = classic elimination.
+* `buildOnPurchase`: the first level may be built on the same visit as the purchase; one level per visit.
+* The board has **19** cities (G2 has 3, G1/G7 have 2, others 3) — the §3 table is authoritative.
+* The seat that starts is randomized by the UI (P1 has a measurable advantage in simulation).
+
 ## 5. Engine architecture (`src/engine`)
 
 * `types.ts` — `GameState`, `Player`, `Space`, `Property`, `Phase` (discriminated union),

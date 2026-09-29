@@ -1,0 +1,70 @@
+/* Lot & Roll design tokens. Single source of truth for color / type / radius / motion. */
+:root {
+  /* Surfaces */
+  --bg-table: #1E2A3A;          /* felt-like table background around the board */
+  --bg-table-2: #16202D;
+  --bg-board: #F6F1E7;          /* warm paper board face */
+  --bg-board-2: #EDE6D8;
+  --bg-stage: #FBF8F2;
+  --bg-panel: #FFFFFF;
+  --bg-panel-dim: #F1F3F7;
+  --ink: #1B2430;
+  --ink-2: #4B5563;
+  --ink-3: #8A94A6;
+  --line: #E2E6EE;
+  --line-2: #CBD2DE;
+
+  /* Brand */
+  --brand: #F2B633;             /* gold */
+  --brand-2: #E8564F;           /* coral */
+  --accent: #4A6CF7;
+  --success: #3DBB6E;
+  --danger: #E8564F;
+  --warning: #F5A25D;
+
+  /* Property groups (DESIGN §3) */
+  --g-brown: #A0715B;
+  --g-sky: #6EC1E4;
+  --g-pink: #F28AB2;
+  --g-orange: #F5A25D;
+  --g-red: #E8564F;
+  --g-yellow: #F2C94C;
+  --g-blue: #4A6CF7;
+  --g-hub: #7B8AA3;
+
+  /* Player colors (content/palette.ts) */
+  --p-red: #E8564F; --p-blue: #4A6CF7; --p-green: #3DBB6E; --p-yellow: #F2B633;
+  --p-purple: #9B6BF2; --p-orange: #F5844A; --p-teal: #2EC4B6; --p-pink: #F272A8;
+
+  /* Type */
+  --font-display: 'Jua', 'Noto Sans KR', system-ui, sans-serif;
+  --font-body: 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-num: 'Noto Sans KR', system-ui, sans-serif;
+
+  /* Board unit: 1/32 of the board side. Set by ui/layout.ts on <html>. */
+  --board: 800px;
+  --u: calc(var(--board) / 32);
+
+  /* Radii / shadows */
+  --r-xs: 6px; --r-sm: 10px; --r-md: 16px; --r-lg: 24px; --r-pill: 999px;
+  --sh-1: 0 1px 2px rgba(20, 30, 50, .10), 0 2px 8px rgba(20, 30, 50, .08);
+  --sh-2: 0 4px 12px rgba(20, 30, 50, .14), 0 12px 32px rgba(20, 30, 50, .12);
+  --sh-3: 0 10px 30px rgba(20, 30, 50, .28), 0 30px 80px rgba(20, 30, 50, .22);
+  --sh-inset: inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 0 rgba(20,30,50,.10);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --t-fast: 140ms; --t-med: 260ms; --t-slow: 420ms; --t-stage: 420ms;
+
+  /* Safe areas (Android WebView + Capacitor) */
+  --safe-t: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --safe-r: max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px));
+  --safe-b: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  --safe-l: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-stage: 0ms; }
+}
