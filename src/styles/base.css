@@ -1,0 +1,307 @@
+/* Lot & Roll — base layer: reset, table felt, typography, buttons, focus, safe areas, transitions.
+   Owned by the shell. Game-screen styles live in board/stage/panels/game.css. */
+
+:root {
+  /* Table felt (shell extension of tokens.css) */
+  --felt-hi: #2B3C53;
+  --felt: #1E2A3A;
+  --felt-lo: #111925;
+  --on-felt: #F4F1EA;
+  --on-felt-2: rgba(244, 241, 234, .72);
+  --on-felt-3: rgba(244, 241, 234, .48);
+  --glass: rgba(255, 255, 255, .07);
+  --glass-2: rgba(255, 255, 255, .12);
+  --glass-line: rgba(255, 255, 255, .14);
+
+  /* Button faces (top / bottom gradient + 3D edge) */
+  --gold-hi: #FFD968; --gold: #F2B633; --gold-edge: #B5841A; --gold-ink: #4A2E00;
+  --coral-hi: #FF877E; --coral: #E8564F; --coral-edge: #A8332D;
+  --paper-hi: #FFFFFF; --paper: #F3EEE4; --paper-edge: #C9BFAE;
+  --focus: #8DB8FF;
+
+  /* Shell scale: 1em ≈ 13px on a 800×450 phone, ≈ 20px on a 2560×1600 tablet. */
+  --shell-fs: clamp(13px, 2.35vmin, 21px);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  color: var(--on-felt);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--felt);
+  background-image:
+    radial-gradient(120% 90% at 50% 38%, var(--felt-hi) 0%, var(--felt) 46%, var(--felt-lo) 100%);
+}
+
+/* Faint felt weave on top of the gradient. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .5;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, .035) 1px, transparent 1.2px),
+    radial-gradient(rgba(0, 0, 0, .12) 1px, transparent 1.2px);
+  background-size: 6px 6px, 6px 6px;
+  background-position: 0 0, 3px 3px;
+}
+
+h1, h2, h3, h4, p, ul, ol, figure { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+img, svg { display: block; max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { -webkit-appearance: none; appearance: none; background: none; border: 0; padding: 0; cursor: pointer; }
+input, textarea { user-select: text; -webkit-user-select: text; }
+
+h1, h2, h3, h4, .display, .num {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: .01em;
+  line-height: 1.1;
+}
+.num { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ app root / screens */
+
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  font-size: var(--shell-fs);
+  animation: screen-in var(--t-med) var(--ease-out) both;
+}
+
+/* Snapshot of the previous screen, cross-faded out by src/ui/shell/nav.ts. */
+.screen-ghost {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  overflow: hidden;
+  animation: screen-out var(--t-med) linear both;
+}
+/* Cloned nodes would restart their entry animations; freeze them in their final state. */
+.screen-ghost * { animation: none !important; transition: none !important; }
+
+@keyframes screen-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes screen-out { from { opacity: 1; } to { opacity: 0; transform: scale(1.015); } }
+
+/* Safe-area helpers (Android cutouts / gesture bars). */
+.safe-pad { padding: max(12px, var(--safe-t)) max(12px, var(--safe-r)) max(12px, var(--safe-b)) max(12px, var(--safe-l)); }
+.safe-t { padding-top: max(12px, var(--safe-t)); }
+.safe-r { padding-right: max(12px, var(--safe-r)); }
+.safe-b { padding-bottom: max(12px, var(--safe-b)); }
+.safe-l { padding-left: max(12px, var(--safe-l)); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------------ icons */
+
+.ico { display: inline-grid; place-items: center; flex: none; width: 1.25em; height: 1.25em; }
+.ico > svg { width: 100%; height: 100%; }
+
+/* ------------------------------------------------------------------ buttons */
+
+.btn {
+  --btn-hi: var(--paper-hi);
+  --btn-lo: var(--paper);
+  --btn-edge: var(--paper-edge);
+  --btn-ink: var(--ink);
+  --btn-depth: 5px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5em;
+  min-width: 48px;
+  min-height: 48px;
+  padding: .55em 1.3em;
+  border-radius: 18px;
+  font-family: var(--font-display);
+  font-size: 1.2em;
+  line-height: 1.1;
+  color: var(--btn-ink);
+  background: linear-gradient(180deg, var(--btn-hi), var(--btn-lo));
+  box-shadow:
+    0 var(--btn-depth) 0 var(--btn-edge),
+    0 calc(var(--btn-depth) + 6px) 18px rgba(5, 10, 20, .35),
+    inset 0 2px 0 rgba(255, 255, 255, .55);
+  transform: translateY(0);
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    filter var(--t-fast) linear,
+    opacity var(--t-fast) linear;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+}
+.btn:active:not(:disabled),
+.btn.is-pressed {
+  transform: translateY(calc(var(--btn-depth) - 1px)) scale(.96);
+  box-shadow:
+    0 1px 0 var(--btn-edge),
+    0 3px 8px rgba(5, 10, 20, .3),
+    inset 0 2px 0 rgba(255, 255, 255, .45);
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  filter: saturate(.25) brightness(.85);
+  opacity: .6;
+  cursor: default;
+}
+
+.btn-primary {
+  --btn-hi: var(--gold-hi);
+  --btn-lo: var(--gold);
+  --btn-edge: var(--gold-edge);
+  --btn-ink: var(--gold-ink);
+}
+.btn-coral {
+  --btn-hi: var(--coral-hi);
+  --btn-lo: var(--coral);
+  --btn-edge: var(--coral-edge);
+  --btn-ink: #fff;
+  text-shadow: 0 1px 0 rgba(120, 20, 20, .35);
+}
+.btn-ghost {
+  --btn-depth: 0px;
+  color: var(--on-felt);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 2px var(--glass-line);
+}
+.btn-ghost:active:not(:disabled),
+.btn-ghost.is-pressed {
+  transform: scale(.96);
+  background: var(--glass-2);
+  box-shadow: inset 0 0 0 2px var(--glass-line);
+}
+.btn-danger-ghost { --btn-depth: 0px; color: #FF9C95; background: rgba(232, 86, 79, .12); box-shadow: inset 0 0 0 2px rgba(232, 86, 79, .35); }
+.btn-danger-ghost:active:not(:disabled) { transform: scale(.96); box-shadow: inset 0 0 0 2px rgba(232, 86, 79, .5); }
+
+.btn-icon { padding: 0; width: 48px; height: 48px; border-radius: 16px; font-size: 1em; }
+.btn-icon .ico { width: 24px; height: 24px; }
+.btn-round { border-radius: 50%; }
+.btn-lg { font-size: 1.45em; min-height: 60px; padding: .6em 1.5em; border-radius: 22px; --btn-depth: 6px; }
+.btn-xl { font-size: 1.75em; min-height: 68px; padding: .6em 1.6em; border-radius: 24px; --btn-depth: 7px; }
+.btn-block { display: flex; width: 100%; }
+
+/* ------------------------------------------------------------------ focus */
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+.btn:focus-visible { outline-offset: 4px; border-radius: 20px; }
+
+/* ------------------------------------------------------------------ dialogs / toasts (shared) */
+
+.dlg-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: max(16px, var(--safe-t)) max(16px, var(--safe-r)) max(16px, var(--safe-b)) max(16px, var(--safe-l));
+  font-size: var(--shell-fs);
+  background: rgba(8, 12, 20, .58);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: dlg-fade var(--t-med) var(--ease-out) both;
+}
+.dlg-backdrop.is-closing { animation: dlg-fade-out var(--t-fast) linear both; }
+.dlg-backdrop.is-top { place-items: start center; padding-top: max(5vh, var(--safe-t)); }
+
+.dlg {
+  position: relative;
+  width: min(30em, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  padding: 1.5em 1.6em 1.4em;
+  border-radius: var(--r-lg);
+  color: var(--ink);
+  background: linear-gradient(180deg, #FFFDF8, var(--bg-board));
+  box-shadow: var(--sh-3), inset 0 0 0 1px rgba(255, 255, 255, .8);
+  animation: dlg-pop var(--t-slow) var(--ease-spring) both;
+}
+.dlg-backdrop.is-closing .dlg { animation: dlg-pop-out var(--t-fast) var(--ease-in-out) both; }
+.dlg-title { font-size: 1.6em; color: var(--ink); }
+.dlg-body { color: var(--ink-2); font-size: 1.05em; line-height: 1.55; }
+.dlg-actions { display: flex; gap: .75em; justify-content: flex-end; flex-wrap: wrap; margin-top: .25em; }
+.dlg-actions .btn { font-size: 1.1em; }
+.dlg .btn-ghost { color: var(--ink-2); background: rgba(27, 36, 48, .05); box-shadow: inset 0 0 0 2px var(--line-2); }
+
+@keyframes dlg-fade { from { opacity: 0; } }
+@keyframes dlg-fade-out { to { opacity: 0; } }
+@keyframes dlg-pop { from { opacity: 0; transform: translateY(18px) scale(.92); } }
+@keyframes dlg-pop-out { to { opacity: 0; transform: scale(.95); } }
+
+.toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, var(--safe-b));
+  z-index: 300;
+  display: grid;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-size: var(--shell-fs);
+}
+.toast {
+  padding: .7em 1.2em;
+  border-radius: var(--r-pill);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1.1em;
+  background: rgba(15, 22, 33, .92);
+  box-shadow: var(--sh-2), inset 0 0 0 1px rgba(255, 255, 255, .1);
+  animation: toast-in var(--t-slow) var(--ease-spring) both;
+}
+.toast.is-out { animation: toast-out var(--t-med) var(--ease-in-out) both; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(.9); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
