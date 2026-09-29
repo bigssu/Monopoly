@@ -1,0 +1,24 @@
+{
+  "name": "lot-and-roll",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Lot & Roll (랏앤롤) — pass-and-play property trading board game for one tablet",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "sim": "tsx scripts/balance.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

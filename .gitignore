@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dist-ssr/
+*.local
+coverage/
+
+# e2e
+test-results/
+playwright-report/
+e2e/__screenshots__/*-actual*
+e2e/__screenshots__/*-diff*
+
+# android / capacitor
+android/app/build/
+android/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/app/release/
+android/capacitor-cordova-android-plugins/build/
+*.keystore
+*.jks
+*.apk
+*.aab
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
