@@ -15,7 +15,7 @@ import {
   type Player,
 } from '@/engine';
 import { fmtMoney, loc, t } from '@/i18n';
-import { anim, D, instant } from '@/ui/fx/time';
+import { anim, D, instant, onFrame } from '@/ui/fx/time';
 import { groupColor, h, iconEl, setPlayerVars, signedMoney, svg } from '@/ui/game/util';
 
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
@@ -33,9 +33,11 @@ export class PlayerPanel {
   private badges: HTMLElement;
   private rank: HTMLElement;
   private floats: HTMLElement;
+  /** Pre-painted green/red rim + tint; money in/out only animates its opacity (no repaint). */
+  private wash: HTMLElement;
   private shown = 0;
   private target = 0;
-  private raf = 0;
+  private stopTween: (() => void) | null = null;
   private sig = '';
 
   constructor(readonly player: Player) {
@@ -65,8 +67,9 @@ export class PlayerPanel {
       });
     });
     this.floats = h('div', { class: 'pp-floats' });
+    this.wash = h('div', { class: 'pp-wash' });
     const head = h('div', { class: 'pp-head' }, h('div', { class: 'pp-tokwrap' }, badge, this.rank), h('div', { class: 'pp-id' }, name, cash, h('div', { class: 'pp-sub' }, this.assets, this.badges)));
-    this.cardEl = h('div', { class: 'pp-card' }, head, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats);
+    this.cardEl = h('div', { class: 'pp-card' }, head, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.wash, this.floats);
     this.el.append(this.cardEl);
     this.shown = player.cash;
     this.target = player.cash;
@@ -135,25 +138,36 @@ export class PlayerPanel {
     const from = this.shown;
     const up = v > this.target;
     this.target = v;
+    // `flash-up` / `flash-down` mark the last money direction (tests and styling hooks).
     this.cardEl.classList.remove('flash-up', 'flash-down');
+    this.stopTween?.();
+    this.stopTween = null;
     if (instant()) {
       this.shown = v;
       this.cashNum.textContent = fmtMoney(v);
       return;
     }
-    void this.cardEl.offsetWidth; // restart flash
     this.cardEl.classList.add(up ? 'flash-up' : 'flash-down');
+    // Rim + tint wash: opacity only, on its own pre-painted layer.
+    this.wash.classList.toggle('is-down', !up);
+    void anim(this.wash, [{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 1000, easing: 'cubic-bezier(.22,1,.36,1)' });
+    void anim(
+      this.cashNum,
+      [{ color: up ? '#25A55A' : '#D2443D' }, { color: up ? '#25A55A' : '#D2443D', offset: 0.4 }, { color: 'var(--ink)' }],
+      { duration: 800, easing: 'cubic-bezier(.22,1,.36,1)' },
+    );
+    // Count-up on the shared frame clock (30 Hz with the battery saver; stops when done).
     const dur = D(650);
     const t0 = performance.now();
-    cancelAnimationFrame(this.raf);
-    const step = (now: number): void => {
+    this.stopTween = onFrame((now) => {
       const k = Math.min(1, (now - t0) / Math.max(1, dur));
       const e = 1 - Math.pow(1 - k, 3);
       this.shown = Math.round(from + (v - from) * e);
       this.cashNum.textContent = fmtMoney(this.shown);
-      if (k < 1) this.raf = requestAnimationFrame(step);
-    };
-    this.raf = requestAnimationFrame(step);
+      if (k < 1) return true;
+      this.stopTween = null;
+      return false;
+    });
   }
 
   /** "+300" / "−120" float rising from the panel (rotated with it), with an optional caption. */
@@ -212,6 +226,7 @@ export class PlayerPanel {
   }
 
   dispose(): void {
-    cancelAnimationFrame(this.raf);
+    this.stopTween?.();
+    this.stopTween = null;
   }
 }

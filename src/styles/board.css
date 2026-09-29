@@ -26,7 +26,7 @@
 .board-face { fill: #EEE3CD; }
 .board-inner-rim { fill: #E3D5BA; }
 
-.sp { cursor: pointer; transition: opacity var(--t-med) var(--ease-out); }
+.sp { cursor: pointer; }
 .sp-bg { stroke: #E2D6BF; stroke-width: 3; }
 .sp-name {
   font-family: var(--font-display);
@@ -45,21 +45,25 @@
 .sp-pot text { font-family: var(--font-num); font-weight: 800; }
 .sp-x2 text { font-family: var(--font-num); font-weight: 900; }
 
-.sp-ring {
-  fill: none;
-  stroke-width: 18;
-  stroke-dasharray: 40 22;
-  animation: lr-ring 1.3s ease-in-out infinite;
-}
+/* Landmark glow: static (a pulsing SVG child would repaint the whole board SVG every frame). */
+
+/* Highlights live in an HTML layer above the SVG (Board.mark): their pulses animate opacity on
+   small elements only, so the compositor runs them without repainting the board. */
+.board-marks { position: absolute; inset: 0; pointer-events: none; }
+.bmark { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.bmark > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.bmark rect { fill: none; }
+.bm-ring rect { stroke-width: 18; stroke-dasharray: 40 22; }
+.bm-ring { animation: lr-ring 1.3s ease-in-out infinite; }
 @keyframes lr-ring { 50% { opacity: 0.25; } }
-
-.sp-glow { animation: lr-glow 2.2s ease-in-out infinite; }
-@keyframes lr-glow { 50% { opacity: 0.35; } }
-
-.board.is-picking .sp:not(.is-pick) { opacity: 0.32; }
-.sp.is-pick .sp-bg { stroke: var(--brand); stroke-width: 16; animation: lr-pick 1s ease-in-out infinite; }
-@keyframes lr-pick { 50% { stroke-opacity: 0.35; } }
-.sp.is-focus .sp-bg { stroke: var(--brand); stroke-width: 18; }
+.bm-pick rect { stroke: var(--brand); stroke-width: 8; }
+.bm-pick { animation: lr-pick 1s ease-in-out infinite; }
+@keyframes lr-pick { 50% { opacity: 0.35; } }
+.bm-focus rect { stroke: var(--brand); stroke-width: 9; }
+/* Pick mode dims the other spaces: a board-colored veil at .68 = those groups at opacity .32. */
+.bm-dim { position: absolute; inset: 0; opacity: 0; transition: opacity var(--t-med) var(--ease-out); }
+.bm-dim.is-on { opacity: 1; }
+.bm-dim > svg { display: block; width: 100%; height: 100%; fill: rgba(238, 227, 205, 0.68); }
 
 /* Stage host = inner square (INNER / VB = 460 / 3200). */
 .stage-host {

@@ -1,5 +1,7 @@
 /**
  * Pooled DOM particles (≤ 80 nodes, transform/opacity only): confetti, coin showers, coin arcs.
+ * The pool only lives while an effect runs: when the last particle lands every node is removed,
+ * so an idle table carries no hidden particle nodes or layers.
  */
 import { anim, instant } from './time';
 import { svg } from '@/ui/game/util';
@@ -31,6 +33,11 @@ export class Particles {
   private give(el: HTMLElement): void {
     el.style.display = 'none';
     this.free.push(el);
+    if (this.free.length === this.pool.length) {
+      for (const p of this.pool) p.remove();
+      this.pool = [];
+      this.free = [];
+    }
   }
 
   /** Confetti rain over the whole host. */

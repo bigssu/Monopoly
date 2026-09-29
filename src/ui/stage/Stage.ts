@@ -68,9 +68,11 @@ export class Stage {
     const from = this.angle;
     this.angle += delta;
     this.rot.style.transform = `rotate(${this.angle}deg)`;
+    // Smooth even with the 30 Hz frame budget: a stepped turn of the whole stage reads as judder.
     await anim(this.rot, [{ transform: `rotate(${from}deg)` }, { transform: `rotate(${this.angle}deg)` }], {
       duration: 420,
       easing: 'cubic-bezier(.65,0,.35,1)',
+      smooth: true,
     });
   }
 

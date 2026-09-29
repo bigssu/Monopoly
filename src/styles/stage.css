@@ -137,8 +137,19 @@
   100% { transform: translate(0, 0) rotate(0); }
 }
 .dice.is-doubles .face { box-shadow: inset 0 0 0 max(2px, calc(var(--u) * 0.12)) #F2B633; }
-.dice.is-doubles .dice-pair { animation: lr-gold 900ms ease-out 1; }
-@keyframes lr-gold { 0% { filter: drop-shadow(0 0 0 #FFD66B); } 40% { filter: drop-shadow(0 0 calc(var(--u) * 0.8) #FFD66B); } 100% { filter: drop-shadow(0 0 0 #FFD66B); } }
+/* Doubles: a gold glow behind each die, pre-painted and faded in/out (opacity only; an animated
+   drop-shadow filter re-rasterizes the dice every frame). */
+.die::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 22%;
+  box-shadow: 0 0 calc(var(--u) * 0.8) calc(var(--u) * 0.12) #FFD66B;
+  opacity: 0;
+  pointer-events: none;
+}
+.dice.is-doubles .die::before { animation: lr-gold 900ms ease-out 1; }
+@keyframes lr-gold { 40% { opacity: 1; } }
 .dice-readout {
   display: flex;
   align-items: center;
@@ -362,7 +373,9 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: 0 0 0 0 rgba(255, 196, 64, 0.75);
+  /* Pre-painted ring; the pulse only scales + fades it (compositor-only, no repaint). */
+  box-shadow: 0 0 0 calc(var(--u) * 0.45) rgba(255, 196, 64, 0.75);
+  opacity: 0;
   animation: lr-invite 1.6s ease-out infinite;
   pointer-events: none;
 }
@@ -372,8 +385,8 @@
 .roll-btn:disabled::before { animation: none; }
 .roll-btn:disabled { filter: saturate(0.4); opacity: 0.8; }
 @keyframes lr-invite {
-  0% { box-shadow: 0 0 0 0 rgba(255, 196, 64, 0.75); }
-  70%, 100% { box-shadow: 0 0 0 calc(var(--u) * 0.9) rgba(255, 196, 64, 0); }
+  0% { opacity: 1; transform: scale(1); }
+  70%, 100% { opacity: 0; transform: scale(1.06, 1.22); }
 }
 @media (prefers-reduced-motion: reduce) {
   .roll-btn::before { animation: none; }

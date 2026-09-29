@@ -124,7 +124,8 @@
   position: absolute;
   left: 0;
   top: 0;
-  will-change: transform;
+  /* No will-change: running transform animations get their own layer anyway; idle (pooled,
+     display:none) particles must not keep 80 layers alive. */
   border-radius: 2px;
 }
 .pt[data-kind='confetti'] { background: var(--c); }

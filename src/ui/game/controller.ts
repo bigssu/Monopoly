@@ -18,7 +18,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, D, endSkip, instant, skip } from '@/ui/fx/time';
+import { animSpeed, D, endSkip, gridTimeout, instant, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -36,7 +36,8 @@ export class GameController {
   private busy = false;
   private disposed = false;
   private paused = false;
-  private cpuTimer = 0;
+  /** Cancels the pending CPU move (a grid-aligned timeout, see fx/time `gridTimeout`). */
+  private cancelCpu: () => void = () => {};
   private onGameOver: (s: GameState) => void;
   private gameOverFired = false;
   /** Dev/test override for the prompt timer (seconds; null = prefs). */
@@ -100,7 +101,7 @@ export class GameController {
       return false;
     }
     this.busy = true;
-    window.clearTimeout(this.cpuTimer);
+    this.cancelCpu();
     this.clearPromptUi();
     const prev = this.state;
     let result;
@@ -191,7 +192,7 @@ export class GameController {
       const base = s.phase.kind === 'preRoll' ? 350 + Math.random() * 200 : 450 + Math.random() * 300;
       const delay = instant() || animSpeed() === 0 ? 0 : D(base);
       const snapshot = s;
-      this.cpuTimer = window.setTimeout(() => {
+      this.cancelCpu = gridTimeout(() => {
         if (this.disposed || this.paused || this.state !== snapshot) return;
         let a: Action;
         try {
@@ -210,7 +211,7 @@ export class GameController {
   /** Pause CPU + prompt timers (menu open). */
   pause(): void {
     this.paused = true;
-    window.clearTimeout(this.cpuTimer);
+    this.cancelCpu();
     this.view.stage.clearTimer();
   }
 
@@ -243,7 +244,7 @@ export class GameController {
 
   dispose(): void {
     this.disposed = true;
-    window.clearTimeout(this.cpuTimer);
+    this.cancelCpu();
     this.flushIdle();
   }
 }

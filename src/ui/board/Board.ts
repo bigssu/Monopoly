@@ -7,7 +7,7 @@ import { playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, D, instant } from '@/ui/fx/time';
+import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
 import { groupColor, h, setPlayerVars, spaceIcon, svg } from '@/ui/game/util';
 import { DEPTH, GEOM, INNER, VB, tokenSpot, type SpaceGeom } from './geometry';
 
@@ -211,6 +211,16 @@ export class Board {
   readonly el: HTMLElement;
   readonly stageHost: HTMLElement;
   readonly overlay: HTMLElement;
+  /**
+   * HTML layer between the board SVG and the tokens for per-space highlights (one-away rings,
+   * pick / focus outlines, pick dimming). Their pulses animate opacity on small HTML elements
+   * (compositor-only); animating inside the SVG would repaint the whole board every frame.
+   */
+  private marks: HTMLElement;
+  private rings = new Map<number, HTMLElement>();
+  private pickEls: HTMLElement[] = [];
+  private focusEl: HTMLElement | null = null;
+  private dimEl: HTMLElement | null = null;
   private svgEl: SVGSVGElement;
   private groups: SVGGElement[] = [];
   private sigs: string[] = [];
@@ -256,9 +266,10 @@ export class Board {
       this.onTap(i);
     });
     this.stageHost = h('div', { class: 'stage-host' });
+    this.marks = h('div', { class: 'board-marks' });
     this.tokenLayer = h('div', { class: 'token-layer' });
     this.overlay = h('div', { class: 'board-overlay' });
-    this.el.append(this.svgEl, this.stageHost, this.tokenLayer, this.overlay);
+    this.el.append(this.svgEl, this.marks, this.stageHost, this.tokenLayer, this.overlay);
     for (const p of players) {
       const body = h('div', { class: 'token-body' });
       body.append(h('span', { class: 'tok-badge', html: svg(p.tokenId) }));
@@ -306,23 +317,17 @@ export class Board {
         this.sigs[i] = sig;
         const g = GEOM[i]!;
         grp.innerHTML = g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
-        grp.dataset.ring = '';
       }
-      // One-away pulse ring (cheap: separate element toggled).
-      if ((grp.dataset.ring || null) !== v.ring) {
-        grp.querySelector('.sp-ring')?.remove();
-        grp.dataset.ring = v.ring ?? '';
+      // One-away pulse ring: a separate HTML mark above the space, recreated only on change.
+      const ring = this.rings.get(i);
+      if ((ring?.dataset.color ?? null) !== v.ring) {
+        ring?.remove();
+        this.rings.delete(i);
         if (v.ring) {
           const g = GEOM[i]!;
-          const r = document.createElementNS(NS, 'rect');
-          r.setAttribute('class', 'sp-ring');
-          r.setAttribute('x', '10');
-          r.setAttribute('y', '10');
-          r.setAttribute('width', String(g.lw - 20));
-          r.setAttribute('height', String(g.lh - 20));
-          r.setAttribute('rx', '22');
-          r.setAttribute('stroke', v.ring);
-          grp.appendChild(r);
+          const el = this.mark(i, 'bm-ring', `<rect x="10" y="10" width="${g.lw - 20}" height="${g.lh - 20}" rx="22" stroke="${v.ring}"/>`);
+          el.dataset.color = v.ring;
+          this.rings.set(i, el);
         }
       }
     }
@@ -375,17 +380,76 @@ export class Board {
     ], { duration: 650, easing: 'cubic-bezier(.22,1,.36,1)' }).then(() => r.remove());
   }
 
+  /**
+   * An HTML element covering space `i` in its local frame (rotated like the SVG group), holding
+   * an SVG snippet in local board units. Appended to the marks layer.
+   */
+  private mark(i: number, cls: string, inner: string): HTMLElement {
+    const g = GEOM[i]!;
+    const k = 100 / VB;
+    const el = h('div', { class: `bmark ${cls}` });
+    el.style.left = `${g.cx * k}%`;
+    el.style.top = `${g.cy * k}%`;
+    el.style.width = `${g.lw * k}%`;
+    el.style.height = `${g.lh * k}%`;
+    if (!g.corner && g.rot) el.style.transform = `translate(-50%, -50%) rotate(${g.rot}deg)`;
+    el.innerHTML = `<svg viewBox="0 0 ${g.lw} ${g.lh}" preserveAspectRatio="none" aria-hidden="true">${inner}</svg>`;
+    this.marks.append(el);
+    return el;
+  }
+
+  /** Outline hugging the outside of a space's background card (`sp-bg`), `w` board units wide. */
+  private outline(i: number, cls: string, w: number): HTMLElement {
+    const g = GEOM[i]!;
+    const m = 7 - w / 2;
+    return this.mark(i, cls, `<rect x="${m}" y="${m}" width="${g.lw - 2 * m}" height="${g.lh - 2 * m}" rx="${(g.corner ? 34 : 24) + w / 2}"/>`);
+  }
+
   /** Highlight a set of spaces as tappable choices; `null` clears. */
   setPicking(options: readonly number[] | null, onPick?: (i: number) => void): void {
     this.pickSet = new Set(options ?? []);
     this.pickHandler = options ? (onPick ?? null) : null;
     this.el.classList.toggle('is-picking', !!options);
     this.groups.forEach((g, i) => g.classList.toggle('is-pick', this.pickSet.has(i)));
+    for (const el of this.pickEls) el.remove();
+    this.pickEls = [];
+    if (options) {
+      for (const i of this.pickSet) this.pickEls.push(this.outline(i, 'bm-pick', 8));
+      // Dim the other spaces with one board-colored veil (same result as group opacity .32,
+      // without promoting 30 SVG groups to layers for the fade).
+      if (!this.dimEl) {
+        const veil: string[] = [];
+        for (let i = 0; i < 32; i++) {
+          if (this.pickSet.has(i)) continue;
+          const g = GEOM[i]!;
+          const tr = g.corner ? `translate(${g.x} ${g.y})` : `translate(${g.cx} ${g.cy}) rotate(${g.rot}) translate(${-g.lw / 2} ${-g.lh / 2})`;
+          veil.push(`<rect transform="${tr}" width="${g.lw}" height="${g.lh}"/>`);
+        }
+        const dim = h('div', { class: 'bm-dim' });
+        dim.innerHTML = `<svg viewBox="0 0 ${VB} ${VB}" aria-hidden="true">${veil.join('')}</svg>`;
+        this.marks.prepend(dim);
+        this.dimEl = dim;
+        onFrame(() => {
+          dim.classList.add('is-on');
+          return false;
+        });
+      }
+    } else if (this.dimEl) {
+      const dim = this.dimEl;
+      this.dimEl = null;
+      dim.classList.remove('is-on');
+      if (instant()) dim.remove();
+      else dim.addEventListener('transitionend', () => dim.remove(), { once: true });
+      // Safety net if no transition runs (hidden tab, reduced motion).
+      gridTimeout(() => dim.remove(), 600);
+    }
   }
 
   /** Mark one space as "selected" (e.g. the space a prompt is about). */
   setFocus(i: number | null): void {
     this.groups.forEach((g, j) => g.classList.toggle('is-focus', j === i));
+    this.focusEl?.remove();
+    this.focusEl = i === null ? null : this.outline(i, 'bm-focus', 9);
   }
 
   /** Screen centre (client px) of a space — for fx. */

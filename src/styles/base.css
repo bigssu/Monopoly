@@ -238,9 +238,9 @@ h1, h2, h3, h4, .display, .num {
   place-items: center;
   padding: max(16px, var(--safe-t)) max(16px, var(--safe-r)) max(16px, var(--safe-b)) max(16px, var(--safe-l));
   font-size: var(--shell-fs);
-  background: rgba(8, 12, 20, .58);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  /* No backdrop-filter: a full-screen blur re-filters everything behind the dialog on every
+     frame of its fade (and of anything animating underneath). A slightly denser scrim instead. */
+  background: rgba(8, 12, 20, .64);
   animation: dlg-fade var(--t-med) var(--ease-out) both;
 }
 .dlg-backdrop.is-closing { animation: dlg-fade-out var(--t-fast) linear both; }

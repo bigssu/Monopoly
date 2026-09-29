@@ -21,9 +21,19 @@ import { currentScreen, showScreen } from '@/ui/router';
 import { exitApp, hideNativeSplash, initNative, isNative } from '@/ui/shell/capacitor';
 import { toast } from '@/ui/shell/dialog';
 import { handleBack } from '@/ui/shell/nav';
+import { installCssAnimationQuantizer, setFrameRate } from '@/ui/fx/time';
 import { clearSavedGame, loadSavedGame, SAVE_BACKUP_KEY, SAVE_KEY, saveGame } from '@/ui/shell/persist';
 import { prefs, PREFS_KEY, type Prefs } from '@/ui/shell/prefs';
 import { kvFlush, kvHydrate } from '@/ui/shell/storage';
+
+/** The faces declared in public/fonts/fonts.css (one subset each). */
+const APP_FONTS = ['400 16px "Jua"', '400 16px "Noto Sans KR"', '700 16px "Noto Sans KR"', '900 16px "Noto Sans KR"'];
+
+function loadAppFonts(): Promise<unknown> {
+  const fonts = document.fonts;
+  if (!fonts?.load) return Promise.resolve();
+  return Promise.all(APP_FONTS.map((f) => fonts.load(f, '가A1').catch(() => undefined)));
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | void> {
   return Promise.race([p, new Promise<void>((r) => setTimeout(r, ms))]);
@@ -36,6 +46,7 @@ function applyPrefs(p: Readonly<Prefs>): void {
   synth.setMuted(!p.sound);
   synth.setVolume(p.volume);
   haptics.setEnabled(p.haptics);
+  setFrameRate(p.batterySaver ? 30 : 60);
 }
 
 let lastBackAt = 0;
@@ -69,6 +80,7 @@ async function boot(): Promise<void> {
   await withTimeout(kvHydrate([PREFS_KEY, SAVE_KEY, SAVE_BACKUP_KEY]), 800);
   prefs.reload();
 
+  installCssAnimationQuantizer();
   installSfx(synth);
   installHaptics(createHaptics(prefs.get().haptics));
   applyPrefs(prefs.get());
@@ -93,8 +105,9 @@ async function boot(): Promise<void> {
     onResume: () => sfx.unlock(),
   });
 
-  // Avoid a flash of fallback fonts behind the splash.
-  await withTimeout(document.fonts?.ready ?? Promise.resolve(), 1200);
+  // Load the four app faces (preloaded by index.html) before the first screen renders: a font
+  // swap later would re-shape and re-lay out every text node (and the board's SVG labels).
+  await withTimeout(loadAppFonts(), 1200);
 
   showScreen('title', {});
   hideSplash();

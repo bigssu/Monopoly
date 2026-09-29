@@ -1,5 +1,5 @@
 /**
- * App preferences (language, sound, haptics, volume, prompt timer, last setup).
+ * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver).
  *
  *   prefs.get().sound
  *   prefs.set({ volume: 0.6 })
@@ -19,6 +19,8 @@ export interface Prefs {
   promptTimer: 0 | 15 | 30;
   /** The last Setup screen configuration (prefills the next game). */
   lastSetup: SetupDraft | null;
+  /** Battery saver: animations produce ~30 distinct frames per second instead of 60. */
+  batterySaver: boolean;
 }
 
 export const PREFS_KEY = 'lotandroll:prefs:v1';
@@ -36,7 +38,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -50,6 +52,7 @@ function sanitize(raw: unknown): Prefs {
     volume: typeof r.volume === 'number' && Number.isFinite(r.volume) ? Math.min(1, Math.max(0, r.volume)) : d.volume,
     promptTimer: r.promptTimer === 0 || r.promptTimer === 15 || r.promptTimer === 30 ? r.promptTimer : d.promptTimer,
     lastSetup: r.lastSetup ? normalizeDraft(r.lastSetup) : null,
+    batterySaver: typeof r.batterySaver === 'boolean' ? r.batterySaver : d.batterySaver,
   };
 }
 

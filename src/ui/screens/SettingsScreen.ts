@@ -1,5 +1,5 @@
 /**
- * Settings: language, sound + volume, vibration, prompt timer, saved game, credits & licenses.
+ * Settings: language, sound + volume, vibration, prompt timer, battery saver, saved game, credits & licenses.
  * Also usable as an overlay from the game menu:
  *   import { openSettingsOverlay } from '@/ui/screens/SettingsScreen';
  */
@@ -18,6 +18,7 @@ import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
 import { version } from '../../../package.json';
 
 const GLOBE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12H21.5"/><path d="M12 2.5Q7 7 7 12T12 21.5Q17 17 17 12T12 2.5Z"/></svg>`;
+const BATTERY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="17" height="10" rx="2.5"/><path d="M22 10.5V13.5"/><path d="M11.5 8.8L8.8 12.2H12.2L9.5 15.2"/></svg>`;
 const LEVELS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 19V15M10 19V11M15 19V7.5M20 19V4"/></svg>`;
 
 function row(iconId: string | HTMLElement, label: string, control: HTMLElement, hint?: string): HTMLElement {
@@ -115,6 +116,12 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       row(LEVELS_SVG, t('settings.volume'), h('div', { class: 'set-inline set-volume' }, volume, test)),
       row('vibrate', t('settings.haptics'), switcher(p.haptics, (v) => prefs.set({ haptics: v }), t('settings.haptics'))),
       row('timer', t('settings.timer'), timer, t('settings.timerHint')),
+      row(
+        BATTERY_SVG,
+        t('settings.batterySaver'),
+        h('div', { class: 'set-inline' }, switcher(p.batterySaver, (v) => prefs.set({ batterySaver: v }), t('settings.batterySaver'))),
+        t('settings.batterySaverHint'),
+      ),
     );
 
     const summary = savedGameSummary();

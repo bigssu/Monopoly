@@ -37,9 +37,11 @@
   --p-purple: #9B6BF2; --p-orange: #F5844A; --p-teal: #2EC4B6; --p-pink: #F272A8;
 
   /* Type */
-  --font-display: 'Jua', 'Noto Sans KR', system-ui, sans-serif;
-  --font-body: 'Noto Sans KR', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-num: 'Noto Sans KR', system-ui, sans-serif;
+  /* App faces first (one preloaded subset each); the '… Fallback' Google slices only load for
+     glyphs the subsets lack (typed names). See public/fonts/fonts.css, docs/PERFORMANCE.md. */
+  --font-display: 'Jua', 'Noto Sans KR', 'Jua Fallback', 'Noto Sans KR Fallback', system-ui, sans-serif;
+  --font-body: 'Noto Sans KR', 'Noto Sans KR Fallback', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-num: 'Noto Sans KR', 'Noto Sans KR Fallback', system-ui, sans-serif;
 
   /* Board unit: 1/32 of the board side. Set by ui/layout.ts on <html>. */
   --board: 800px;

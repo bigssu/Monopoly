@@ -12,19 +12,31 @@
   overflow: hidden;
   border-radius: clamp(14px, 7cqmin, 24px);
   background: linear-gradient(180deg, #FFFFFF 0%, #F4F6FA 100%);
-  box-shadow:
-    inset 0 clamp(4px, 2.2cqmin, 8px) 0 var(--pc),
-    0 10px 28px rgba(0, 0, 0, 0.38),
-    0 2px 0 rgba(0, 0, 0, 0.2);
-  transition: box-shadow var(--t-slow) var(--ease-out), opacity var(--t-slow);
+  box-shadow: inset 0 clamp(4px, 2.2cqmin, 8px) 0 var(--pc);
+  transition: opacity var(--t-slow);
 }
-.pp.is-turn .pp-card {
+/* Resting drop shadow (::before) and turn glow rings (::after) are pre-painted on the panel's
+   own pseudo-elements; a turn change crossfades their opacity (compositor-only) instead of
+   transitioning the card's box-shadow (a repaint of the card + a 36px blur every frame). */
+.pp::before,
+.pp::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: clamp(14px, 7cqmin, 24px);
+  pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease-out);
+}
+.pp::before { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38), 0 2px 0 rgba(0, 0, 0, 0.2); }
+.pp::after {
+  opacity: 0;
   box-shadow:
-    inset 0 clamp(4px, 2.2cqmin, 8px) 0 var(--pc),
     0 0 0 3px var(--pc),
     0 0 0 6px rgba(255, 255, 255, 0.85),
     0 0 36px 8px var(--pc);
 }
+.pp.is-turn::before { opacity: 0; }
+.pp.is-turn::after { opacity: 1; }
 .pp.is-turn .pp-card::before {
   content: '';
   position: absolute;
@@ -105,35 +117,21 @@
 }
 .pp-coin { width: 0.85em; height: 0.85em; flex: none; }
 .pp-assets { font-size: clamp(11px, min(5.6cqw, 4.2cqh), 17px); font-weight: 700; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pp-card.flash-up .pp-cash-n { animation: lr-flash-up 0.8s var(--ease-out); }
-.pp-card.flash-down .pp-cash-n { animation: lr-flash-down 0.8s var(--ease-out); }
-@keyframes lr-flash-up { 0%, 40% { color: #25A55A; } 100% { color: var(--ink); } }
-@keyframes lr-flash-down { 0%, 40% { color: #D2443D; } 100% { color: var(--ink); } }
-/* Money in / out also washes the whole panel (green / red rim + tint): readable from across
-   the table without reading the number. */
-.pp-card.flash-up::after,
-.pp-card.flash-down::after {
-  content: '';
+/* Money in / out washes the whole panel (green / red rim + tint): readable from across the table
+   without reading the number. The wash is pre-painted at its peak and PlayerPanel only animates
+   its opacity (compositor-only); the cash number's color flash runs on the frame budget. */
+.pp-wash {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  animation: lr-wash-up 1s var(--ease-out) both;
+  opacity: 0;
+  box-shadow: inset 0 0 0 clamp(4px, 2.6cqmin, 9px) #3DBB6E;
+  background: rgba(61, 187, 110, 0.16);
 }
-.pp-card.flash-down::after { animation-name: lr-wash-down; }
-@keyframes lr-wash-up {
-  0% { box-shadow: inset 0 0 0 0 rgba(61, 187, 110, 0); background: rgba(61, 187, 110, 0); }
-  25% { box-shadow: inset 0 0 0 clamp(4px, 2.6cqmin, 9px) #3DBB6E; background: rgba(61, 187, 110, 0.16); }
-  100% { box-shadow: inset 0 0 0 0 rgba(61, 187, 110, 0); background: rgba(61, 187, 110, 0); }
-}
-@keyframes lr-wash-down {
-  0% { box-shadow: inset 0 0 0 0 rgba(232, 86, 79, 0); background: rgba(232, 86, 79, 0); }
-  25% { box-shadow: inset 0 0 0 clamp(4px, 2.6cqmin, 9px) #E8564F; background: rgba(232, 86, 79, 0.12); }
-  100% { box-shadow: inset 0 0 0 0 rgba(232, 86, 79, 0); background: rgba(232, 86, 79, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pp-card.flash-up::after,
-  .pp-card.flash-down::after { animation: none; }
+.pp-wash.is-down {
+  box-shadow: inset 0 0 0 clamp(4px, 2.6cqmin, 9px) #E8564F;
+  background: rgba(232, 86, 79, 0.12);
 }
 
 /* Set grid: one line per color group (+ hubs). Orientation chosen in PlayerPanel.setBox. */
@@ -149,26 +147,34 @@
 .pp-sets.is-rows { grid-template-columns: repeat(4, var(--slot)); grid-template-rows: repeat(8, var(--slot)); }
 .pp-sets.is-cols .slot { grid-column: var(--g); grid-row: var(--k); }
 .pp-sets.is-rows .slot { grid-row: var(--g); grid-column: var(--k); }
+/* Rings are outlines (outline-offset = -width draws exactly the old inset box-shadow ring) and
+   the owned shade is a gradient band: ~90 slots rasterize as plain fills, no shadow passes. */
 .slot {
+  --ring: max(1.5px, calc(var(--slot) * 0.07));
   position: relative;
   width: var(--slot);
   height: var(--slot);
   border-radius: 26%;
   background: color-mix(in srgb, var(--gc) 14%, #fff);
-  box-shadow: inset 0 0 0 max(1.5px, calc(var(--slot) * 0.07)) color-mix(in srgb, var(--gc) 45%, #fff);
+  outline: var(--ring) solid color-mix(in srgb, var(--gc) 45%, #fff);
+  outline-offset: calc(var(--ring) * -1);
 }
 .slot.is-hub { border-radius: 50%; }
 .slot.is-mine {
-  background: var(--gc);
-  box-shadow: inset 0 calc(var(--slot) * -0.1) 0 rgba(0, 0, 0, 0.2);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.2) 10%, transparent 10%), var(--gc);
+  outline: none;
 }
 .slot.is-complete.is-mine {
-  box-shadow: inset 0 calc(var(--slot) * -0.1) 0 rgba(0, 0, 0, 0.2), 0 0 0 max(2px, calc(var(--slot) * 0.1)) #FFD15C;
+  --ring: max(2px, calc(var(--slot) * 0.1));
+  outline: var(--ring) solid #FFD15C;
+  outline-offset: 0;
 }
-.slot.is-lm { box-shadow: inset 0 calc(var(--slot) * -0.1) 0 rgba(0, 0, 0, 0.2), 0 0 0 2px #FFD66B, 0 0 calc(var(--slot) * 0.4) 1px rgba(255, 196, 60, 0.9); }
+.slot.is-lm { outline: 2px solid #FFD66B; outline-offset: 0; box-shadow: 0 0 calc(var(--slot) * 0.4) 1px rgba(255, 196, 60, 0.9); }
 .slot.is-missing {
+  --ring: max(2px, calc(var(--slot) * 0.1));
   background: #fff;
-  box-shadow: inset 0 0 0 max(2px, calc(var(--slot) * 0.1)) var(--gc);
+  outline: var(--ring) solid var(--gc);
+  outline-offset: calc(var(--ring) * -1);
   animation: lr-missing 1.1s ease-in-out infinite;
 }
 @keyframes lr-missing { 50% { opacity: 0.35; } }
@@ -184,7 +190,7 @@
   box-shadow: 0 0 0 1.5px #fff;
 }
 .slot-pips { position: absolute; left: 0; right: 0; bottom: 16%; display: flex; justify-content: center; gap: 9%; }
-.slot-pips i { width: 20%; aspect-ratio: 1; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.slot-pips i { width: 20%; aspect-ratio: 1; border-radius: 50%; background: #fff; outline: 1px solid rgba(0, 0, 0, 0.12); }
 .slot-star { display: grid; place-items: center; height: 100%; color: #fff; font-size: calc(var(--slot) * 0.6); line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
 
 .pp-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6cqmin 1.5cqmin; min-width: 0; }
@@ -251,7 +257,7 @@
 /* Bankrupt */
 /* Grey out the contents, not the "파산" stamp (a filter on the card would grey the stamp too). */
 .pp.is-bankrupt .pp-card { background: #E9ECF1; box-shadow: inset 0 clamp(4px, 2.2cqmin, 8px) 0 #A9B1BE, 0 10px 28px rgba(0, 0, 0, 0.38); }
-.pp.is-bankrupt .pp-card > :not(.pp-broken):not(.pp-floats) { filter: grayscale(1); opacity: 0.55; }
+.pp.is-bankrupt .pp-card > :not(.pp-broken):not(.pp-floats):not(.pp-wash) { filter: grayscale(1); opacity: 0.55; }
 .pp-broken { display: none; }
 .pp.is-bankrupt .pp-broken {
   position: absolute;

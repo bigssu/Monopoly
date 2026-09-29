@@ -193,7 +193,7 @@
 .lic-ofl { white-space: pre-wrap; font-size: 12px; line-height: 1.5; padding: 1em; margin: 0; border-radius: 12px; background: #F3EEE4; color: var(--ink-2); }
 
 /* Full-screen overlays (rules/settings opened from inside the game) */
-.overlay-backdrop { padding: 0; place-items: stretch; background: radial-gradient(120% 90% at 50% 38%, var(--felt-hi) 0%, var(--felt) 46%, var(--felt-lo) 100%); backdrop-filter: none; }
+.overlay-backdrop { padding: 0; place-items: stretch; background: radial-gradient(120% 90% at 50% 38%, var(--felt-hi) 0%, var(--felt) 46%, var(--felt-lo) 100%); }
 .rules-overlay, .settings-overlay {
   position: absolute;
   inset: 0;
@@ -231,13 +231,13 @@
   aspect-ratio: 1;
   border-radius: 50%;
   opacity: .5;
-  animation: blob-drift 22s var(--ease-in-out) infinite alternate;
+  /* Static: four drifting 70vmax blobs were four ~20 MB composited layers (DPR 2) for a barely
+     visible motion. They now paint once into the title background. */
 }
 .title-blob.b1 { left: -25vmax; top: -30vmax; background: radial-gradient(circle, rgba(242, 182, 51, .45), transparent 62%); }
-.title-blob.b2 { right: -28vmax; bottom: -34vmax; background: radial-gradient(circle, rgba(232, 86, 79, .42), transparent 62%); animation-duration: 26s; animation-delay: -6s; }
-.title-blob.b3 { right: -20vmax; top: -38vmax; background: radial-gradient(circle, rgba(74, 108, 247, .38), transparent 62%); animation-duration: 30s; animation-delay: -12s; }
-.title-blob.b4 { left: -22vmax; bottom: -40vmax; background: radial-gradient(circle, rgba(61, 187, 110, .32), transparent 62%); animation-duration: 24s; animation-delay: -3s; }
-@keyframes blob-drift { to { transform: translate(6vmax, 4vmax) scale(1.08); } }
+.title-blob.b2 { right: -28vmax; bottom: -34vmax; background: radial-gradient(circle, rgba(232, 86, 79, .42), transparent 62%); }
+.title-blob.b3 { right: -20vmax; top: -38vmax; background: radial-gradient(circle, rgba(74, 108, 247, .38), transparent 62%); }
+.title-blob.b4 { left: -22vmax; bottom: -40vmax; background: radial-gradient(circle, rgba(61, 187, 110, .32), transparent 62%); }
 
 .title-rays {
   position: absolute;
@@ -592,13 +592,24 @@
   border-radius: 50%;
   color: var(--gold-ink);
   background: linear-gradient(180deg, var(--gold-hi), var(--gold));
-  box-shadow: 0 .8cqmin 0 var(--gold-edge), 0 0 0 0 rgba(242, 182, 51, .5);
+  box-shadow: 0 .8cqmin 0 var(--gold-edge);
+  position: relative;
+}
+/* "Join" pulse: a pre-painted ring that scales out and fades (compositor-only, no repaint). */
+.seat-join-plus::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.75cqmin rgba(242, 182, 51, .45);
+  opacity: 0;
   animation: join-pulse 2.2s var(--ease-out) infinite;
+  pointer-events: none;
 }
 .seat-join-plus .ico { width: 55%; height: 55%; }
 @keyframes join-pulse {
-  0% { box-shadow: 0 .8cqmin 0 var(--gold-edge), 0 0 0 0 rgba(242, 182, 51, .45); }
-  70%, 100% { box-shadow: 0 .8cqmin 0 var(--gold-edge), 0 0 0 3.5cqmin rgba(242, 182, 51, 0); }
+  0% { opacity: 1; transform: scale(1); }
+  70%, 100% { opacity: 0; transform: scale(1.4); }
 }
 .seat-join-text { display: flex; flex-direction: column; gap: .6cqmin; text-align: left; }
 .seat-join-title { font-size: 4.4cqmin; color: var(--on-felt); }
@@ -830,7 +841,7 @@
   display: flex;
   height: 100%;
   transition: transform var(--t-med) var(--ease-out);
-  will-change: transform;
+  /* translate3d (Rules.ts) already gives the track its own layer; no permanent will-change. */
 }
 .rp { flex: 0 0 100%; height: 100%; padding: 0 .35em .4em; }
 .rp:not(.is-active) * { animation-play-state: paused !important; }
