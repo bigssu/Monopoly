@@ -1,4 +1,7 @@
-# GAME DESIGN DOCUMENT — working title: **TABLE TYCOON (테이블 타이쿤)**
+# GAME DESIGN DOCUMENT — **LOT & ROLL (랏앤롤)**
+
+> Title chosen after `docs/research/02-ip-licensing-research.md` (naming §5): "Lot" = a plot of land, "Roll" = dice.
+> Formal trademark clearance (KIPRIS/USPTO) is still recommended before store release.
 
 > Status: v1 (authored by the planning model). This is the single source of truth for all
 > implementation agents. If something here conflicts with code, fix the code (or update this
@@ -17,7 +20,7 @@ Web Audio. Ships to Android through Capacitor; also runs in any modern browser.
 
 | # | Constraint |
 |---|-----------|
-| C1 | No trademarked names/art from Monopoly / 부루마블 / 모두의마블 (see `docs/research/02-ip-licensing-research.md`). No "Monopoly", "Chance", "Community Chest", "황금열쇠", "부루마블", "모두의마블", "마블", Mr. Monopoly-like mascot, Blue Marble's board ordering, etc. |
+| C1 | No trademarked names/art from Monopoly / 부루마블 / 모두의마블 (see `docs/research/02-ip-licensing-research.md`). No "Monopoly", "Chance", "Community Chest", "Go", "Free Parking", "황금열쇠", "우주여행", "사회복지기금", "세계여행", "올림픽/Olympic", "랜드마크" (as a Korean feature name), "찬스/포춘카드", "부루마블", "모두의마블", "마블", top-hat/monocle tycoon mascot, Blue Marble's board ordering, etc. |
 | C2 | 100% offline. No network calls, no analytics, no ads, no accounts. |
 | C3 | Single device, landscape only, tablet-first (primary target 10–13" Android tablets, 4:3 to 16:10). Must still be usable on a 7" tablet and a phone in landscape (min 640×360 CSS px). |
 | C4 | All art = inline SVG / CSS authored in this repo (MIT-licensed as part of the project). Fonts = SIL OFL fonts vendored in `public/fonts` with their license files. Audio = synthesized at runtime. |
@@ -50,7 +53,7 @@ The board occupies the center square. The board's **inner area** (inside the rin
 the **Stage**. The Stage rotates (CSS transform, animated 400 ms) to face the seat of the player
 who must act. Everything interactive lives on the Stage: the dice, the "굴리기/Roll" button, the
 buy/build/takeover decision cards, card draws, the island escape choice, the festival target
-picker, the world-tour destination prompt, the pay/sell flow, the turn banner.
+picker, the travel destination prompt, the pay/sell flow, the turn banner.
 
 Rule: **a player never has to read upside-down text to take their turn**. Non-acting players
 only need to *notice* things (money floats on their own panel, token animation on the board,
@@ -150,7 +153,7 @@ Currency unit: `만` (displayed `1,500만`, engine uses integers).
 | 21 | hub | 고속열차역 / Express Rail | HUB | 250 | |
 | 22 | city | 런던 / London | G5 red | 480 | |
 | 23 | tax | 세무서 / TAX OFFICE | | | pay 10% of cash (rounded to 10) |
-| 24 | worldtour | 세계여행 / WORLD TOUR | | | next turn choose any destination |
+| 24 | travel | 자유여행 / TRAVEL | | | next turn choose any destination |
 | 25 | city | 두바이 / Dubai | G6 yellow | 540 | |
 | 26 | city | 싱가포르 / Singapore | G6 yellow | 560 | |
 | 27 | event | 이벤트 / EVENT | | | |
@@ -171,7 +174,7 @@ Cairo (pyramid), Nairobi (giraffe/acacia), Cape Town (table mountain), Lima (lla
 Madrid (bull/windmill), Berlin (gate), Rome (colosseum), London (clock tower), Dubai (tall spire),
 Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/tower), New York
 (statue torch/skyline), Seoul (hanok gate/tower), hubs (ship, plane, train, rocket), corners
-(flag, palm island, fireworks, globe), event (star/gift), tax (stamp), donation (heart box).
+(flag, palm island, fireworks, globe-with-ticket), event (star/gift), tax (stamp), donation (heart box).
 
 ## 4. Economy & rules (exact numbers)
 
@@ -182,7 +185,7 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
   * L1 별장/villa: `0.35P`
   * L2 빌딩/building: `0.90P`
   * L3 호텔/hotel: `1.60P`
-  * L4 랜드마크/landmark: `3.00P`
+  * L4 명소/landmark (engine id `landmark`; Korean UI label is 명소, never 랜드마크): `3.00P`
   * Festival marker on that city: toll ×2 (applies on top of everything; cap ×2 — only one
     festival marker exists on the board at a time).
 * Build cost (per level, paid when upgrading, one level per landing/visit; owner may only build
@@ -200,7 +203,7 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
   or use an 탈출권 card. After 3 failed turns you leave automatically (no fee) on the 4th turn.
   Landing on the island by 3 consecutive doubles or by card = same.
 * Festival: choose one own city; the festival marker moves there (toll ×2). If no own city, nothing.
-* World Tour: on your **next** turn, instead of rolling, pick any space (except Island) and move
+* Travel (자유여행): on your **next** turn, instead of rolling, pick any space (except Island) and move
   there directly (passing Start pays salary as normal, landing resolves normally). Can decline.
 * Doubles: roll again after resolving. Third consecutive doubles ⇒ go to Island immediately
   (no move). Doubles do not grant another roll while escaping Island.
@@ -218,14 +221,14 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
   5. Round limit reached (default 15 rounds; a round = every solvent player has taken a turn):
      highest total assets (cash + property values) wins; tie → more cash → more cities → earlier seat.
 * Events (`src/content/cards.ts`, 24 cards, uniformly random with replacement):
-  1. 출발지로 이동 (+300) 2. 무인도로 이동 3. 세계여행으로 이동 (get tour next turn)
+  1. 출발지로 이동 (+300) 2. 무인도로 이동 3. 자유여행으로 이동 (get travel next turn)
   4. 축제로 이동 5. 은행 배당 +200 6. 복권 당첨 +500 7. 벌금 −150 8. 건물 수리비: 각 건물 레벨당 −30
   9. 생일: 모든 플레이어에게 100씩 받기 10. 기부: 모든 플레이어에게 50씩 주기
   11. 3칸 뒤로 12. 가장 가까운 허브로 이동 (buy or pay double toll)
   13. 탈출권 (keep) 14. 통행료 면제권 (keep; auto-used on next toll)
-  15. 천사의 방패 (keep; block one takeover attempt on your property)
+  15. 수호 방패 (keep; block one takeover attempt on your property)
   16. 복지기금 지급: receive the pot 17. 급행: 다음 턴 주사위 2배 (move double)
-  18. 순간이동: 무작위 도시로 이동 19. 세금 환급 +100 20. 부자세: 현재 총자산 1위 플레이어가 최하위 플레이어에게 200 지급 (drawer irrelevant; no-op if tie/2 players same)
+  18. 랜덤 점프: 무작위 도시로 이동 19. 세금 환급 +100 20. 부자세: 현재 총자산 1위 플레이어가 최하위 플레이어에게 200 지급 (drawer irrelevant; no-op if tie/2 players same)
   21. 건물 보너스: 모든 자기 도시 +? → replaced by: 보유 도시 1곳 무료 1레벨 업그레이드 (choose)
   22. 태풍: 무작위 상대 도시 1곳 건물 1레벨 다운 (landmark immune)
   23. 축제 초대: festival marker moves to a random own city (no-op if none)
@@ -248,7 +251,7 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
 
 Events (`GameEvent`) drive the UI animation queue: `DiceRolled`, `TokenMoved` (path of indexes),
 `PassedStart`, `MoneyChanged{playerId, delta, reason}`, `PropertyBought`, `Built`, `TollPaid`,
-`TakenOver`, `CardDrawn`, `SentToIsland`, `Escaped`, `FestivalSet`, `TourGranted`, `Bankrupt`,
+`TakenOver`, `CardDrawn`, `SentToIsland`, `Escaped`, `FestivalSet`, `TravelGranted`, `Bankrupt`,
 `GameOver`, `TurnStarted`, `PromptOpened{phase}` etc. The UI must render *any* state statelessly
 (for resume) and additionally animate events as they arrive.
 
@@ -283,7 +286,7 @@ where `panelN/S` strips are `clamp(72px, 9vh, 120px)` tall and `panelE/W` column
 ## 7. Android packaging
 
 * Capacitor (`android/` generated by `npx cap add android`, committed). App id
-  `com.bigssu.tabletycoon`, name "테이블 타이쿤".
+  `com.bigssu.lotandroll`, name "랏앤롤" (en: "Lot & Roll").
 * `screenOrientation="sensorLandscape"`, immersive sticky fullscreen, keep-screen-on during play,
   hardware back = open menu (not exit) during game.
 * `.github/workflows/android.yml`: on push → `npm ci && npm test && npm run build && npx cap sync
