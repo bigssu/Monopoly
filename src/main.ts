@@ -120,4 +120,6 @@ async function boot(): Promise<void> {
 void boot().catch((e) => {
   console.error('[boot]', e);
   hideSplash();
+  // launchAutoHide is off: without this a failed boot would leave the native splash up forever.
+  void hideNativeSplash();
 });

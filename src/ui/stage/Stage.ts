@@ -190,6 +190,8 @@ export class Stage {
 
   clearPrompt(): void {
     this.clearTimer();
+    // A held roll button may vanish without a pointerup (timer / dispatch): stop the shake loop.
+    this.dice.shake(false);
     this.promptSlot.innerHTML = '';
     this.el.classList.remove('has-prompt', 'has-big', 'no-dice');
   }
@@ -249,7 +251,7 @@ export class Stage {
   }
 
   /** Flip an event card; resolves after a read delay or a tap. */
-  async showCard(id: CardId, readMs = 1900): Promise<void> {
+  async showCard(id: CardId, readMs = 1400): Promise<void> {
     if (instant()) return;
     const c = getCard(id);
     const front = h(
@@ -334,7 +336,7 @@ export class Stage {
       duration: 280,
       easing: 'cubic-bezier(.34,1.56,.64,1)',
     });
-    await sleep(900);
+    await sleep(700);
     void anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).then(() => el.remove());
   }
 

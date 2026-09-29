@@ -188,7 +188,7 @@ export class GameController {
     }
     if (p.isCpu) {
       stage.setThinking(s.phase.kind !== 'preRoll');
-      const base = s.phase.kind === 'preRoll' ? 520 + Math.random() * 300 : 650 + Math.random() * 450;
+      const base = s.phase.kind === 'preRoll' ? 350 + Math.random() * 200 : 450 + Math.random() * 300;
       const delay = instant() || animSpeed() === 0 ? 0 : D(base);
       const snapshot = s;
       this.cpuTimer = window.setTimeout(() => {

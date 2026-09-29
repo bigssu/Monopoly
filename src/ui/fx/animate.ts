@@ -77,7 +77,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
         return;
       }
       await Promise.all([stage.rotateTo(p.seat), stage.announce()]);
-      await sleep(180);
+      await sleep(100);
       return;
     }
     case 'TurnEnded':
@@ -93,13 +93,15 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
         haptic('warning');
         await stage.stamp(t('g.doubles.three'), 'bad');
       } else if (ev.isDouble) {
-        await stage.stamp(t('g.doubles'), 'gold');
+        // Informational: let the stamp finish over the start of the move.
+        void stage.stamp(t('g.doubles'), 'gold');
+        await sleep(450);
       } else if (ev.context === 'island' && ev.steps === 0) {
         await sleep(250);
       } else {
-        await sleep(220);
+        await sleep(120);
       }
-      if (ev.express) await stage.toast(t('g.express'), 500, 'gold', 'hub-rail');
+      if (ev.express) void stage.toast(t('g.express'), 500, 'gold', 'hub-rail');
       return;
     }
     case 'TokenMoved': {
@@ -115,7 +117,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       haptic('success');
       const c = board.spaceClientCenter(0);
       void view.particles.coinShower(c.x, c.y, 16);
-      if (ev.landed) await stage.toast(t('g.passStart.landed'), 600, 'good', 'corner-start');
+      if (ev.landed) void stage.toast(t('g.passStart.landed'), 600, 'good', 'corner-start');
       return;
     }
     case 'MoneyChanged': {
@@ -132,10 +134,10 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
         // (bump + green wash + captioned float) before the next prompt takes the table's eye.
         sfx.play('cash-in');
         void panel?.bump();
-        await sleep(620);
+        await sleep(450);
         return;
       }
-      await sleep(ev.reason === 'bankruptcy' ? 80 : 180);
+      await sleep(ev.reason === 'bankruptcy' ? 80 : 120);
       return;
     }
     case 'PotChanged':
@@ -148,7 +150,10 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       if (fast) return;
       sfx.play('buy');
       haptic('success');
-      await Promise.all([board.pulseSpace(ev.spaceIndex, 'stamp'), stage.toast(t('g.bought', { name: loc(BOARD[ev.spaceIndex]!.short) }), 500, 'good', spaceIcon(BOARD[ev.spaceIndex]!))]);
+      // Informational: the stamp + toast finish over the next event instead of blocking it.
+      void board.pulseSpace(ev.spaceIndex, 'stamp');
+      void stage.toast(t('g.bought', { name: loc(BOARD[ev.spaceIndex]!.short) }), 500, 'good', spaceIcon(BOARD[ev.spaceIndex]!));
+      await sleep(350);
       return;
     }
     case 'CannotAfford':
@@ -161,7 +166,11 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       sfx.play(ev.level === 4 ? 'landmark' : 'build');
       haptic(ev.level === 4 ? 'success' : 'light');
       if (ev.level === 4) await Promise.all([board.pulseSpace(ev.spaceIndex, 'pop'), stage.stamp(t('g.landmark.done'), 'gold')]);
-      else await board.pulseSpace(ev.spaceIndex, 'pop');
+      else {
+        // The pop finishes over the next event.
+        void board.pulseSpace(ev.spaceIndex, 'pop');
+        await sleep(300);
+      }
       return;
     }
     case 'Demolished': {
@@ -216,7 +225,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       const k = cards.indexOf(ev.card);
       if (k >= 0) cards.splice(k, 1);
       render(view, vs);
-      if (!fast) await stage.toast(t(`g.cardUsed.${ev.card}`), 700, 'gold', ev.card === 'escape' ? 'cards-escape' : ev.card === 'shield' ? 'cards-shield' : 'cards-freepass');
+      if (!fast) void stage.toast(t(`g.cardUsed.${ev.card}`), 700, 'gold', ev.card === 'escape' ? 'cards-escape' : ev.card === 'shield' ? 'cards-shield' : 'cards-freepass');
       return;
     }
     case 'ExpressGranted':
@@ -232,7 +241,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       if (!fast) {
         sfx.play('island');
         haptic('warning');
-        await stage.toast(t('g.island.stuck'), 800, 'bad', 'corner-island');
+        await stage.toast(t('g.island.stuck'), 600, 'bad', 'corner-island');
       }
       return;
     case 'IslandStay':
@@ -245,7 +254,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       render(view, vs);
       if (!fast) {
         sfx.play('escape');
-        await stage.toast(t('g.escaped'), 600, 'good', 'corner-island');
+        void stage.toast(t('g.escaped'), 600, 'good', 'corner-island');
       }
       return;
     case 'FestivalSet':
@@ -254,7 +263,8 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
       if (!fast && ev.spaceIndex !== null) {
         sfx.play('festival');
         haptic('success');
-        await Promise.all([board.pulseSpace(ev.spaceIndex, 'pop'), stage.toast(t('g.festival.set', { name: loc(BOARD[ev.spaceIndex]!.short) }), 700, 'gold', 'festival-marker')]);
+        void stage.toast(t('g.festival.set', { name: loc(BOARD[ev.spaceIndex]!.short) }), 700, 'gold', 'festival-marker');
+        await board.pulseSpace(ev.spaceIndex, 'pop');
       }
       return;
     case 'TravelGranted':
@@ -310,7 +320,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean)
     case 'AuctionBid':
       if (!fast) {
         sfx.play('tap');
-        await stage.toast(t('g.auction.bidMade', { name: vs.players[ev.playerId]!.name, amount: money(ev.amount) }), 450, 'info');
+        void stage.toast(t('g.auction.bidMade', { name: vs.players[ev.playerId]!.name, amount: money(ev.amount) }), 450, 'info');
       }
       return;
     case 'AuctionDropped':

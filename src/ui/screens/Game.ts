@@ -43,9 +43,17 @@ registerScreen('game', (root, props) => {
   ctrl.timerOverride = currentTimerOverride();
   setCurrentController(ctrl);
 
+  /** Shell overlay (rules / settings) currently open above the game. */
+  let overlayOpen = false;
+  /** Run only while nothing covers the table: menu, overlay, portrait hint or a hidden app. */
+  function syncPause(): void {
+    if (menu.isOpen() || overlayOpen || view.layout?.portrait || document.hidden) ctrl.pause();
+    else ctrl.resume();
+  }
+
   const menu = new GameMenu({
     onOpen: () => ctrl.pause(),
-    onClose: () => ctrl.resume(),
+    onClose: () => syncPause(),
     onRules: () => overlay(openRulesOverlay, '.rules-overlay'),
     onSettings: () => overlay(openSettingsOverlay, '.settings-overlay'),
     onSaveQuit: () => {
@@ -62,21 +70,23 @@ registerScreen('game', (root, props) => {
   /** Shell overlays sit above the running game; keep it paused until they close. */
   let overlayPoll = 0;
   function overlay(open: () => void, selector: string): void {
+    overlayOpen = true;
     ctrl.pause();
     open();
     window.clearInterval(overlayPoll);
     overlayPoll = window.setInterval(() => {
       if (document.querySelector(selector)) return;
       window.clearInterval(overlayPoll);
-      if (!menu.isOpen()) ctrl.resume();
+      overlayOpen = false;
+      syncPause();
     }, 250);
   }
 
-  view.onPortraitChange = (portrait) => {
-    if (portrait) ctrl.pause();
-    else if (!menu.isOpen()) ctrl.resume();
-  };
-  if (view.layout?.portrait) ctrl.pause();
+  view.onPortraitChange = () => syncPause();
+  // App in the background (Android pause / hidden tab): no CPU moves or prompt auto-picks.
+  const onVisibility = (): void => syncPause();
+  document.addEventListener('visibilitychange', onVisibility);
+  if (view.layout?.portrait || document.hidden) ctrl.pause();
 
   view.menuSlot.append(menu.button);
   view.root.append(menu.overlay);
@@ -85,11 +95,9 @@ registerScreen('game', (root, props) => {
     e.preventDefault();
     menu.toggle();
   };
-  const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') menu.toggle();
-  };
+  // Escape reaches `onBack` through the shell (main.ts → handleBack), which first closes any open
+  // rules/settings overlay; a second Escape listener here would re-open the menu on that press.
   window.addEventListener('lotandroll:back', onBack);
-  window.addEventListener('keydown', onKey);
 
   if (fresh) saveGame(state);
   void ctrl.start(fresh);
@@ -97,8 +105,8 @@ registerScreen('game', (root, props) => {
   return () => {
     leaving = true;
     window.clearInterval(overlayPoll);
+    document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('lotandroll:back', onBack);
-    window.removeEventListener('keydown', onKey);
     ctrl.dispose();
     view.dispose();
     flushAll();

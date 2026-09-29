@@ -460,7 +460,8 @@ export class Board {
     tk.moving = true;
     tk.root.classList.add('is-moving');
     this.layoutTokens(true); // others on the start space re-centre
-    const per = Math.max(85, 180 * Math.min(1, 9 / path.length));
+    // 180 ms/space for short moves; long moves hop faster (≤150 ms) so they never drag.
+    const per = path.length > 6 ? Math.max(85, Math.min(150, 180 * (9 / path.length))) : 180;
     const lift = 0.95 * (this.px / 32);
     for (let n = 0; n < path.length; n++) {
       const idx = path[n]!;

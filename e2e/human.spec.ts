@@ -536,6 +536,55 @@ test.describe('human play (clicking real controls)', () => {
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
+  test('soft timer pauses: hidden app, rules overlay + Escape; a held roll button stops shaking', async ({ page }) => {
+    test.setTimeout(90_000);
+    const logs = watchConsole(page);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await boot(page);
+    await page.evaluate(() => {
+      window.__lotAndRoll!.setAnimSpeed(0);
+      window.__lotAndRoll!.setPromptTimer(2);
+    });
+    await loadCrafted(page, { players: 2 }, `s.testHooks = { diceQueue: [[1, 3], [2, 4], [3, 5]] };`);
+    const setHidden = (hidden: boolean) =>
+      page.evaluate((h) => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, hidden);
+
+    // App in the background: the 2 s timer must not roll for the absent player…
+    await setHidden(true);
+    await page.waitForTimeout(3000);
+    expect((await getState(page)).lastDice).toBeNull();
+    // …and runs again (fresh ring) once the app is back.
+    await setHidden(false);
+    await expect.poll(async () => (await getState(page)).lastDice, { timeout: 6000 }).not.toBeNull();
+    await waitIdle(page);
+
+    // Rules overlay from the in-game menu: Escape closes it and does not re-open the menu.
+    await page.evaluate(() => window.__lotAndRoll!.setPromptTimer(0));
+    await page.locator('.menu-btn').click();
+    await page.locator('.menu-item').first().click();
+    await expect(page.locator('.rules-overlay')).toBeVisible();
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.rules-overlay')).toHaveCount(0);
+    await expect(page.locator('.menu-overlay')).not.toHaveClass(/is-open/);
+
+    // Hold the roll button until the soft timer rolls: the shake loop (haptic + sound) must stop.
+    await page.evaluate(() => window.__lotAndRoll!.setPromptTimer(2));
+    await loadCrafted(page, { players: 2 }, `s.testHooks = { diceQueue: [[1, 3]] };`);
+    const box = (await page.locator('.st-prompt .roll-btn').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await expect.poll(async () => (await getState(page)).lastDice, { timeout: 6000 }).not.toBeNull();
+    await page.mouse.up();
+    await expect(page.locator('.stage .dice')).not.toHaveClass(/is-shaking/);
+    await page.evaluate(() => window.__lotAndRoll!.setPromptTimer(0));
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
   for (const vp of [
     { w: 800, h: 450 },
     { w: 1600, h: 1000 },
