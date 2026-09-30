@@ -159,7 +159,8 @@ export class Stage {
     }
     this.promptSlot.append(card);
     this.fitDice();
-    void anim(card, [{ transform: 'translateY(30%) scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
+    // On the slot (its own layer, same box as the card): see .st-prompt in stage.css.
+    void anim(this.promptSlot, [{ transform: 'translateY(30%) scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
       duration: 300,
       easing: 'cubic-bezier(.22,1,.36,1)',
     });

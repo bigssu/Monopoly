@@ -209,6 +209,10 @@
   z-index: 2;
 }
 .st-prompt:empty { display: none; }
+/* A stable layer for the card: the entrance animation (Stage.showPrompt) moves this slot, so a new
+   card is rastered once into it, instead of into a temporary 8 MB layer of its own and then again
+   into the stage layer when the animation ends (docs/PERFORMANCE.md). */
+.st-prompt { will-change: transform; }
 .stage.has-big .st-prompt { flex: 1; }
 
 .pcard {
