@@ -100,13 +100,10 @@ export class GameView {
       },
       policy: fxPolicy,
       serializeBig: true,
-      // Keep the hidden canvas's backing store between effects (no first-draw allocation spike;
-      // still no layer, frame callback or timer while idle) — docs/VFX.md §13.5.
+      // Idle: park the canvas off the layer and keep its backing store (no Paint to park / unpark, no
+      // first-draw allocation; no frame callback or timer while idle) — docs/VFX.md §15.3.
       retainBacking: true,
-      // Dev A/B knobs for devices (VFX.md §10.4): ?dev=1&fxmp=0.45 (backing MP budget), &fxsw=0 (GPU canvas).
-      // 0.5 MP (engine default 0.9): the software canvas is copied to the compositor on every frame,
-      // so the backing size is the main per-frame cost of an effect at 4x (docs/VFX.md §14). Small
-      // effects keep their 1.5x backing; only table-wide ones (toll, takeover, finale) get softer.
+      // Dev A/B knobs for devices (VFX.md §10.4, §15.4): ?dev=1&fxsw=0 (GPU canvas), fxk / fxpool / fxs / fxe / fxdom.
       // ONE canvas (a 400×400 backing, upgraded once to 960×600 if the effects outgrow it), painted
       // by the FX worker: each extra shown canvas is a GPU layer and every show/hide is a Paint on
       // the main thread, while a larger backing only costs the worker a larger copy (docs/VFX.md §15).

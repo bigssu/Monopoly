@@ -769,7 +769,8 @@ export function buildSeq(p: BuildParams, env: PresetEnv): Timeline {
     const f = h.first + k * h.gap;
     const last = k === lv - 1;
     hitBurst(b, tile, f, dustS[k]!);
-    b.at(f, sfx('build', { pitch: semi([0, lv === 2 ? 1 : 2, 4][k]!), gain: last ? 1 : 0.7 + 0.15 * k }), haptic(last ? (lv === 3 ? 'medium' : 'light') : 'tick'));
+    // `rm`: the last hit's sound also plays on the reduced path (effects off / reduced motion).
+    b.at(f, sfx('build', { pitch: semi([0, lv === 2 ? 1 : 2, 4][k]!), gain: last ? 1 : 0.7 + 0.15 * k, rm: last }), haptic(last ? (lv === 3 ? 'medium' : 'light') : 'tick'));
     if (lv > 1) b.at(f, shake(last ? (lv === 3 ? 3 : 2) : shakes[k]!, last ? (lv === 3 ? 200 : 160) : 100));
     if (last) b.at(f, hitStop(1));
   }

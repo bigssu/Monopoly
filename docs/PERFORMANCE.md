@@ -71,11 +71,42 @@
 - `fx` 페이즈 측정 세부: F4는 스로틀 없이(4×에서는 스크린캐스트가 30장/s를 못 보냄), F5/F6는 추적·스크린캐스트 없는 별도 재생,
   F1의 task는 LayerTree 에이전트 없는 창(에이전트를 다시 켜는 것만으로 4×에서 ~110 ms — 하네스 비용).
 
+### 1.2 VFX 비용 2라운드 후 (`npm run perf -- --full --unique`, 2026-09-30, 원자료 `docs/assets/perf-fx.json`)
+
+설계·단계별 수치·품질 단계는 `docs/VFX.md` §15. 효과를 여러 작은 풀 캔버스로 나눠 **OffscreenCanvas 워커가 그리게**
+하고(메인 스레드의 캔버스 그리기·합성기 복사 0), 게임에서는 캔버스 1장을 표시/숨김 없이 transform으로 옮기고 유휴 때 레이어
+밖으로 주차, FX 좌표 사각형을 캐시(강제 레이아웃 제거). **26/28.**
+
+| 결과 | 게이트 | 연동 전(1절) | 연동 후(1.1) | 지금 |
+|---|---|---|---|---|
+| PASS | A 절전 ON 26–34 / OFF ≥ 55 | 30.6 / 58.0 | 31.5 / 57.7 | 33.5 / 58.3 (DrawFrame 31.0) |
+| PASS | B 유휴 0 + 장식 루프 합성기 전용(게임·타이틀·결과) | PASS | PASS | PASS |
+| FAIL | C p99 ≤ 20 ms (4×) | 16.8 | 33.4 | 33.3 — **같은 날 연동 전 빌드 3회 모두 33.3** |
+| FAIL | C 33 ms 초과 ≤ 빈 페이지 바닥값 + 3 (새 기준) | 7 | 22 | 9 (바닥값 1) — 같은 날 연동 전 빌드 4–9 (바닥값 1–2) |
+| PASS | C 피크 레이어 ≤ 20 / 메모리 ≤ 100 MB | 18 / 97 | 19 / 97.9 | 19 / 93.5 |
+| PASS | C Paint ≤ 20/s | 17.2 | 22 (FAIL) | **18.4** |
+| PASS | C 마운트 · 강제 레이아웃 · 부팅 · DOM | PASS | PASS | 80.3 ms · 12.6 ms · 382 ms · 1.09 |
+| PASS | F1–F5, F7–F10 | — | PASS | PASS (F3 16개 80 MB, F4 29.9 / 고유 29.6, F10 430 ms) |
+| PASS | F6 효과 켬 ≤ 1.35 × 끔 (새 기준) | — | 380.8 ms/s (절대 150 FAIL) | 272.9 vs 239.1 = ×1.14 |
+
+- **같은 날 번갈아 잰 연동 전 빌드(`635532b`) 대비**(play 페이즈 3회씩): 20 ms 초과 36/50/51 vs 47/44/46, 2 vsync 초과 6/16/12 vs
+  9/4/8, 빈 페이지 바닥값 7/0/4 · 1/1/2. 즉 효과가 켜진 지금도 긴 프레임은 연동 전과 같은 수준이고, p99 게이트는 이날 이 VM에서
+  효과와 무관하게 미달(허용 ≈ 35/분). 1절의 16.8 ms는 조용한 날의 값이다. 남은 긴 프레임: 메인 스레드 유휴(스로틀러 시분할,
+  "rendering from +55 ms") 또는 게임 이벤트 프레임(`perf-frames.mjs`) — 효과의 틱은 이제 평균 ≈ 1 ms(4×).
+- **F6을 상대 게이트로**: 절대 150 ms/s는 효과만 있는 데모 페이지 벤치 값이라 실제 게임(효과를 꺼도 240–300 ms/s @4×: 레이어
+  16개의 커밋·스타일·렌더)에 맞지 않는다. 효과가 지킬 것은 게임 위에 얹는 비용이므로 **같은 시드 게임의 켬(기본 = 자동) / 끔(설정
+  "끄기")** 메인 스레드 ms/s 비 ≤ 1.35. 두 번씩 번갈아 재고 중앙값.
+- **"33 ms 초과 0" → "≤ 빈 페이지 바닥값 + 3"**: 같은 실행의 floor 페이즈(빈 페이지, 같은 스로틀/DPR/60 s)가 이미 0–8개를 보인다.
+- Paint 22 → 18.4: 캔버스 표시/숨김(= 메인 Paint + 아래 영역 재래스터)을 없앤 것(캔버스 1장, transform 이동·주차), SVG 아이콘 팝
+  15 Hz. 효과만 도는 장면(`scripts/fx/fx-mix.mjs`) 메인 스레드: 240 → 158 ms/s(효과 없음 62–78).
+- 표시 fps 33.5: 워커 캔버스 프레임이 메인 커밋과 다른 vsync에 들어가는 경우가 ~2.5/s(고유 프레임 34.6/s, 연동 전 28.9). 게이트 안.
+
 ## 2. 측정 방법론
 
 - **환경**: Playwright + Chromium 141 헤드리스(소프트웨어 합성), 1600×1000 뷰포트, DPR 2, CDP CPU 스로틀 4×
   ("중급 태블릿"), 게이트에 "스로틀 없음"이라 적힌 항목만 1×. CPU 데모 게임은 시드 고정(`20260929`)이라 매 실행 동일한 게임.
-- **표시 fps**: 렌더러 합성기 `DrawFrame` 트레이스 이벤트 수 / 초. 보조 지표로 `Page.startScreencast` 프레임을 해시해
+- **표시 fps**: 렌더러 합성기 `DrawFrame`과 디스플레이 합성기 `Display::DrawAndSwap`(viz) 중 큰 값 / 초 — FX 워커의
+  OffscreenCanvas 프레임은 렌더러 `DrawFrame` 없이 화면에 가므로 스왑도 센다. 보조 지표로 `Page.startScreencast` 프레임을 해시해
   **내용이 바뀐 프레임만** 센 "고유 프레임/s"(`--unique`).
 - **유휴 0 (B)**: 사람 4명 게임의 굴림 대기(타이머 끔), Title, Result 각각 — 장식 루프가 도는 첫 7 s("decorative")와,
   루프가 끝난 뒤(마지막 입력 ~10 s 후) 10 s("calm") 두 창. 트레이스의 `Layout`/`Paint`/`RasterTask`/`UpdateLayoutTree`/
@@ -244,7 +275,11 @@ node scripts/perf-render.mjs --out docs/assets/perf-render-after.json   # 작업
 npm run perf:frames                # 4× 긴 프레임 원인(직전 게임 이벤트, 메인 스레드 사용/유휴) + 프롬프트 DOM 요소 수
 node scripts/perf-frames.mjs --runs 3 --seconds 60
 node scripts/perf.mjs --phases play          # 프레임 게이트만 (+ 환경 바닥값 floor, 약 2.5분)
+node scripts/perf-frames.mjs --query fxq=off  # 효과 끔(설정 "끄기")으로 같은 긴 프레임 분석
+node scripts/fx/fx-mix.mjs --runs 2 "" "fxq=off" "fxq=low"   # 효과 비용 A/B (효과만 도는 장면, 메인 ms/s ±5)
 ```
+dev 노브(`?dev=1&…`, `src/ui/game/view.ts`): `fxq=auto|high|low|off`(품질), `fxk=`(보이는 FX 캔버스 수), `fxpool=6.12`(크기 등급),
+`fxs=`(백킹 배율 상한), `fxe=`(n틱마다 그리기), `fxdom=0`(효과의 DOM 훅 끔), `fxsw=0`(가속 캔버스).
 `play` 단계는 이어서 `floor`(빈 페이지, 같은 조건)를 재서 표 아래에 "environment floor"로 출력한다. play의 "vsync 두 번 초과"
 개수가 floor 수준이면 그 프레임은 게임이 아니라 이 기계의 것이다(4.5 참고).
 Playwright 모듈/Chromium 경로는 `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH`로 바꿀 수 있음(기본: `/opt/node22/lib/node_modules/playwright`,
@@ -261,6 +296,8 @@ Playwright 모듈/Chromium 경로는 `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH`로 바�
 
 ## 7. 남은 비용과 미달 항목
 
+- **VFX 연동 뒤(1.2절)**: C p99 · "33 ms 초과 ≤ 바닥값 + 3" 미달은 같은 날 연동 전 빌드도 같은 값 — 효과 비용이 아니라 환경과
+  게임 이벤트 프레임. 효과 쪽 남은 것은 `docs/VFX.md` §15.6.
 - **4× "33 ms 초과 프레임 0" — 이 환경에서는 미달(환경 바닥값 수준).** p99는 16.8 ms로 통과. vsync 2회를 넘는 프레임이
   60 s에 0–7개(대개 1–4, 모두 50 ms 안팎) 남는데, 같은 조건의 **빈 페이지도 0–2개**(최대 33–83 ms)다. `scripts/perf-frames.mjs`로 보면 남은 것의 절반가량은
   메인 스레드가 놀고 있는(LoAF 없음 또는 blocking 0, 모든 스레드 유휴) 구간 = 이 VM의 스케줄링/CPU 스로틀러, 나머지는 게임
