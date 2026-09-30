@@ -8,7 +8,7 @@ import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
-import { groupColor, h, setPlayerVars, spaceIcon, svg } from '@/ui/game/util';
+import { groupColor, h, setPlayerVars, spaceIcon, svg, svgNode } from '@/ui/game/util';
 import { DEPTH, GEOM, INNER, VB, tokenSpot, type SpaceGeom } from './geometry';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -272,7 +272,7 @@ export class Board {
     this.el.append(this.svgEl, this.marks, this.stageHost, this.tokenLayer, this.overlay);
     for (const p of players) {
       const body = h('div', { class: 'token-body' });
-      body.append(h('span', { class: 'tok-badge', html: svg(p.tokenId) }));
+      body.append(h('span', { class: 'tok-badge' }, svgNode(p.tokenId)));
       const root = h('div', { class: 'token', 'data-pid': p.id }, h('div', { class: 'token-shadow' }), body);
       setPlayerVars(root, p.colorId);
       this.tokenLayer.append(root);

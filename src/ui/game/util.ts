@@ -95,14 +95,30 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+/** Parsed icon markup, cloned per use: parsing SVG markup for every icon of every prompt card was
+ *  a visible part of building a card on a slow CPU (docs/PERFORMANCE.md). */
+const iconTemplates = new Map<string, HTMLTemplateElement>();
+export function svgNode(id: string): DocumentFragment {
+  let tpl = iconTemplates.get(id);
+  if (!tpl) {
+    tpl = document.createElement('template');
+    tpl.innerHTML = svg(id);
+    iconTemplates.set(id, tpl);
+  }
+  return tpl.content.cloneNode(true) as DocumentFragment;
+}
+
 export function iconEl(id: string, cls = 'ico'): HTMLSpanElement {
-  return h('span', { class: cls, html: svg(id), 'aria-hidden': 'true' });
+  const el = h('span', { class: cls, 'aria-hidden': 'true' });
+  el.append(svgNode(id));
+  return el;
 }
 
 /** A circular token badge tinted with the player color. */
 export function tokenBadge(p: Pick<Player, 'tokenId' | 'colorId'>, cls = 'tok-badge'): HTMLSpanElement {
   const c = playerColor(p.colorId);
-  const el = h('span', { class: cls, html: svg(p.tokenId), 'aria-hidden': 'true' });
+  const el = h('span', { class: cls, 'aria-hidden': 'true' });
+  el.append(svgNode(p.tokenId));
   el.style.setProperty('--pc', c.hex);
   el.style.setProperty('--pc-dark', c.dark);
   el.style.setProperty('--pc-tint', c.tint);

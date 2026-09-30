@@ -33,7 +33,7 @@ import { loc, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import type { Board } from '@/ui/board/Board';
-import { groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svg, tokenBadge } from '@/ui/game/util';
+import { groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, tokenBadge } from '@/ui/game/util';
 import type { Dice } from './Dice';
 
 export interface PromptCtx {
@@ -320,7 +320,7 @@ function buildPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'build' }>): Pro
     'div',
     { class: 'lvl-preview' },
     h('div', { class: 'lp-cell' }, levelIcon(from, groupColor(sp)), h('span', { text: levelName(from) })),
-    h('span', { class: 'lp-arrow', html: svg('chevron-right') }),
+    h('span', { class: 'lp-arrow' }, svgNode('chevron-right')),
     h('div', { class: 'lp-cell is-next' }, levelIcon(to, groupColor(sp)), h('span', { text: levelName(to) })),
   );
   const el = card(

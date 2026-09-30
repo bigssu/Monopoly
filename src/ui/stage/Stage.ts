@@ -9,7 +9,7 @@ import { ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, gridTimeout, instant, onFrame, sleep } from '@/ui/fx/time';
-import { cardIcon, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
+import { cardIcon, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, svgNode, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 
 export type Tone = 'info' | 'good' | 'bad' | 'gold';
@@ -333,7 +333,7 @@ export class Stage {
         'div',
         { class: 'toll-flow' },
         tokenBadge(opts.payer, 'tok-badge toll-tok'),
-        h('span', { class: 'toll-arrow', html: svg('chevron-right') }),
+        h('span', { class: 'toll-arrow' }, svgNode('chevron-right')),
         tokenBadge(opts.owner, 'tok-badge toll-tok'),
       ),
       h('div', { class: 'toll-amt', text: opts.waived ? t('g.free') : money(opts.amount) }),

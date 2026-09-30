@@ -16,7 +16,7 @@ import {
 } from '@/engine';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, instant, onFrame } from '@/ui/fx/time';
-import { groupColor, h, iconEl, setPlayerVars, signedMoney, svg } from '@/ui/game/util';
+import { groupColor, h, iconEl, setPlayerVars, signedMoney, svgNode } from '@/ui/game/util';
 
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
 
@@ -46,7 +46,7 @@ export class PlayerPanel {
   constructor(readonly player: Player) {
     this.el = h('div', { class: player.isCpu ? 'pp is-cpu' : 'pp', 'data-seat': player.seat, 'data-pid': player.id });
     setPlayerVars(this.el, player.colorId);
-    const badge = h('span', { class: 'pp-tok', html: svg(player.tokenId) });
+    const badge = h('span', { class: 'pp-tok' }, svgNode(player.tokenId));
     this.rank = h('span', { class: 'pp-rank' });
     const name = h('div', { class: 'pp-name' }, h('span', { class: 'pp-name-t', text: player.name }), player.isCpu ? h('span', { class: 'pp-cpu', text: t('g.cpu') }) : null);
     // Status badges (island, travel, express, cards) ride at the end of the assets line, so they
