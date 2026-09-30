@@ -72,7 +72,15 @@ let server = null;
 let base = CFG.url;
 if (!base) {
   base = `http://localhost:${CFG.port}`;
-  server = spawn('npx', ['vite', 'preview', '--port', String(CFG.port), '--strictPort', '--host', 'localhost'], { cwd: ROOT, stdio: 'ignore' });
+  // Own process group: `npx` forks the actual server, which a plain kill() would leave running.
+  server = spawn('npx', ['vite', 'preview', '--port', String(CFG.port), '--strictPort', '--host', 'localhost'], { cwd: ROOT, stdio: 'ignore', detached: true });
+  process.on('exit', () => {
+    try {
+      process.kill(-server.pid);
+    } catch {
+      /* already gone */
+    }
+  });
   for (let i = 0; i < 40; i++) {
     try { if ((await fetch(base + '/')).ok) break; } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 250));
@@ -495,6 +503,12 @@ try {
   console.error(e);
   exitCode = 1;
 } finally {
-  server?.kill();
+  if (server) {
+    try {
+      process.kill(-server.pid);
+    } catch {
+      /* already gone */
+    }
+  }
 }
 process.exit(exitCode);

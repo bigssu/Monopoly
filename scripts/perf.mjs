@@ -95,6 +95,7 @@ if (!CFG.url) {
   };
   process.on('exit', kill);
   process.on('SIGINT', () => process.exit(130));
+  process.on('SIGTERM', () => process.exit(143));
   let up = false;
   for (let i = 0; i < 80 && !up; i++) {
     try {
