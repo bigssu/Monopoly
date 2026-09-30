@@ -9,7 +9,7 @@
  */
 import { animSpeed, instant, isSkipping, onFrame } from './time';
 import { cubicBezier, type Ease } from './quantize';
-import { svg } from '@/ui/game/util';
+import { svgArt } from '@/ui/game/util';
 
 const CONFETTI = ['#E8564F', '#4A6CF7', '#3DBB6E', '#F2B633', '#9B6BF2', '#F5844A', '#2EC4B6', '#F272A8'];
 
@@ -55,7 +55,7 @@ const coinCache = new Map<number, HTMLCanvasElement>();
 function coinBitmap(px: number): CanvasImageSource | null {
   if (typeof Image === 'undefined') return null;
   if (!coinSrc) {
-    let markup = svg('coin');
+    let markup = svgArt('coin');
     if (!markup.includes('xmlns=')) markup = markup.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
     markup = markup.replace('<svg', '<svg width="64" height="64"');
     coinSrc = new Image();

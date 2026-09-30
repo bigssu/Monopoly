@@ -1,7 +1,7 @@
 /**
  * Small helpers shared by the game-screen modules (icons, DOM, seats, money).
  */
-import { icon, ICON_IDS } from '@/content/icons';
+import { icon, iconMarkup, ICON_IDS } from '@/content/icons';
 import { playerColor, type PlayerColor } from '@/content/palette';
 import { getCard, type CardId } from '@/content/cards';
 import { GROUP_COLORS, HUB_COLOR } from '@/content/board';
@@ -50,9 +50,14 @@ export function iconId(id: string): string {
   return KNOWN.has(a) ? a : 'space-event';
 }
 
-/** SVG markup for an icon id (aliases resolved, never throws). */
+/** SVG markup for an icon id (aliases resolved, never throws): a `<use>` into the icon sprite. */
 export function svg(id: string): string {
   return icon(iconId(id));
+}
+
+/** Self-contained SVG art for an icon id (for images / canvases, where the sprite is out of reach). */
+export function svgArt(id: string): string {
+  return iconMarkup(iconId(id));
 }
 
 export function cardIcon(id: CardId): string {
@@ -95,8 +100,9 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-/** Parsed icon markup, cloned per use: parsing SVG markup for every icon of every prompt card was
- *  a visible part of building a card on a slow CPU (docs/PERFORMANCE.md). */
+/** Parsed icon markup (an `<svg><use/></svg>` into the sprite), cloned per use: parsing markup for
+ *  every icon of every prompt card was a visible part of building a card on a slow CPU
+ *  (docs/PERFORMANCE.md). */
 const iconTemplates = new Map<string, HTMLTemplateElement>();
 export function svgNode(id: string): DocumentFragment {
   let tpl = iconTemplates.get(id);

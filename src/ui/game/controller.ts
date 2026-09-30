@@ -23,6 +23,14 @@ import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
 import type { GameView } from './view';
+import { isDevHook } from './util';
+
+type PromptStat = { kind: string; cpu: boolean; els: number; ms: number };
+/** Dev only: per-prompt build stats, `window.__lrPromptStats` (null in production). */
+const PROMPT_STATS: PromptStat[] | null =
+  typeof window !== 'undefined' && isDevHook()
+    ? (((window as unknown as { __lrPromptStats?: PromptStat[] }).__lrPromptStats ??= []))
+    : null;
 
 export interface ControllerOpts {
   view: GameView;
@@ -165,6 +173,7 @@ export class GameController {
     const { stage, board } = this.view;
     this.clearPromptUi();
     void stage.rotateTo(p.seat);
+    const t0 = PROMPT_STATS ? performance.now() : 0;
     const res = buildPromptFor({
       state: s,
       cpu: p.isCpu,
@@ -172,6 +181,13 @@ export class GameController {
       board,
       dice: stage.dice,
     });
+    if (PROMPT_STATS && res) {
+      // Dev (?dev=1): prompt build cost for scripts/perf*.mjs and docs/PERFORMANCE.md.
+      const t1 = performance.now();
+      const els = res.el.querySelectorAll('*').length + 1;
+      performance.measure('lr:prompt-build', { start: t0, end: t1, detail: { kind: s.phase.kind, els } });
+      PROMPT_STATS.push({ kind: s.phase.kind, cpu: p.isCpu, els, ms: Math.round((t1 - t0) * 100) / 100 });
+    }
     if (res) {
       const timer = p.isCpu ? 0 : this.timerSeconds();
       stage.showPrompt(res.el, {
