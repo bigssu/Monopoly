@@ -1,0 +1,49 @@
+/*
+ * VFX engine (src/ui/fx/vfx, docs/VFX.md §3). Imported by the wiring phase (docs/VFX-WIRING.md).
+ * The FX canvas lives inside `.fx-layer` (z 40, pointer-events none, overflow hidden). It is
+ * positioned with a transform, sized to the effects' region, and hidden (backing store freed) when idle.
+ */
+.fx-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+.fx-canvas[hidden] { display: none; }
+
+/* Spotlight (landmark close-up, VFX.md §7.2b.10): a dim veil under the fx canvas, above the table. */
+.fx-spot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(8, 12, 20, 0.25);
+  opacity: 0;
+}
+.fx-spot[hidden] { display: none; }
+
+/* Close-up card: the space's level icon (2.2×) in the owner's frame, no text. Owned by Stage (seat rotation). */
+.fx-closeup {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--u, 30px) * 5.2);
+  height: calc(var(--u, 30px) * 5.2);
+  margin: calc(var(--u, 30px) * -2.6) 0 0 calc(var(--u, 30px) * -2.6);
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--u, 30px) * 0.9);
+  background: #FFF8E8;
+  border: calc(var(--u, 30px) * 0.28) solid var(--pc, #F2B633);
+  box-shadow: 0 calc(var(--u, 30px) * 0.3) calc(var(--u, 30px) * 0.8) rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.fx-closeup > * { width: 62%; height: 62%; }
+.fx-closeup[hidden] { display: none; }
+
+/* Reduced motion: static colour frame on the space / panel for ~800 ms (a class toggle, no animation). */
+.fx-hl {
+  outline: calc(var(--u, 30px) * 0.14) solid var(--fx-hl, #F2B633);
+  outline-offset: calc(var(--u, 30px) * -0.14);
+}
