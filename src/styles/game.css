@@ -24,6 +24,10 @@
 
 .ico { display: inline-block; line-height: 0; }
 .ico svg { width: 100%; height: 100%; display: block; }
+/* An icon drawn from the bitmap atlas (src/ui/game/iconAtlas.ts): one element in place of the
+   icon's <svg>, same box. Background image / size / position are inline per element. */
+.ic-bm { display: block; width: 100%; height: 100%; background-repeat: no-repeat; }
+.tok-badge > .ic-bm { width: 84%; height: 84%; }
 
 /* ≡ menu (top-left, upright) */
 .menu-slot { position: absolute; z-index: 30; }

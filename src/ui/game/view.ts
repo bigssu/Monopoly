@@ -10,7 +10,7 @@ import { spaceInfo } from '@/ui/stage/prompts';
 import { PlayerPanel } from '@/ui/panels/PlayerPanel';
 import { Particles } from '@/ui/fx/particles';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
-import { h, iconEl } from './util';
+import { h, iconEl, prepareGameIcons } from './util';
 
 export class GameView {
   readonly root: HTMLElement;
@@ -69,6 +69,8 @@ export class GameView {
     setBoardVar(L.board.w);
     placeRect(this.board.el, L.board);
     this.board.setSize(L.board.w);
+    // Icon bitmaps sized for the largest card icon (.pc-icon: 2.6 board units of board/32).
+    void prepareGameIcons(this.state.players, (L.board.w / 32) * 2.8);
     for (const p of this.state.players) {
       const box = L.seats[p.seat];
       const panel = this.panels.get(p.id)!;
@@ -101,6 +103,7 @@ export class GameView {
 
   dispose(): void {
     this.stopWatch();
+    this.board.dispose();
     this.stage.dispose();
     for (const p of this.panels.values()) p.dispose();
   }

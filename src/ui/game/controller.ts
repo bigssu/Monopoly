@@ -18,7 +18,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, D, endSkip, gridTimeout, instant, skip } from '@/ui/fx/time';
+import { animSpeed, D, endSkip, gridTimeout, instant, onFrame, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -46,6 +46,9 @@ export class GameController {
   private paused = false;
   /** Cancels the pending CPU move (a grid-aligned timeout, see fx/time `gridTimeout`). */
   private cancelCpu: () => void = () => {};
+  /** Pending deferred prompt (see advance). */
+  private cancelPrompt: (() => void) | null = null;
+  private promptSeq = 0;
   private onGameOver: (s: GameState) => void;
   private gameOverFired = false;
   /** Dev/test override for the prompt timer (seconds; null = prefs). */
@@ -135,6 +138,9 @@ export class GameController {
 
   private clearPromptUi(): void {
     const { stage, board } = this.view;
+    this.promptSeq++;
+    this.cancelPrompt?.();
+    this.cancelPrompt = null;
     stage.clearPrompt();
     stage.hideInfo();
     stage.setThinking(false);
@@ -170,9 +176,44 @@ export class GameController {
     if (this.paused) return;
     const pid = s.phase.playerId;
     const p = s.players[pid]!;
-    const { stage, board } = this.view;
+    const { stage } = this.view;
     this.clearPromptUi();
     void stage.rotateTo(p.seat);
+    // The new prompt goes in on the next 30 Hz frame, not in the frame that just took the last
+    // event's DOM changes (landing token, board space, panels) and the old prompt's removal:
+    // together they were one 35-60 ms frame at 4x CPU throttle (docs/PERFORMANCE.md).
+    if (instant()) this.showPromptFor(s);
+    else {
+      const seq = ++this.promptSeq;
+      this.cancelPrompt = onFrame(() => {
+        this.cancelPrompt = null;
+        if (seq === this.promptSeq && !this.disposed && !this.paused && this.state === s) this.showPromptFor(s);
+        return false;
+      });
+    }
+    if (p.isCpu) {
+      stage.setThinking(s.phase.kind !== 'preRoll');
+      const base = s.phase.kind === 'preRoll' ? 350 + Math.random() * 200 : 450 + Math.random() * 300;
+      const delay = instant() || animSpeed() === 0 ? 0 : D(base);
+      const snapshot = s;
+      this.cancelCpu = gridTimeout(() => {
+        if (this.disposed || this.paused || this.state !== snapshot) return;
+        let a: Action;
+        try {
+          a = chooseAction(snapshot, pid);
+        } catch (e) {
+          console.error('[game] CPU failed; using default', e);
+          a = defaultAction(snapshot)!;
+        }
+        void this.dispatch(a);
+      }, delay);
+    }
+  }
+
+  private showPromptFor(s: GameState): void {
+    if (s.phase.kind === 'gameOver') return;
+    const p = s.players[s.phase.playerId]!;
+    const { stage, board } = this.view;
     const t0 = PROMPT_STATS ? performance.now() : 0;
     const res = buildPromptFor({
       state: s,
@@ -203,25 +244,7 @@ export class GameController {
       });
       if (res.focus !== undefined) board.setFocus(res.focus);
     }
-    if (p.isCpu) {
-      stage.setThinking(s.phase.kind !== 'preRoll');
-      const base = s.phase.kind === 'preRoll' ? 350 + Math.random() * 200 : 450 + Math.random() * 300;
-      const delay = instant() || animSpeed() === 0 ? 0 : D(base);
-      const snapshot = s;
-      this.cancelCpu = gridTimeout(() => {
-        if (this.disposed || this.paused || this.state !== snapshot) return;
-        let a: Action;
-        try {
-          a = chooseAction(snapshot, pid);
-        } catch (e) {
-          console.error('[game] CPU failed; using default', e);
-          a = defaultAction(snapshot)!;
-        }
-        void this.dispatch(a);
-      }, delay);
-    } else {
-      this.flushIdle();
-    }
+    if (!p.isCpu) this.flushIdle();
   }
 
   /** Pause CPU + prompt timers (menu open). */

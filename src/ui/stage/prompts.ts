@@ -33,7 +33,7 @@ import { loc, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import type { Board } from '@/ui/board/Board';
-import { groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, tokenBadge } from '@/ui/game/util';
+import { groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, TINT, tokenBadge } from '@/ui/game/util';
 import type { Dice } from './Dice';
 
 export interface PromptCtx {
@@ -121,13 +121,14 @@ function tag(text: string, tone: 'gold' | 'good' | 'bad' | 'info' = 'info', icon
   return el;
 }
 
-function levelIcon(level: number, color: string | null): HTMLElement {
+/** `tint` = the text color the building is shown in (stage.css: ladder --ink, lp-cell --ink-3 / --ink). */
+function levelIcon(level: number, color: string | null, tint = TINT.ink): HTMLElement {
   if (level === 0) {
     const sq = h('span', { class: 'lvl-land' });
     if (color) sq.style.background = color;
     return sq;
   }
-  return iconEl(BUILDING_LEVEL_IDS[level]!, 'ico lvl-ico');
+  return iconEl(BUILDING_LEVEL_IDS[level]!, 'ico lvl-ico', tint);
 }
 
 function levelName(level: number): string {
@@ -319,7 +320,7 @@ function buildPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'build' }>): Pro
   const preview = h(
     'div',
     { class: 'lvl-preview' },
-    h('div', { class: 'lp-cell' }, levelIcon(from, groupColor(sp)), h('span', { text: levelName(from) })),
+    h('div', { class: 'lp-cell' }, levelIcon(from, groupColor(sp), TINT.ink3), h('span', { text: levelName(from) })),
     h('span', { class: 'lp-arrow' }, svgNode('chevron-right')),
     h('div', { class: 'lp-cell is-next' }, levelIcon(to, groupColor(sp)), h('span', { text: levelName(to) })),
   );

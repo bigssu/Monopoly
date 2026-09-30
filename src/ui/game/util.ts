@@ -3,6 +3,7 @@
  */
 import { icon, iconMarkup, ICON_IDS } from '@/content/icons';
 import { playerColor, type PlayerColor } from '@/content/palette';
+import { atlasNode, prepareIconAtlas, type AtlasEntry } from './iconAtlas';
 import { getCard, type CardId } from '@/content/cards';
 import { GROUP_COLORS, HUB_COLOR } from '@/content/board';
 import { fmtMoney, t } from '@/i18n';
@@ -114,17 +115,47 @@ export function svgNode(id: string): DocumentFragment {
   return tpl.content.cloneNode(true) as DocumentFragment;
 }
 
-export function iconEl(id: string, cls = 'ico'): HTMLSpanElement {
+/**
+ * An icon in a span (`cls` sizes it). Drawn from the icon bitmap atlas when it holds the icon
+ * (one element, no SVG shadow tree), else from the sprite. `tint` = the color `currentColor`
+ * resolves to where the icon is shown (tokens / buildings; ignored for full-color art). Without
+ * a tint a tinted icon always uses the sprite, which inherits the CSS color.
+ */
+export function iconEl(id: string, cls = 'ico', tint?: string): HTMLSpanElement {
   const el = h('span', { class: cls, 'aria-hidden': 'true' });
-  el.append(svgNode(id));
+  el.append(atlasNode(iconId(id), tint) ?? svgNode(id));
   return el;
+}
+
+/** Theme colors icons are tinted with, read once from the stylesheet (see `prepareGameIcons`). */
+export const TINT: { ink?: string; ink3?: string } = {};
+
+/**
+ * Build the icon atlas for a game: all space art, the players' tokens in their colors, and the
+ * buildings in the player / theme colors they are shown in. `iconPx` = the largest icon size in
+ * CSS px (the atlas cells are that times the device pixel ratio).
+ */
+export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, iconPx: number): Promise<void> {
+  if (typeof document === 'undefined') return Promise.resolve();
+  if (!TINT.ink) {
+    const root = getComputedStyle(document.documentElement);
+    TINT.ink = root.getPropertyValue('--ink').trim() || undefined;
+    TINT.ink3 = root.getPropertyValue('--ink-3').trim() || undefined;
+  }
+  const entries: AtlasEntry[] = [];
+  for (const id of ICON_IDS) if (/^(city|hub|corner|space)-/.test(id) || id === 'coin' || id.startsWith('dice-face-')) entries.push({ id });
+  const tints = [TINT.ink, TINT.ink3, ...players.map((p) => playerColor(p.colorId).hex)].filter((c): c is string => !!c);
+  for (const p of players) entries.push({ id: p.tokenId, tint: playerColor(p.colorId).hex });
+  for (const b of ['villa', 'building', 'hotel', 'landmark']) for (const c of tints) entries.push({ id: b, tint: c });
+  const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+  return prepareIconAtlas(entries, iconPx * dpr);
 }
 
 /** A circular token badge tinted with the player color. */
 export function tokenBadge(p: Pick<Player, 'tokenId' | 'colorId'>, cls = 'tok-badge'): HTMLSpanElement {
   const c = playerColor(p.colorId);
   const el = h('span', { class: cls, 'aria-hidden': 'true' });
-  el.append(svgNode(p.tokenId));
+  el.append(atlasNode(p.tokenId, c.hex) ?? svgNode(p.tokenId));
   el.style.setProperty('--pc', c.hex);
   el.style.setProperty('--pc-dark', c.dark);
   el.style.setProperty('--pc-tint', c.tint);

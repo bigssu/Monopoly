@@ -26,6 +26,21 @@
 .board-face { fill: #EEE3CD; }
 .board-inner-rim { fill: #E3D5BA; }
 
+/* Static board bitmap (Board.rasterizeBase): face, rim and every bare space. The SVG above it
+   keeps only hit areas and the spaces that carry state (owner, buildings, festival, pot). */
+.board-base {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.board.has-base .board-face,
+.board.has-base .board-inner-rim { display: none; }
+
 .sp { cursor: pointer; }
 .sp-bg { stroke: #E2D6BF; stroke-width: 3; }
 .sp-name {

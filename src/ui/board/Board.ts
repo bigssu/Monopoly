@@ -8,7 +8,8 @@ import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
-import { groupColor, h, setPlayerVars, spaceIcon, svg, svgNode } from '@/ui/game/util';
+import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
+import { atlasSvg } from '@/ui/game/iconAtlas';
 import { DEPTH, GEOM, INNER, VB, tokenSpot, type SpaceGeom } from './geometry';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -25,9 +26,43 @@ const SPECIAL_BAR: Record<string, string> = {
   donation: '#F272A8',
 };
 
-/** Nested <svg> icon at a position (board units). */
-function iconAt(id: string, x: number, y: number, size: number, cls = ''): string {
-  return svg(id).replace(
+// ---------------------------------------------------------------------------------------------
+// Base-raster mode (docs/PERFORMANCE.md "보드 정적 래스터화"): while the static board image is
+// generated, the markup functions below emit self-contained icon art (an SVG image cannot reach
+// the page's icon sprite) and hand their text to `baseTexts` instead of emitting <text> (an SVG
+// image cannot use the page's web fonts either: the text is drawn with canvas fillText).
+// ---------------------------------------------------------------------------------------------
+
+interface BaseText {
+  cls: string;
+  x: number;
+  y: number;
+  size: number;
+  text: string;
+  m: DOMMatrix;
+}
+let baseTexts: BaseText[] | null = null;
+let baseMatrix: DOMMatrix | null = null;
+
+function textEl(cls: string, x: number, y: number, size: number, text: string): string {
+  if (baseTexts && baseMatrix) {
+    baseTexts.push({ cls, x, y, size, text, m: baseMatrix });
+    return '';
+  }
+  return `<text class="${cls}" x="${x}" y="${y}" font-size="${size.toFixed(1)}" text-anchor="middle">${esc(text)}</text>`;
+}
+
+/**
+ * Nested <svg> icon at a position (board units). Live board: from the icon bitmap atlas when it
+ * has the icon (two elements instead of a `<use>` shadow tree), else the sprite. `tint` = the
+ * color `currentColor` resolves to there (buildings: the owner color).
+ */
+function iconAt(id: string, x: number, y: number, size: number, cls = '', tint?: string): string {
+  if (!baseTexts) {
+    const bm = atlasSvg(iconId(id), x, y, size, cls, tint);
+    if (bm) return bm;
+  }
+  return (baseTexts ? svgArt(id) : svg(id)).replace(
     '<svg ',
     `<svg x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${size}" height="${size}" class="${cls}" `,
   );
@@ -87,16 +122,9 @@ function textLines(
   cls: string,
   lineGap = 1.02,
 ): string {
-  if (lines.length === 1) {
-    return `<text class="${cls}" x="${cx}" y="${baseY}" font-size="${size.toFixed(1)}" text-anchor="middle">${esc(lines[0]!)}</text>`;
-  }
+  if (lines.length === 1) return textEl(cls, cx, baseY, size, lines[0]!);
   const y0 = baseY - (size * lineGap) / 2;
-  return lines
-    .map(
-      (l, i) =>
-        `<text class="${cls}" x="${cx}" y="${(y0 + i * size * lineGap).toFixed(1)}" font-size="${size.toFixed(1)}" text-anchor="middle">${esc(l)}</text>`,
-    )
-    .join('');
+  return lines.map((l, i) => textEl(cls, cx, +(y0 + i * size * lineGap).toFixed(1), size, l)).join('');
 }
 
 interface SpaceView {
@@ -132,9 +160,7 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
     `<path d="M${m} ${m + barH} V${m + 24} Q${m} ${m} ${m + 24} ${m} H${w - m - 24} Q${w - m} ${m} ${w - m} ${m + 24} V${m + barH} Z" fill="${bar}"/>`,
   );
   if (isProp && v.level === 0) {
-    parts.push(
-      `<text class="sp-price" x="${w / 2}" y="${m + 62}" font-size="54" text-anchor="middle">${esc(fmtMoney(sp.price ?? 0))}</text>`,
-    );
+    parts.push(textEl('sp-price', w / 2, m + 62, 54, fmtMoney(sp.price ?? 0)));
   }
   // Landmark icon.
   const iconSize = isProp ? 152 : 176;
@@ -153,10 +179,12 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
     const sz = 92;
     const step = 84;
     const x0 = w / 2 - ((ids.length - 1) * step) / 2 - sz / 2;
-    ids.forEach((id, i) => parts.push(`<g color="${oc?.hex ?? '#E8564F'}">${iconAt(id, x0 + i * step, -4, sz, 'sp-bld')}</g>`));
+    const c = oc?.hex ?? '#E8564F';
+    ids.forEach((id, i) => parts.push(`<g color="${c}">${iconAt(id, x0 + i * step, -4, sz, 'sp-bld', c)}</g>`));
   } else if (v.level === 4) {
     parts.push(`<circle class="sp-glow" cx="${w / 2}" cy="${46}" r="84" fill="url(#lr-glow)"/>`);
-    parts.push(`<g color="${oc?.hex ?? '#F2B633'}">${iconAt('landmark', w / 2 - 60, -16, 120, 'sp-bld sp-landmark')}</g>`);
+    const c = oc?.hex ?? '#F2B633';
+    parts.push(`<g color="${c}">${iconAt('landmark', w / 2 - 60, -16, 120, 'sp-bld sp-landmark', c)}</g>`);
   }
   if (oc) {
     parts.push(
@@ -179,11 +207,13 @@ function cornerMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView): string {
     `<rect class="sp-bg" x="7" y="7" width="${s - 14}" height="${s - 14}" rx="34" fill="${CORNER_BG[sp.kind] ?? '#FFFDF8'}"/>`,
   );
   parts.push(`<g transform="rotate(${g.rot} ${s / 2} ${s / 2})">`);
+  const outer = baseMatrix;
+  if (outer) baseMatrix = outer.translate(s / 2, s / 2).rotate(g.rot).translate(-s / 2, -s / 2);
   parts.push(iconAt(spaceIcon(sp), s / 2 - 118, 64, 236));
   const fit = fitLabel(loc(sp.name), 300, 80);
   parts.push(textLines(fit.lines, fit.size, s / 2, 378, 'sp-name sp-corner-name'));
   if (sp.kind === 'start') {
-    parts.push(`<text class="sp-sub" x="${s / 2}" y="440" font-size="44" text-anchor="middle">${esc(t('g.board.salary'))}</text>`);
+    parts.push(textEl('sp-sub', s / 2, 440, 44, t('g.board.salary')));
     if (v.pot > 0) {
       parts.push(
         `<g class="sp-pot"><rect x="${s / 2 - 150}" y="6" width="300" height="74" rx="37" fill="#1B2430" opacity=".86"/>` +
@@ -193,7 +223,143 @@ function cornerMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView): string {
     }
   }
   parts.push('</g>');
+  baseMatrix = outer;
   return parts.join('');
+}
+
+/** Transform of space i's group (board units), as an SVG attribute and as a matrix. */
+function spaceTransform(i: number): string {
+  const g = GEOM[i]!;
+  return g.corner ? `translate(${g.x} ${g.y})` : `translate(${g.cx} ${g.cy}) rotate(${g.rot}) translate(${-g.lw / 2} ${-g.lh / 2})`;
+}
+function spaceMatrix(i: number): DOMMatrix {
+  const g = GEOM[i]!;
+  return g.corner ? new DOMMatrix().translate(g.x, g.y) : new DOMMatrix().translate(g.cx, g.cy).rotate(g.rot).translate(-g.lw / 2, -g.lh / 2);
+}
+
+/** The look of a space with nothing on it (what the static base image shows). */
+const BARE: Omit<SpaceView, 'lang'> = { owner: null, level: 0, festival: false, pot: 0, ring: null };
+const isBare = (v: SpaceView): boolean => v.owner === null && v.level === 0 && !v.festival && v.pot === 0;
+
+/** Invisible hit area of a bare space (taps, picking); the art is in the base image. */
+function hitMarkup(i: number): string {
+  const g = GEOM[i]!;
+  return `<rect x="7" y="7" width="${g.lw - 14}" height="${g.lh - 14}" rx="${g.corner ? 34 : 24}" fill="none" pointer-events="all"/>`;
+}
+
+interface BaseStyles {
+  face: string;
+  rim: string;
+  bgStroke: string;
+  bgStrokeWidth: string;
+  text: Record<string, { font: string; fill: string; spacingEm: number }>;
+}
+
+/** Board styles from the live stylesheet (board.css stays the one source of truth). */
+function readBaseStyles(svgEl: SVGSVGElement): BaseStyles {
+  const mk = (tag: string, cls: string): SVGElement => {
+    const e = document.createElementNS(NS, tag) as SVGElement;
+    e.setAttribute('class', cls);
+    if (tag === 'text') e.setAttribute('font-size', '100');
+    svgEl.appendChild(e);
+    return e;
+  };
+  const probes = {
+    face: mk('rect', 'board-face'),
+    rim: mk('rect', 'board-inner-rim'),
+    bg: mk('rect', 'sp-bg'),
+  };
+  const textCls = ['sp-name', 'sp-name sp-corner-name', 'sp-price', 'sp-sub'];
+  const texts = textCls.map((c) => mk('text', c));
+  const cs = (e: Element): CSSStyleDeclaration => getComputedStyle(e);
+  const bg = cs(probes.bg);
+  const out: BaseStyles = {
+    face: cs(probes.face).fill,
+    rim: cs(probes.rim).fill,
+    bgStroke: bg.stroke,
+    bgStrokeWidth: bg.strokeWidth,
+    text: {},
+  };
+  textCls.forEach((c, k) => {
+    const st = cs(texts[k]!);
+    const sp = parseFloat(st.letterSpacing);
+    out.text[c] = {
+      font: `${st.fontStyle === 'normal' ? '' : st.fontStyle + ' '}${st.fontWeight} {size}px ${st.fontFamily}`,
+      fill: st.fill,
+      spacingEm: Number.isFinite(sp) ? sp / 100 : 0,
+    };
+  });
+  for (const e of [...Object.values(probes), ...texts]) e.remove();
+  return out;
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = src;
+  return img.decode().then(() => img);
+}
+
+/**
+ * Render the static board (face, rim and every space as if bare: background, color bar, price,
+ * icon, name) once into a bitmap `pw` x `pw` device pixels: shapes via an SVG image, text with
+ * canvas fillText in the page fonts. Returned as a PNG blob URL for an <img>: a <canvas> in the
+ * page would be its own GPU layer (plus overlap layers for everything above it), an <img> is a
+ * plain bitmap painted into the board's layer, so raster work under a changed prompt, token or
+ * space is one image copy instead of re-drawing ~950 SVG shapes and 40 text runs per tile.
+ */
+async function rasterizeBase(svgEl: SVGSVGElement, players: readonly Player[], pw: number): Promise<string> {
+  const st = readBaseStyles(svgEl);
+  const texts: BaseText[] = [];
+  const groups: string[] = [];
+  baseTexts = texts;
+  try {
+    const lang = getLang();
+    for (let i = 0; i < 32; i++) {
+      const g = GEOM[i]!;
+      baseMatrix = spaceMatrix(i);
+      const v: SpaceView = { ...BARE, lang };
+      const inner = g.corner ? cornerMarkup(BOARD[i]!, g, v) : sideSpaceMarkup(BOARD[i]!, g, v, players);
+      groups.push(`<g transform="${spaceTransform(i)}">${inner}</g>`);
+    }
+  } finally {
+    baseTexts = null;
+    baseMatrix = null;
+  }
+  const markup =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB} ${VB}" width="${pw}" height="${pw}">` +
+    `<style>.sp-bg{stroke:${st.bgStroke};stroke-width:${st.bgStrokeWidth}}</style>` +
+    `<rect x="0" y="0" width="${VB}" height="${VB}" rx="70" fill="${st.face}"/>` +
+    `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="40" fill="${st.rim}"/>` +
+    groups.join('') +
+    '</svg>';
+  const svgUrl = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml' }));
+  let shapes: HTMLImageElement;
+  try {
+    shapes = await loadImage(svgUrl);
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = pw;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no 2d context');
+  ctx.drawImage(shapes, 0, 0, pw, pw);
+  const k = pw / VB;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  for (const tx of texts) {
+    const ts = st.text[tx.cls] ?? st.text['sp-name']!;
+    ctx.setTransform(new DOMMatrix().scale(k, k).multiply(tx.m));
+    ctx.font = ts.font.replace('{size}', tx.size.toFixed(1));
+    ctx.fillStyle = ts.fill;
+    (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = `${(ts.spacingEm * tx.size).toFixed(2)}px`;
+    ctx.fillText(tx.text, tx.x, tx.y);
+  }
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+  canvas.width = canvas.height = 0;
+  if (!blob) throw new Error('toBlob failed');
+  return URL.createObjectURL(blob);
 }
 
 interface TokenEl {
@@ -230,6 +396,16 @@ export class Board {
   private players: readonly Player[];
   private pickHandler: ((i: number) => void) | null = null;
   private pickSet = new Set<number>();
+  /** Static board bitmap under the SVG (null until the first one is ready). */
+  private baseImg: HTMLImageElement | null = null;
+  private baseUrl = '';
+  /** Key (size|dpr|lang) of the base image shown / being made. */
+  private baseKey = '';
+  private baseGen = 0;
+  private baseTimer = 0;
+  private sized = false;
+  private lastVs: GameState | null = null;
+  private disposed = false;
 
   constructor(players: readonly Player[], private onTap: (index: number) => void) {
     this.players = players;
@@ -242,14 +418,10 @@ export class Board {
       `<rect x="0" y="0" width="${VB}" height="${VB}" rx="70" class="board-face"/>` +
       `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="40" class="board-inner-rim"/>`;
     for (let i = 0; i < 32; i++) {
-      const g = GEOM[i]!;
       const grp = document.createElementNS(NS, 'g');
       grp.setAttribute('class', `sp sp-${BOARD[i]!.kind}`);
       grp.setAttribute('data-i', String(i));
-      const tr = g.corner
-        ? `translate(${g.x} ${g.y})`
-        : `translate(${g.cx} ${g.cy}) rotate(${g.rot}) translate(${-g.lw / 2} ${-g.lh / 2})`;
-      grp.setAttribute('transform', tr);
+      grp.setAttribute('transform', spaceTransform(i));
       this.svgEl.appendChild(grp);
       this.groups.push(grp);
       this.sigs.push('');
@@ -281,9 +453,86 @@ export class Board {
   }
 
   setSize(px: number): void {
-    if (px === this.px) return;
-    this.px = px;
-    for (const tk of this.tokens.values()) this.setTokenXY(tk, tk.x, tk.y);
+    this.sized = true;
+    if (px !== this.px) {
+      this.px = px;
+      for (const tk of this.tokens.values()) this.setTokenXY(tk, tk.x, tk.y);
+    }
+    this.ensureBase();
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    window.clearTimeout(this.baseTimer);
+    if (this.baseUrl) URL.revokeObjectURL(this.baseUrl);
+    this.baseUrl = '';
+  }
+
+  // -------------------------------------------------------------------------
+  // Static base image ("rasterized board"): see rasterizeBase. Bare spaces are then only an
+  // invisible hit rect in the SVG; spaces with an owner / festival / pot keep their full live
+  // SVG (drawn opaque over the base). Re-made on board size, device-pixel-ratio or language change.
+  // -------------------------------------------------------------------------
+
+  private baseKeyNow(): { key: string; pw: number; lang: string } {
+    const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+    const pw = Math.min(4096, Math.round(this.px * dpr));
+    const lang = getLang();
+    return { key: `${pw}|${lang}`, pw, lang };
+  }
+
+  private ensureBase(): void {
+    if (!this.sized || this.disposed || typeof document === 'undefined') return;
+    const { key, lang } = this.baseKeyNow();
+    if (key === this.baseKey) return;
+    // A base in another language would show stale names: back to the full SVG until the new one lands.
+    if (this.baseImg && this.baseKey && !this.baseKey.endsWith(`|${lang}`)) this.setBase(null);
+    this.baseKey = key;
+    const gen = ++this.baseGen;
+    window.clearTimeout(this.baseTimer);
+    // Coalesce a burst of resizes; the first one (game mount) goes right away.
+    const delay = this.baseImg ? 150 : 0;
+    this.baseTimer = window.setTimeout(() => {
+      if (gen !== this.baseGen || this.disposed) return;
+      const { pw } = this.baseKeyNow();
+      rasterizeBase(this.svgEl, this.players, pw)
+        .then(async (url) => {
+          if (gen !== this.baseGen || this.disposed) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          const img = await loadImage(url);
+          if (gen !== this.baseGen || this.disposed) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          img.className = 'board-base';
+          img.alt = '';
+          img.draggable = false;
+          img.setAttribute('aria-hidden', 'true');
+          const old = this.baseUrl;
+          this.baseUrl = url;
+          this.setBase(img);
+          if (old) URL.revokeObjectURL(old);
+        })
+        .catch((e: unknown) => {
+          // Keep the full live SVG (always correct, only slower).
+          console.warn('[board] base raster failed', e);
+        });
+    }, delay);
+  }
+
+  private setBase(img: HTMLImageElement | null): void {
+    if (img) {
+      if (this.baseImg) this.baseImg.replaceWith(img);
+      else this.el.insertBefore(img, this.svgEl);
+    } else {
+      this.baseImg?.remove();
+    }
+    const had = !!this.baseImg;
+    this.baseImg = img;
+    this.el.classList.toggle('has-base', !!img);
+    if (had !== !!img && this.lastVs) this.render(this.lastVs);
   }
 
   /** Board-unit → px scale. */
@@ -296,6 +545,8 @@ export class Board {
   // -------------------------------------------------------------------------
 
   render(vs: GameState): void {
+    this.lastVs = vs;
+    const based = !!this.baseImg;
     const rings = new Map<number, string>();
     for (const w of oneAwayWarnings(vs)) {
       if (vs.properties[w.missing]?.owner === w.playerId) continue;
@@ -313,12 +564,13 @@ export class Board {
         ring: rings.get(i) ?? null,
         lang,
       };
-      const sig = `${v.owner}|${v.level}|${v.festival}|${v.pot}|${v.lang}`;
+      const hit = based && isBare(v);
+      const sig = hit ? 'hit' : `${v.owner}|${v.level}|${v.festival}|${v.pot}|${v.lang}`;
       const grp = this.groups[i]!;
       if (sig !== this.sigs[i]) {
         this.sigs[i] = sig;
         const g = GEOM[i]!;
-        grp.innerHTML = g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
+        grp.innerHTML = hit ? hitMarkup(i) : g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
       }
       // One-away pulse ring: a separate HTML mark above the space, recreated only on change.
       const ring = this.rings.get(i);
@@ -334,6 +586,7 @@ export class Board {
       }
     }
     this.renderTokens(vs);
+    this.ensureBase();
   }
 
   /** Brief highlight of a space (bought / built / stamped). */
@@ -424,8 +677,7 @@ export class Board {
         for (let i = 0; i < 32; i++) {
           if (this.pickSet.has(i)) continue;
           const g = GEOM[i]!;
-          const tr = g.corner ? `translate(${g.x} ${g.y})` : `translate(${g.cx} ${g.cy}) rotate(${g.rot}) translate(${-g.lw / 2} ${-g.lh / 2})`;
-          veil.push(`<rect transform="${tr}" width="${g.lw}" height="${g.lh}"/>`);
+          veil.push(`<rect transform="${spaceTransform(i)}" width="${g.lw}" height="${g.lh}"/>`);
         }
         const dim = h('div', { class: 'bm-dim' });
         dim.innerHTML = `<svg viewBox="0 0 ${VB} ${VB}" aria-hidden="true">${veil.join('')}</svg>`;
