@@ -404,10 +404,30 @@ export class Stage {
     }
   }
 
+  private veil: HTMLElement | null = null;
+
+  /**
+   * Landmark "spotlight": a static veil over the stage with a clear hole around the close-up card
+   * (docs/VFX.md §7.2b.10). No fade animation on purpose: a full-size fading element would be one
+   * more large GPU layer (layer-memory budget, docs/PERFORMANCE.md); the card's own entrance carries the motion.
+   */
+  spotlight(on: boolean): void {
+    if (on && !this.veil) {
+      this.veil = h('div', { class: 'fx-cu-veil', 'aria-hidden': 'true' });
+      // Under the close-up card (which is appended after it).
+      if (this.cu) this.rot.insertBefore(this.veil, this.cu);
+      else this.rot.append(this.veil);
+    } else if (!on && this.veil) {
+      this.veil.remove();
+      this.veil = null;
+    }
+  }
+
   /** Remove the close-up card now (skip, resize, screen exit). */
   dropCloseUp(): void {
     this.cu?.remove();
     this.cu = null;
+    this.spotlight(false);
   }
 
   /** Client centre of the card / prompt on the stage (else the stage centre): free-upgrade comet, card glints. */

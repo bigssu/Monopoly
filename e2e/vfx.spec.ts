@@ -296,10 +296,10 @@ test.describe('in-game VFX', () => {
     const errors = watchErrors(page);
     await boot(page, 1600, 1000);
     await craft(page, BEATS[1]!.patch!);
-    // A landmark effect with the spotlight veil over the whole table…
+    // A landmark effect (close-up card + stage veil) running…
     await page.evaluate(() => void window.__lotAndRoll!.playFx('landmarkReveal', { space: 31, player: 0 }));
     await page.waitForFunction(() => (window.__lotAndRoll!.fx()?.live ?? 0) > 20);
-    await expect(page.locator('.fx-spot')).toBeVisible();
+    await expect(page.locator('.fx-cu-veil')).toBeAttached();
     // …and the build prompt's button still takes the tap (Playwright checks nothing covers it).
     await page.locator('.st-prompt [data-action="Build"]').click({ timeout: 3000 });
     await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.properties[22]!.level)).toBe(1);

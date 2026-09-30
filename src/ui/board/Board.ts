@@ -7,7 +7,7 @@ import { playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
+import { anim, animSpeed, D, gridTimeout, instant, isSkipping, onFrame } from '@/ui/fx/time';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
 import { DEPTH, GEOM, INNER, VB, tokenSpot, type SpaceGeom } from './geometry';
@@ -762,32 +762,76 @@ export class Board {
     this.runPop(i, o);
   }
 
+  /**
+   * Scale an SVG element through its `transform` ATTRIBUTE, stepped on the 30 Hz clock. A CSS
+   * transform animation on an SVG child makes Chromium composite the board SVG, and the layers
+   * painted above it (marks, tokens) then need their own overlap layers: +14 MB of layer memory
+   * per effect (docs/VFX.md §14). The attribute path costs one board repaint per frame, briefly.
+   */
+  private svgScale(el: SVGGraphicsElement, base: string, cx: number, cy: number, frames: number, scaleAt: (t: number) => number): void {
+    if (instant()) return;
+    this.svgTweens.get(el)?.();
+    const dur = (frames * 1000) / 30;
+    let t = 0;
+    let last = -1;
+    const set = (sc: number): void => {
+      const s = Math.abs(sc - 1) < 1e-3 ? '' : ` translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${sc.toFixed(3)}) translate(${(-cx).toFixed(1)} ${(-cy).toFixed(1)})`;
+      const v = `${base}${s}`.trim();
+      if (v) el.setAttribute('transform', v);
+      else el.removeAttribute('transform');
+    };
+    const stop = onFrame((now) => {
+      if (last >= 0) t += (now - last) * animSpeed() * (isSkipping() ? 5 : 1);
+      last = now;
+      const k = Math.min(1, t / dur);
+      set(scaleAt(k));
+      if (k >= 1 || !el.isConnected) {
+        this.svgTweens.delete(el);
+        return false;
+      }
+      return true;
+    });
+    this.svgTweens.set(el, () => {
+      stop();
+      set(1);
+    });
+  }
+
+  private svgTweens = new Map<Element, () => void>();
+
   private runPop(i: number, o: { from: number; c1: number; frames: number }): void {
     const el = this.levelIconEl(i);
     if (!el) return;
-    const n = Math.max(2, o.frames);
-    const kf: Keyframe[] = [];
-    for (let k = 0; k <= n; k++) {
-      const x = k / n - 1;
-      const e = 1 + (o.c1 + 1) * x ** 3 + o.c1 * x ** 2;
-      kf.push({ transform: `scale(${(o.from + (1 - o.from) * e).toFixed(3)})` });
+    let box: DOMRect;
+    try {
+      box = el.getBBox();
+    } catch {
+      return;
     }
-    void anim(el, kf, { duration: (n * 1000) / 30, easing: 'linear' });
+    const c1 = o.c1;
+    this.svgScale(el, '', box.x + box.width / 2, box.y + box.height / 2, Math.max(2, o.frames), (t) => {
+      const x = t - 1;
+      return o.from + (1 - o.from) * (1 + (c1 + 1) * x ** 3 + c1 * x ** 2);
+    });
   }
 
-  /** Zoom punch of a whole space 1 → k → 1 (400 ms), drawn above its neighbours. */
+  /** Zoom punch of a whole space 1 → k (5 f outQuad) → 1 (7 f inOutQuad), drawn above its neighbours. */
   zoomPunch(i: number, k: number): void {
     const grp = this.groups[i];
     if (!grp || instant()) return;
     const g = GEOM[i]!;
-    // A CSS transform replaces the group's transform attribute: compose the placement with the scale.
-    const tf = (s: number): string =>
-      g.corner
-        ? `translate(${g.x}px, ${g.y}px) translate(${g.lw / 2}px, ${g.lh / 2}px) scale(${s}) translate(${-g.lw / 2}px, ${-g.lh / 2}px)`
-        : `translate(${g.cx}px, ${g.cy}px) rotate(${g.rot}deg) scale(${s}) translate(${-g.lw / 2}px, ${-g.lh / 2}px)`;
     // Paint order = z-order in SVG: move the group last (the order of the groups carries no meaning).
     if (grp.nextSibling) this.svgEl.appendChild(grp);
-    void anim(grp, [{ transform: tf(1) }, { transform: tf(k), offset: 5 / 12 }, { transform: tf(1) }], { duration: 400, easing: 'ease-out' });
+    this.svgScale(grp, spaceTransform(i), g.lw / 2, g.lh / 2, 12, (t) => {
+      const f = t * 12;
+      if (f <= 5) {
+        const x = f / 5;
+        return 1 + (k - 1) * (1 - (1 - x) * (1 - x));
+      }
+      const x = (f - 5) / 7;
+      const e = x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
+      return k + (1 - k) * e;
+    });
   }
 
   /** "Under construction" dim of a space's level icon (class on the space group: survives re-renders). */

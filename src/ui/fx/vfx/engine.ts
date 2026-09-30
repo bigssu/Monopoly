@@ -276,8 +276,8 @@ export function createFx(o: FxOptions): FxHandle {
     if (retained && region) {
       retained = false;
       const fits = want.x >= region.x && want.y >= region.y && want.x + want.width <= region.x + region.width && want.y + want.height <= region.y + region.height;
-      // …and not much larger than needed (a full-screen store would draw a tile effect at a lower backing scale).
-      if (fits && want.width * want.height >= region.width * region.height * 0.25) {
+      // …and not much larger than needed: the canvas's CSS box is the GPU layer (layer-memory budget).
+      if (fits && want.width * want.height >= region.width * region.height * 0.7) {
         c.hidden = false;
         return;
       }
@@ -299,6 +299,26 @@ export function createFx(o: FxOptions): FxHandle {
     // (≈ 10 ms at 4× for 0.9 MP; see docs/VFX.md §13 and the `retainBacking` option).
     fullClear = false;
     dirty.any = false;
+  }
+
+  /**
+   * An effect ended while others still run: shrink the canvas to the remaining effects' regions when
+   * that saves a lot (a chain of overlapping effects would otherwise keep the union of all of them —
+   * a full-screen layer — until the very last particle).
+   */
+  function refit(): void {
+    if (!canvas || !region) return;
+    let next: RectLike | null = null;
+    for (const e of runner.effects) next = union(next, e.tl.bounds);
+    if (!next) return;
+    const L = createCoords(o);
+    const x0 = Math.max(0, next.x - 8);
+    const y0 = Math.max(0, next.y - 8);
+    const w = Math.min(L.width, next.x + next.width + 8) - x0;
+    const h = Math.min(L.height, next.y + next.height + 8) - y0;
+    if (w <= 0 || h <= 0 || w * h > region.width * region.height * 0.6) return;
+    region = null;
+    growRegion({ x: x0 + 8, y: y0 + 8, width: w - 16, height: h - 16 }, L.width, L.height);
   }
 
   /** Idle: stop the frame step, hide the canvas and (unless `retainBacking`) free its backing store. */
@@ -381,7 +401,11 @@ export function createFx(o: FxOptions): FxHandle {
       frames = Math.min(frames, skipping ? 20 : 8);
     }
     last = now;
-    if (frames > 0) runner.advance(frames);
+    if (frames > 0) {
+      const before = runner.effects.length;
+      runner.advance(frames);
+      if (runner.effects.length < before && runner.effects.length > 0) refit();
+    }
     if (frames > 0) pumpBig(frames);
     if (settleWaiters.length) pumpSettled();
     if (frames > 0 || fullClear) draw();

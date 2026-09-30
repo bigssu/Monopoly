@@ -11,12 +11,11 @@ import { PlayerPanel } from '@/ui/panels/PlayerPanel';
 import { createFx, type FxHandle, type HighlightTarget } from '@/ui/fx/vfx';
 import { fxPolicy, PitchLadder } from '@/ui/fx/vfx/director';
 import { shakeAll } from '@/ui/fx/shake';
-import { anim } from '@/ui/fx/time';
 import { sfx, type SfxName } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
-import { h, iconEl, isDevHook, prepareGameIcons, SEAT_ANGLE } from './util';
+import { h, iconEl, isDevHook, prepareGameIcons } from './util';
 
 export class GameView {
   readonly root: HTMLElement;
@@ -25,12 +24,10 @@ export class GameView {
   readonly board: Board;
   readonly stage: Stage;
   readonly panels = new Map<PlayerId, PlayerPanel>();
-  /** `.fx-layer` (z 40, pointer-events none): the VFX canvas + spotlight veil. */
+  /** `.fx-layer` (z 40, pointer-events none): the VFX canvas. */
   readonly fx: HTMLElement;
   /** Canvas sprite/particle engine (docs/VFX.md, wiring: docs/VFX-WIRING.md). */
   readonly vfx: FxHandle;
-  private spot: HTMLElement;
-  private spotOn = false;
   private ladder = new PitchLadder();
   readonly menuSlot: HTMLElement;
   readonly seats: Seat[];
@@ -56,10 +53,6 @@ export class GameView {
       this.table.append(panel.el);
     }
     this.fx = h('div', { class: 'fx-layer' });
-    this.spot = h('div', { class: 'fx-spot', 'aria-hidden': 'true' });
-    this.spot.hidden = true;
-    // Under the canvas (the canvas is appended on the first play()).
-    this.fx.append(this.spot);
     this.vfx = createFx({
       layer: this.fx,
       getLayerRect: () => this.fx.getBoundingClientRect(),
@@ -71,17 +64,17 @@ export class GameView {
       getPlayerColor: (id) => this.colorOf(id),
       sfx: (name, o) => this.playSfx(name, o),
       haptic: (k) => haptic(k),
-      shake: (px, ms) => void shakeAll([this.table, this.fx], px, ms),
+      // Camera shake of the effect layer only: shaking the table or the board would promote it to a
+      // ~27-33 MB GPU layer at the moments the canvas is largest (layer-memory gate, docs/VFX.md §14).
+      shake: (px, ms) => void shakeAll([this.fx], px, ms),
       highlight: (target, ms) => this.staticHighlight(target, ms),
       dom: {
         pop: (i, o) => this.board.popIcon(i, o),
         zoomPunch: (i, k) => this.board.zoomPunch(i, k),
         dim: (i, on) => this.board.dimIcon(i, on),
-        closeUp: (i, pid, level, phase) => {
-          if (phase === 'in') this.aimSpot(i);
-          this.stage.closeUp(this.colorOf(pid), level, phase);
-        },
-        spotlight: (on) => this.spotlight(on),
+        closeUp: (_i, pid, level, phase) => this.stage.closeUp(this.colorOf(pid), level, phase),
+        // The "spotlight" is a static veil in the stage around the close-up card (no extra layer).
+        spotlight: (on) => this.stage.spotlight(on),
         floatText: (pid, text) => this.panels.get(pid)?.floatText(text),
         panelBump: (pid) => void this.panels.get(pid)?.bump(),
       },
@@ -90,6 +83,9 @@ export class GameView {
       // Keep the hidden canvas's backing store between effects (no first-draw allocation spike;
       // still no layer, frame callback or timer while idle) — docs/VFX.md §13.5.
       retainBacking: true,
+      // Dev A/B knobs for devices (VFX.md §10.4): ?dev=1&fxmp=0.45 (backing MP budget), &fxsw=0 (GPU canvas).
+      maxBackingPixels: Number((isDevHook() && new URLSearchParams(location.search).get('fxmp')) || 0.9) * 1e6,
+      softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
       dev: isDevHook(),
     });
     this.menuSlot = h('div', { class: 'menu-slot' });
@@ -169,46 +165,6 @@ export class GameView {
   stopFx(): void {
     this.vfx.stopAll();
     this.stage.dropCloseUp();
-    this.spotlight(false, true);
-  }
-
-  /** Centre the spotlight's clear hole on a space (and the stage centre, where the close-up card is). */
-  private aimSpot(i: number): void {
-    const L = this.fx.getBoundingClientRect();
-    const r = this.board.spaceRect(i);
-    const b = this.board.el.getBoundingClientRect();
-    const s = this.spot.style;
-    s.setProperty('--sx', `${r.x + r.width / 2 - L.left}px`);
-    s.setProperty('--sy', `${r.y + r.height / 2 - L.top}px`);
-    s.setProperty('--sr', `${Math.max(r.width, r.height) * 0.9}px`);
-    // The close-up card sits 4.2 u above the stage centre in the acting seat's frame (vfx.css).
-    const u = b.width / 32;
-    const a = (SEAT_ANGLE[this.stage.currentSeat] * Math.PI) / 180;
-    const dx = 4.2 * u * Math.sin(a);
-    const dy = -4.2 * u * Math.cos(a);
-    s.setProperty('--cx', `${b.left + b.width / 2 + dx - L.left}px`);
-    s.setProperty('--cy', `${b.top + b.height / 2 + dy - L.top}px`);
-    s.setProperty('--cr', `${u * 3.9}px`);
-  }
-
-  /** Landmark spotlight: the table dims to 25 % around the space and the close-up card (fade 200 / 267 ms). */
-  spotlight(on: boolean, now = false): void {
-    if (on === this.spotOn && !now) return;
-    this.spotOn = on;
-    const el = this.spot;
-    if (on) {
-      el.hidden = false;
-      void anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
-    } else if (now) {
-      el.getAnimations().forEach((a) => a.cancel());
-      el.hidden = true;
-    } else {
-      void anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 267, fill: 'forwards' }).then(() => {
-        if (this.spotOn) return;
-        el.getAnimations().forEach((a) => a.cancel());
-        el.hidden = true;
-      });
-    }
   }
 
   /** Reduced motion (docs/VFX.md §8.3): a static colour frame on the space / panel, no animation. */

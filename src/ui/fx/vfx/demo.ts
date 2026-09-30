@@ -60,6 +60,8 @@ html,body{margin:0;height:100%;background:#16202D;font-family:system-ui,sans-ser
 .vd-pp{position:absolute;border-radius:14px;background:#243246;border:3px solid var(--pc);color:#fff;display:grid;place-items:center;font:700 15px system-ui;box-sizing:border-box}
 .vd-float{position:absolute;font:900 22px system-ui;color:#FFD45C;text-shadow:0 2px 0 #0008;pointer-events:none;white-space:nowrap}
 .fx-layer{position:absolute;inset:0;pointer-events:none;z-index:40;overflow:hidden}
+.fx-spot{position:absolute;inset:0;pointer-events:none;background:rgba(8,12,20,.25);opacity:0}
+.fx-spot[hidden]{display:none}
 .vd-ui{position:absolute;left:6px;top:6px;z-index:60;display:flex;flex-wrap:wrap;gap:4px;max-width:260px}
 .vd-ui button{font:600 11px system-ui;padding:3px 6px;border-radius:6px;border:0;background:#33445c;color:#fff;cursor:pointer}
 .vd-ui .vd-stats{font:11px ui-monospace,monospace;color:#9fb0c8;white-space:pre;width:100%}

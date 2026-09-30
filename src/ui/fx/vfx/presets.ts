@@ -1450,7 +1450,10 @@ export function victory(p: VictoryParams, env: PresetEnv): Timeline {
   rays(b, at, 2, col, 72, { s0: 0.8, s1: 1.6, a: 0.75, spin: 40 });
   for (const f of [8, 20]) b.at(f, spawn((e) => void e.emit({ anim: 'glint_sweep', x: at.x, y: at.y, life: 9, fit: true, s: 1.2, tint: GOLD_HI, blend: 'add', layer: 3 })));
   b.at(0, sfx('win'), haptic('success', true));
-  b.at(6, hitStop(3), shake(12, 480));
+  // No screen shake here (§6.1 lists 12 px): the finale's canvas covers the table, and a shaking
+  // board on top would be one more large GPU layer at the peak (PERFORMANCE.md layer budget, gate F3).
+  // (A winner-panel bump here promoted a full-screen squashing layer as well: hit-stop only.)
+  b.at(6, hitStop(3));
   // Cannons at both ends of the winner's panel, shooting toward the board centre; gravity toward the winner.
   const half = (seat === 'S' || seat === 'N' ? pa.w : pa.h) * 0.45;
   const g = seatLocal(seat, 0, 20);
@@ -1504,7 +1507,16 @@ export function victory(p: VictoryParams, env: PresetEnv): Timeline {
   }
   b.at(45, block());
   b.at(110, cue('end'));
-  return b.build('victory', 4, PRIORITY.victory, { panel: p.winner });
+  const tl = b.build('victory', 4, PRIORITY.victory, { panel: p.winner });
+  // Canvas region: the board + the winner's panel (the confetti stays over the board); a full-screen
+  // canvas would be the largest GPU layer of the finale (layer-memory budget, gate F3).
+  const halfB = 16 * u + 2 * u;
+  const keep = { x0: Math.min(mid.x - halfB, pa.cx - pa.w / 2), y0: Math.min(mid.y - halfB, pa.cy - pa.h / 2), x1: Math.max(mid.x + halfB, pa.cx + pa.w / 2), y1: Math.max(mid.y + halfB, pa.cy + pa.h / 2) };
+  const r = tl.bounds;
+  const x0 = Math.max(r.x, keep.x0);
+  const y0 = Math.max(r.y, keep.y0);
+  tl.bounds = { x: x0, y: y0, width: Math.max(1, Math.min(r.x + r.width, keep.x1) - x0), height: Math.max(1, Math.min(r.y + r.height, keep.y1) - y0) };
+  return tl;
 }
 
 export interface OneAwayParams {
