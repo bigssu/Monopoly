@@ -7,7 +7,7 @@
  * in-app setting, docs/VFX-WIRING.md §2). `ManualClock` drives the engine
  * deterministically (tests, demo filmstrips).
  */
-import { animSpeed, isSkipping, onFrame, reducedMotion } from '../time';
+import { animSpeed, isManualClock, isSkipping, onFrame, reducedMotion } from '../time';
 
 export type FrameFn = (now: number) => boolean | void;
 
@@ -21,6 +21,8 @@ export interface FxClock {
   instant(): boolean;
   /** prefers-reduced-motion (or the app setting): no canvas; sound + static highlight. */
   reducedMotion(): boolean;
+  /** Frames are stepped by hand (tests / filmstrips): paint synchronously on the main thread. */
+  manual?(): boolean;
 }
 
 /** The game's shared 30 Hz clock (ui/fx/time.ts). */
@@ -30,6 +32,7 @@ export const gameClock: FxClock = {
   skipping: isSkipping,
   instant: () => animSpeed() === 0,
   reducedMotion,
+  manual: isManualClock,
 };
 
 /** A clock advanced by hand: each `step()` is one 30 Hz tick (33.33 ms). */
@@ -55,6 +58,9 @@ export class ManualClock implements FxClock {
   }
   reducedMotion(): boolean {
     return this.reduced;
+  }
+  manual(): boolean {
+    return true;
   }
   /** Registered frame callbacks (0 = idle). */
   get active(): number {

@@ -24,10 +24,10 @@ const PLAYERS = SEATS.map((seat, id) => ({ id, seat, color: PLAYER_COLORS[id]!.h
 
 /** Clock that can switch between the game's 30 Hz clock and a manual one (only while idle). */
 class DemoClock implements FxClock {
-  manual = new ManualClock();
+  hand = new ManualClock();
   useManual = false;
   private get c(): FxClock {
-    return this.useManual ? this.manual : gameClock;
+    return this.useManual ? this.hand : gameClock;
   }
   onFrame(fn: FrameFn): () => void {
     return this.c.onFrame(fn);
@@ -42,7 +42,10 @@ class DemoClock implements FxClock {
     return this.c.instant();
   }
   reducedMotion(): boolean {
-    return this.useManual ? this.manual.reduced : gameClock.reducedMotion();
+    return this.useManual ? this.hand.reduced : gameClock.reducedMotion();
+  }
+  manual(): boolean {
+    return this.useManual;
   }
 }
 
@@ -420,10 +423,10 @@ export function mountVfxDemo(root: HTMLElement, o: { size?: number } = {}): Demo
       clock.useManual = on;
     },
     step(n = 1) {
-      clock.manual.step(n);
+      clock.hand.step(n);
     },
     reduced(on) {
-      clock.manual.reduced = on;
+      clock.hand.reduced = on;
     },
     skip: () => fx.skip(),
     stats: () => fx.stats(),

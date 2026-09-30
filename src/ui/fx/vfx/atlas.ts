@@ -38,7 +38,16 @@ interface FrameInfo {
   key: string;
 }
 
-export interface FxAtlas {
+/** What the engine needs of the atlas on the main thread when a worker paints (frame boxes only, no images). */
+export interface FxAtlasMeta {
+  /**
+   * The drawn (trimmed) rect of a frame in the sprite's local nominal px relative to the pivot
+   * (anchor ax, ay): writes [x0, y0, x1, y1] into `out`; false when the frame does not exist.
+   */
+  frameBox(animIndex: number, frame: number, ax: number, ay: number, out: Float64Array): boolean;
+}
+
+export interface FxAtlas extends FxAtlasMeta {
   readonly json: FxAtlasJson;
   /** Tint cache size in bytes / entries (dev stats). */
   cacheBytes(): number;
@@ -65,11 +74,6 @@ export interface FxAtlas {
   ): void;
   /** Approximate radius (px at scale 1) of a sprite's nominal box — for dirty rects / bounds. */
   radius(anim: FxAnimName): number;
-  /**
-   * The drawn (trimmed) rect of a frame in the sprite's local nominal px relative to the pivot
-   * (anchor ax, ay): writes [x0, y0, x1, y1] into `out`; false when the frame does not exist.
-   */
-  frameBox(animIndex: number, frame: number, ax: number, ay: number, out: Float64Array): boolean;
   /** Pre-build tinted frames (idle warm-up, VFX.md §3.6). */
   warm(anims: readonly FxAnimName[], colors: readonly string[]): void;
 }
@@ -118,7 +122,7 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
   return c;
 }
 
-async function loadImage(url: string): Promise<Img> {
+export async function loadImage(url: string): Promise<Img> {
   if (typeof fetch === 'function' && typeof createImageBitmap === 'function') {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`${url}: ${res.status}`);
@@ -249,6 +253,55 @@ export function createAtlas(json: FxAtlasJson, images: Record<FxAtlasId, Img>): 
   };
 }
 
+/** Frame boxes from the atlas JSON alone (worker backend: the main thread never decodes the sheets). */
+export function createAtlasMeta(json: FxAtlasJson): FxAtlasMeta {
+  const names = Object.keys(FX_ANIMS) as FxAnimName[];
+  // Per animation: per frame [x0, y0, w, h, bw, bh] in nominal px (x0/y0 = trim offset).
+  const table: Float64Array[][] = names.map((name) => {
+    const meta = json.anims[name]!;
+    return meta.frames.map((key) => {
+      const f = json.frames[key]!;
+      const rs = meta.scale;
+      return Float64Array.of(f.ox / rs, f.oy / rs, f.w / rs, f.h / rs, f.sw / rs, f.sh / rs);
+    });
+  });
+  return {
+    frameBox(ai, frame, ax, ay, out) {
+      const b = table[ai]?.[frame];
+      if (!b) return false;
+      out[0] = b[0]! - b[4]! * ax;
+      out[1] = b[1]! - b[5]! * ay;
+      out[2] = out[0] + b[2]!;
+      out[3] = out[1] + b[3]!;
+      return true;
+    },
+  };
+}
+
+/** Absolute URLs of the atlas files (a worker resolves relative URLs against its own script). */
+export function atlasUrls(baseUrl = base()): { json: string; color: string; mask: string } {
+  const abs = (f: string): string => (typeof location !== 'undefined' ? new URL(baseUrl + f, location.href).href : baseUrl + f);
+  return { json: abs(FX_FILES.json), color: abs(FX_FILES.color), mask: abs(FX_FILES.mask) };
+}
+
+let loadingJson: Promise<FxAtlasJson | null> | null = null;
+/** Load (once) the atlas JSON only. Resolves null on failure. */
+export function loadAtlasJson(baseUrl = base()): Promise<FxAtlasJson | null> {
+  if (loadingJson) return loadingJson;
+  loadingJson = (async () => {
+    try {
+      if (typeof fetch !== 'function') return null;
+      const res = await fetch(baseUrl + FX_FILES.json);
+      if (!res.ok) throw new Error(`atlas.json ${res.status}`);
+      return (await res.json()) as FxAtlasJson;
+    } catch (e) {
+      console.warn('[vfx] atlas unavailable, effects disabled:', e);
+      return null;
+    }
+  })();
+  return loadingJson;
+}
+
 let loading: Promise<FxAtlas | null> | null = null;
 
 /** Load (once) the atlas JSON + sheets. Resolves null on any failure (the engine then disables itself). */
@@ -256,10 +309,8 @@ export function loadAtlas(baseUrl = base()): Promise<FxAtlas | null> {
   if (loading) return loading;
   loading = (async () => {
     try {
-      if (typeof fetch !== 'function') return null;
-      const res = await fetch(baseUrl + FX_FILES.json);
-      if (!res.ok) throw new Error(`atlas.json ${res.status}`);
-      const json = (await res.json()) as FxAtlasJson;
+      const json = await loadAtlasJson(baseUrl);
+      if (!json) return null;
       const [color, mask] = await Promise.all([loadImage(baseUrl + FX_FILES.color), loadImage(baseUrl + FX_FILES.mask)]);
       return createAtlas(json, { color, mask });
     } catch (e) {
@@ -273,6 +324,7 @@ export function loadAtlas(baseUrl = base()): Promise<FxAtlas | null> {
 /** Test helper: forget the cached load. */
 export function resetAtlasLoad(): void {
   loading = null;
+  loadingJson = null;
 }
 
 export { fxFrameKey };

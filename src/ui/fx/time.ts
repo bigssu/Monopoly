@@ -391,6 +391,11 @@ export function onFrame(fn: FrameTick): () => void {
   };
 }
 
+/** The hand-driven clock is on (dev/test). */
+export function isManualClock(): boolean {
+  return !!manual;
+}
+
 /** Dev/test: switch the hand-driven clock on / off (see `manual`). */
 export function setManualClock(on: boolean): void {
   if (on === !!manual) return;

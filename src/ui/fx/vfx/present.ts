@@ -22,6 +22,7 @@
  *   its canvas only when it leaves the canvas's rect.
  */
 import type { RectLike } from './coords';
+import { S_FLAGS, S_H, S_S, S_W, S_X, S_Y, SF_CLEAR, SF_SHOWN, SREC } from './paint';
 
 export interface SlotClass {
   name: string;
@@ -248,10 +249,10 @@ export class Clusterer {
   }
 }
 
-interface Slot {
+export interface Slot {
   cls: number;
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
+  /** The canvas element (its pixels belong to the backend: a main-thread context or a worker). */
+  el: HTMLCanvasElement;
   shown: boolean;
   /** Has a backing store of the class size (freed while hidden unless retained). */
   sized: boolean;
@@ -261,17 +262,12 @@ interface Slot {
   s: number;
   /** Cluster index assigned this frame (-1 = none). */
   cluster: number;
-  /** Drawn content box in backing px (to clear next frame). */
-  dx0: number;
-  dy0: number;
-  dx1: number;
-  dy1: number;
-  dirty: boolean;
-  /** Needs a full clear (moved / rescaled / just shown). */
+  /** Had a cluster last frame (its content is on screen). */
+  used: boolean;
+  /** Clear everything before the next paint (just shown: parked content is stale). */
   clearAll: boolean;
   /** Frames shown without a cluster. */
   idle: number;
-  blend: number;
 }
 
 export interface PresentStats {
@@ -279,7 +275,7 @@ export interface PresentStats {
   /** Union of the shown canvases' rects (layer px). */
   union: RectLike | null;
   slots: Array<{ cls: string; x: number; y: number; w: number; h: number; s: number; shown: boolean }>;
-  /** Backing px uploaded (canvases drawn) since the last reset, and frames drawn. */
+  /** Backing px uploaded (canvases painted) since the last reset, and canvas frames painted. */
   uploadPx: number;
   drawn: number;
   /** show/hide toggles (each is one Paint). */
@@ -288,11 +284,8 @@ export interface PresentStats {
 
 export interface PresenterOptions {
   layer: HTMLElement;
-  software: boolean;
   /** Most canvases shown at once (each is a GPU layer). */
   maxShown: number;
-  /** Keep hidden canvases' backing stores. */
-  retain: boolean;
   classes?: readonly SlotClass[];
   pool?: readonly number[];
 }
@@ -302,6 +295,10 @@ const RETAIN_MAX_PX = 160e3;
 /** Hide a shown canvas that has had no cluster for this many drawn frames (frees its layer). */
 const EMPTY_HIDE_FRAMES = 45;
 
+/**
+ * The pooled canvases' DOM side: assignment of clusters to canvases, placement (transform),
+ * parking (visibility). Pixels are painted by the backend from `writeStates()` + the engine's list.
+ */
 export class Presenter {
   readonly slots: Slot[] = [];
   readonly classes: readonly SlotClass[];
@@ -309,7 +306,7 @@ export class Presenter {
   private uploadPx = 0;
   private drawn = 0;
   private toggles = 0;
-  /** Cluster → slot for the current frame. */
+  /** Cluster → slot index for the current frame. */
   slotOf = new Int32Array(8);
 
   constructor(readonly o: PresenterOptions) {
@@ -324,15 +321,11 @@ export class Presenter {
       c.style.width = `${k.w}px`;
       c.style.height = `${k.h}px`;
       c.style.visibility = 'hidden';
-      const ctx = c.getContext('2d', { alpha: true, willReadFrequently: o.software });
-      if (!ctx) continue;
+      c.width = 0;
+      c.height = 0;
       o.layer.append(c);
-      this.slots.push({ cls, canvas: c, ctx, shown: false, sized: false, x: 0, y: 0, s: 1, cluster: -1, dx0: 0, dy0: 0, dx1: 0, dy1: 0, dirty: false, clearAll: true, idle: 0, blend: -1 });
+      this.slots.push({ cls, el: c, shown: false, sized: false, x: 0, y: 0, s: 1, cluster: -1, used: false, clearAll: true, idle: 0 });
     }
-  }
-
-  get ok(): boolean {
-    return this.slots.length > 0;
   }
 
   private show(sl: Slot, on: boolean): void {
@@ -340,19 +333,14 @@ export class Presenter {
     sl.shown = on;
     this.toggles++;
     if (on) {
-      if (!sl.sized) {
-        const k = this.classes[sl.cls]!;
-        sl.canvas.width = k.w;
-        sl.canvas.height = k.h;
-        sl.sized = true;
-        sl.dirty = false;
-      }
+      sl.sized = true;
       sl.clearAll = true;
       sl.idle = 0;
-      sl.canvas.style.visibility = 'visible';
+      sl.el.style.visibility = 'visible';
     } else {
-      sl.canvas.style.visibility = 'hidden';
+      sl.el.style.visibility = 'hidden';
       sl.cluster = -1;
+      sl.used = false;
     }
   }
 
@@ -361,8 +349,7 @@ export class Presenter {
     sl.x = x;
     sl.y = y;
     sl.s = s;
-    sl.canvas.style.transform = `translate(${x}px,${y}px) scale(${1 / s})`;
-    sl.clearAll = true;
+    sl.el.style.transform = `translate(${x}px,${y}px) scale(${1 / s})`;
   }
 
   /** Rect (layer px) a slot covers. */
@@ -373,7 +360,8 @@ export class Presenter {
 
   /**
    * Assign the clusters of this frame to canvases (placing / rescaling / showing them).
-   * `sMax` = the crisp backing scale (min(1.5, DPR)).
+   * `sMax` = the crisp backing scale (min(1.5, DPR)); `budget` = backing px per frame that sets the
+   * scale of large clusters.
    */
   assign(sMax: number, budget = FRAME_BUDGET_PX): void {
     const C = this.clusterer;
@@ -409,7 +397,7 @@ export class Presenter {
       let pick: Slot | null = null;
       let bestOv = 0;
       for (const sl of this.slots) {
-        if (!sl.shown || sl.cluster >= 0 || !sl.dirty) continue;
+        if (!sl.shown || sl.cluster >= 0 || !sl.used) continue;
         const r = this.rect(sl);
         const ov = Math.max(0, Math.min(r.x + r.w, C.x1[k]!) - Math.max(r.x, C.x0[k]!)) * Math.max(0, Math.min(r.y + r.h, C.y1[k]!) - Math.max(r.y, C.y0[k]!));
         const K = this.classes[sl.cls]!;
@@ -438,6 +426,18 @@ export class Presenter {
         this.place(pick, Math.round(cx - cw / 2), Math.round(cy - ch / 2), s);
       }
       this.show(pick, true);
+    }
+    // Bookkeeping: uploads (a painted canvas is copied whole), emptied canvases, idle ones parked.
+    for (const sl of this.slots) {
+      if (!sl.shown) continue;
+      const px = this.classes[sl.cls]!.w * this.classes[sl.cls]!.h;
+      if (sl.cluster >= 0) {
+        this.uploadPx += px;
+        this.drawn++;
+      } else {
+        if (sl.used) this.uploadPx += px; // one more paint: the clear
+        if (++sl.idle > EMPTY_HIDE_FRAMES) this.show(sl, false);
+      }
     }
   }
 
@@ -473,72 +473,40 @@ export class Presenter {
     return sl;
   }
 
-  private clear(sl: Slot): void {
-    if (sl.clearAll) {
-      sl.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      sl.ctx.clearRect(0, 0, sl.canvas.width, sl.canvas.height);
-      sl.clearAll = false;
-      sl.dirty = false;
-      return;
-    }
-    if (!sl.dirty) return;
-    sl.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    sl.ctx.clearRect(sl.dx0 - 2, sl.dy0 - 2, sl.dx1 - sl.dx0 + 4, sl.dy1 - sl.dy0 + 4);
-    sl.dirty = false;
+  /** Slot index for a cluster (after `assign`), -1 when none. */
+  slotIndex(cluster: number): number {
+    return this.slotOf[cluster]!;
   }
 
-  /** Start a frame: clear what each shown canvas drew last time (and empty the ones without a cluster). */
-  begin(): void {
-    for (const sl of this.slots) {
-      if (!sl.shown) continue;
-      const had = sl.dirty || sl.clearAll;
-      this.clear(sl);
-      sl.dx0 = sl.dy0 = Infinity;
-      sl.dx1 = sl.dy1 = -Infinity;
-      sl.blend = -1;
-      if (sl.cluster >= 0) {
-        this.uploadPx += sl.canvas.width * sl.canvas.height;
-        this.drawn++;
-      } else {
-        // Emptied this frame: one more upload (the clear); then nothing until it is used or hidden.
-        if (had) this.uploadPx += sl.canvas.width * sl.canvas.height;
-        if (++sl.idle > EMPTY_HIDE_FRAMES) this.show(sl, false);
+  /**
+   * Per-canvas state for the painter (paint.ts SREC floats each): backing size (0 × 0 = freed),
+   * placement, flags. Consumes the one-shot clear flags.
+   */
+  writeStates(out: Float32Array): void {
+    for (let k = 0; k < this.slots.length; k++) {
+      const sl = this.slots[k]!;
+      const K = this.classes[sl.cls]!;
+      const o = k * SREC;
+      out[o + S_W] = sl.sized ? K.w : 0;
+      out[o + S_H] = sl.sized ? K.h : 0;
+      out[o + S_X] = sl.x;
+      out[o + S_Y] = sl.y;
+      out[o + S_S] = sl.s;
+      out[o + S_FLAGS] = (sl.shown ? SF_SHOWN : 0) | (sl.clearAll ? SF_CLEAR : 0);
+      if (sl.shown) {
+        sl.clearAll = false;
+        sl.used = sl.cluster >= 0;
       }
     }
   }
 
-  /** Slot for a cluster (after `assign`). */
-  slot(cluster: number): Slot | null {
-    const i = this.slotOf[cluster]!;
-    return i >= 0 ? this.slots[i]! : null;
-  }
-
-  /** Grow a slot's drawn box by a layer-px box (stored in backing px). */
-  mark(sl: Slot, x0: number, y0: number, x1: number, y1: number): void {
-    const s = sl.s;
-    const a = (x0 - sl.x) * s;
-    const b = (y0 - sl.y) * s;
-    const c = (x1 - sl.x) * s;
-    const d = (y1 - sl.y) * s;
-    if (a < sl.dx0) sl.dx0 = a;
-    if (b < sl.dy0) sl.dy0 = b;
-    if (c > sl.dx1) sl.dx1 = c;
-    if (d > sl.dy1) sl.dy1 = d;
-    sl.dirty = true;
-  }
-
-  /** Idle: hide every canvas and free the backing stores (unless retained; big ones are always freed). */
+  /** Idle: hide every canvas; free the backing stores (unless retained — big ones are always freed). Call `writeStates` after. */
   hideAll(free: boolean): void {
     for (const sl of this.slots) {
       this.show(sl, false);
-      sl.dirty = false;
       sl.clearAll = true;
       const K = this.classes[sl.cls]!;
-      if ((free || K.w * K.h > RETAIN_MAX_PX) && sl.sized) {
-        sl.canvas.width = 0;
-        sl.canvas.height = 0;
-        sl.sized = false;
-      }
+      if (free || K.w * K.h > RETAIN_MAX_PX) sl.sized = false;
     }
   }
 
@@ -567,7 +535,7 @@ export class Presenter {
   }
 
   dispose(): void {
-    for (const sl of this.slots) sl.canvas.remove();
+    for (const sl of this.slots) sl.el.remove();
     this.slots.length = 0;
   }
 }

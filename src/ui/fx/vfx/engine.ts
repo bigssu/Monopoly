@@ -17,7 +17,8 @@ import type { PlayerId } from '@/engine';
 import { PLAYER_COLORS } from '@/content/palette';
 import type { HapticKind } from '@/ui/audio/haptics';
 import type { SfxName } from '@/ui/audio/sfx';
-import { loadAtlas, type FxAtlas } from './atlas';
+import { atlasUrls, createAtlasMeta, loadAtlas, loadAtlasJson, type FxAtlas, type FxAtlasMeta } from './atlas';
+import { paintFrame, R_A, R_ALPHA, R_ANIM, R_AX, R_AY, R_FRAME, R_SLOT, R_TINT, REC, SlotPainter, SREC, type FromWorker, type ToWorker, type WorkerFrame } from './paint';
 import { gameClock, type FxClock } from './clock';
 import { createCoords, type CoordSource } from './coords';
 import { FRAME_MS, newSample, sampleParticle } from './particles';
@@ -54,6 +55,12 @@ export interface FxOptions extends CoordSource {
   maxBackingPixels?: number;
   /** Most FX canvases shown at once (each one is a GPU layer while shown). Default 3. */
   maxCanvases?: number;
+  /**
+   * Paint the canvases in a worker (OffscreenCanvas, docs/VFX.md §15) when supported: the canvas
+   * draw and its copy to the compositor leave the main thread. Default true; never with an injected
+   * `loadAtlas` or a manual clock (deterministic screenshots paint on the main thread).
+   */
+  worker?: boolean;
   /** Dev A/B knobs (VFX.md §15): crisp-scale cap, draw every n-th tick. */
   tune?: { sMax?: number; drawEvery?: number };
   /**
@@ -155,6 +162,9 @@ export function backingScale(w: number, h: number, dpr: number, budget = DEFAULT
   return s;
 }
 
+/** One frame's buffers (paint.ts layout). */
+type Bufs = { states: Float32Array; list: Float32Array; boxes: Float32Array };
+
 const noopPlay = (name = '', tier: Tier = 0): FxPlay => {
   const p = Promise.resolve();
   return { name, tier, then: p.then.bind(p), cue: () => Promise.resolve(), done: p, block: p, cancel() {} };
@@ -174,14 +184,30 @@ export function createFx(o: FxOptions): FxHandle {
     o.seed ?? 0x5eed,
   );
   const pool = runner.pool;
-  const loader = o.loadAtlas ?? (() => loadAtlas());
-  let atlas: FxAtlas | null = null;
-  let atlasState: FxStats['atlas'] = 'idle';
-  let atlasP: Promise<FxAtlas | null> | null = null;
   let quality: FxQuality = 'high';
+  const software = o.softwareCanvas ?? true;
+  /** Full atlas on the main thread (main backend: tests, manual clock, no worker support). */
+  let atlas: FxAtlas | null = null;
+  let atlasP: Promise<FxAtlas | null> | null = null;
+  /** Frame boxes (from the full atlas, or the JSON alone when a worker paints). */
+  let meta: FxAtlasMeta | null = null;
+  let metaP: Promise<FxAtlasMeta | null> | null = null;
+  let atlasState: FxStats['atlas'] = 'idle';
+  /** Paint worker (fx.worker.ts). */
+  let worker: Worker | null = null;
+  let workerState: 'none' | 'loading' | 'ready' | 'failed' = 'none';
+  let workerP: Promise<boolean> | null = null;
+  const freeBuffers: Bufs[] = [];
+  let sentTints = 1;
 
-  /** Pooled small canvases (present.ts), created on the first effect (never in reduced motion). */
+  /**
+   * Pooled small canvases (present.ts), created on the first effect (never in reduced motion): one
+   * set painted by the worker, one by the main thread (created only if that backend is used).
+   */
   let pres: Presenter | null = null;
+  let workerPres: Presenter | null = null;
+  let mainPres: Presenter | null = null;
+  let mainPainters: SlotPainter[] = [];
   /** Layer size (CSS px) read when an effect starts. */
   let layerW = 0;
   let layerH = 0;
@@ -242,29 +268,124 @@ export function createFx(o: FxOptions): FxHandle {
 
   const env = (): PresetEnv => ({ c: createCoords(o), color: colorOf });
 
-  function ensureAtlas(): Promise<FxAtlas | null> {
+  /** Worker backend possible here (default loader, real clock, OffscreenCanvas + transferControlToOffscreen). */
+  function workerWanted(): boolean {
+    return (
+      o.worker !== false &&
+      !o.loadAtlas &&
+      !clock.manual?.() &&
+      workerState !== 'failed' &&
+      typeof Worker !== 'undefined' &&
+      typeof OffscreenCanvas !== 'undefined' &&
+      typeof HTMLCanvasElement !== 'undefined' &&
+      'transferControlToOffscreen' in HTMLCanvasElement.prototype
+    );
+  }
+
+  function ensureMainAtlas(): Promise<FxAtlas | null> {
     if (!atlasP) {
-      atlasState = 'loading';
-      atlasP = loader().then(
+      atlasP = (o.loadAtlas ?? (() => loadAtlas()))().then(
         (a) => {
           atlas = a;
-          atlasState = a ? 'ready' : 'failed';
+          if (a) meta = a;
           return a;
         },
-        () => {
-          atlasState = 'failed';
-          return null;
-        },
+        () => null,
       );
     }
     return atlasP;
   }
 
+  function ensureWorker(): Promise<boolean> {
+    if (workerP) return workerP;
+    workerP = new Promise<boolean>((resolve) => {
+      try {
+        worker = new Worker(new URL('./fx.worker.ts', import.meta.url), { type: 'module' });
+      } catch {
+        workerState = 'failed';
+        resolve(false);
+        return;
+      }
+      workerState = 'loading';
+      worker.onmessage = (e: MessageEvent<FromWorker>) => {
+        const m = e.data;
+        if (m.t === 'buffers') freeBuffers.push(m);
+        else if (m.t === 'ready') {
+          workerState = 'ready';
+          resolve(true);
+        } else if (m.t === 'failed') {
+          console.warn('[vfx] paint worker unavailable, painting on the main thread:', m.error);
+          workerState = 'failed';
+          resolve(false);
+        }
+      };
+      worker.onerror = () => {
+        if (workerState === 'loading') console.warn('[vfx] paint worker failed to start; painting on the main thread');
+        workerState = 'failed';
+        resolve(false);
+      };
+      worker.postMessage({ t: 'init', urls: atlasUrls(), software } satisfies ToWorker);
+    });
+    return workerP;
+  }
+
+  function ensureMeta(): Promise<FxAtlasMeta | null> {
+    if (meta) return Promise.resolve(meta);
+    metaP ??= loadAtlasJson().then((j) => (j ? (meta ??= createAtlasMeta(j)) : null));
+    return metaP;
+  }
+
+  /**
+   * Load what the backend of the next effect needs: worker → atlas JSON here + sheets in the worker;
+   * main → the full atlas here. A worker failure falls back to the main thread. Resolves ready.
+   */
+  async function ensureReady(): Promise<boolean> {
+    if (atlasState === 'idle') atlasState = 'loading';
+    let ok = false;
+    if (workerWanted()) {
+      const [m, w] = await Promise.all([ensureMeta(), ensureWorker()]);
+      ok = !!m && w;
+    }
+    if (!ok) ok = !!(await ensureMainAtlas());
+    atlasState = ok ? 'ready' : 'failed';
+    return ok;
+  }
+
+  /** The presenter (and backend) for the next frames: the worker's while it can paint, else the main thread's. */
   function ensureCanvas(): boolean {
-    if (pres) return pres.ok;
     if (typeof document === 'undefined') return false;
-    pres = new Presenter({ layer: o.layer, software: o.softwareCanvas ?? true, maxShown: o.maxCanvases ?? 3, retain: !!o.retainBacking });
-    return pres.ok;
+    const useWorker = workerWanted() && workerState === 'ready' && !!meta;
+    if (useWorker) {
+      if (!workerPres) {
+        workerPres = new Presenter({ layer: o.layer, maxShown: o.maxCanvases ?? 3 });
+        const offs = workerPres.slots.map((sl) => sl.el.transferControlToOffscreen());
+        worker!.postMessage({ t: 'canvases', canvases: offs } satisfies ToWorker, offs);
+      }
+      switchTo(workerPres);
+      return true;
+    }
+    if (!atlas) return false;
+    if (!mainPres) {
+      mainPres = new Presenter({ layer: o.layer, maxShown: o.maxCanvases ?? 3 });
+      mainPainters = [];
+      for (const sl of mainPres.slots) {
+        const ctx = sl.el.getContext('2d', { alpha: true, willReadFrequently: software });
+        if (!ctx) return false;
+        mainPainters.push(new SlotPainter({ canvas: sl.el, ctx }));
+      }
+    }
+    switchTo(mainPres);
+    return true;
+  }
+
+  /** Change backend (e.g. the manual clock was switched on mid-session): park the other set. */
+  function switchTo(next: Presenter): void {
+    if (pres === next) return;
+    if (pres) {
+      pres.hideAll(true);
+      submit(pres, 0);
+    }
+    pres = next;
   }
 
   /** Idle: stop the frame step, hide the canvases and (unless `retainBacking`) free their backing stores. */
@@ -276,7 +397,10 @@ export function createFx(o: FxOptions): FxHandle {
     localSkip = false;
     drawnFrame = -1;
     sinceDraw = 0;
-    pres?.hideAll(free);
+    if (pres) {
+      pres.hideAll(free);
+      submit(pres, 0);
+    }
   }
 
   // Per-frame scratch (sampled particles), sized to the pool: no allocation in the frame loop.
@@ -297,9 +421,44 @@ export function createFx(o: FxOptions): FxHandle {
   const PI = new Int32Array(cap);
   const bucket = new Int32Array(cap);
   const bucketStart = new Int32Array(9);
+  // Main-backend frame buffers (the worker backend posts pooled, transferred ones).
+  const mainList = new Float32Array(cap * REC);
+  const mainBoxes = new Float32Array(cap * 4);
+  let mainStates = new Float32Array(0);
+
+  /** Frame buffers to fill: the main ones, or a free (returned) worker set. */
+  function frameBuffers(p: Presenter): Bufs {
+    const need = p.slots.length * SREC;
+    if (p === mainPres || !worker) {
+      if (mainStates.length !== need) mainStates = new Float32Array(need);
+      return { states: mainStates, list: mainList, boxes: mainBoxes };
+    }
+    const b = freeBuffers.pop();
+    if (b && b.states.length === need) return b;
+    return { states: new Float32Array(need), list: new Float32Array(cap * REC), boxes: new Float32Array(cap * 4) };
+  }
+  let cur: Bufs = { states: mainStates, list: mainList, boxes: mainBoxes };
+
+  /** Hand the frame (`n` records in `cur`) to the backend of `p`. */
+  function submit(p: Presenter, n: number): void {
+    if (n === 0) cur = frameBuffers(p);
+    p.writeStates(cur.states);
+    if (p === mainPres) {
+      if (atlas) paintFrame(atlas, mainPainters, cur.states, cur.list, cur.boxes, n, pool.tints);
+      return;
+    }
+    if (!worker) return;
+    const msg: WorkerFrame = { t: 'frame', states: cur.states, list: cur.list, boxes: cur.boxes, n };
+    if (pool.tints.length > sentTints) {
+      msg.tints = { first: sentTints, add: pool.tints.slice(sentTints) };
+      sentTints = pool.tints.length;
+    }
+    worker.postMessage(msg, [cur.states.buffer, cur.list.buffer, cur.boxes.buffer]);
+  }
 
   function draw(): void {
-    if (!pres || !atlas) return;
+    if (!pres || !meta) return;
+    const P = pres;
     const W = layerW;
     const H = layerH;
     // 1. Sample every visible particle once; cull the ones fully outside the layer.
@@ -309,7 +468,7 @@ export function createFx(o: FxOptions): FxHandle {
       if (!sampleParticle(pool, i, sample)) continue;
       // The drawn (trimmed) quad under the particle's transform → its layer-px box (tight: early
       // ring / burst frames and soft glows are much smaller than their nominal box).
-      if (!atlas.frameBox(pool.anim[i]!, sample.frame, pool.anchorX[i]!, pool.anchorY[i]!, fbox)) continue;
+      if (!meta.frameBox(pool.anim[i]!, sample.frame, pool.anchorX[i]!, pool.anchorY[i]!, fbox)) continue;
       const cs = Math.cos(sample.rot);
       const sn = Math.sin(sample.rot);
       const a = cs * sample.sx;
@@ -347,17 +506,16 @@ export function createFx(o: FxOptions): FxHandle {
       n++;
     }
     // 2. Cluster → canvases (clipped to the layer: nothing off-screen gets backing pixels).
-    const C = pres.clusterer;
-    C.run(n, BX0, BY0, BX1, BY1, W, H, pres.o.maxShown);
+    const C = P.clusterer;
+    C.run(n, BX0, BY0, BX1, BY1, W, H, P.o.maxShown);
     for (let k = 0; k < C.count; k++) {
       C.x0[k] = Math.max(0, C.x0[k]!);
       C.y0[k] = Math.max(0, C.y0[k]!);
       C.x1[k] = Math.min(W, C.x1[k]!);
       C.y1[k] = Math.min(H, C.y1[k]!);
     }
-    pres.assign(sMax());
-    pres.begin();
-    // 3. Draw order: layer 0..3 × (normal, additive) — a counting sort into 8 buckets.
+    P.assign(sMax());
+    // 3. Records in draw order: layer 0..3 × (normal, additive) — a counting sort into 8 buckets.
     bucketStart.fill(0);
     for (let p = 0; p < n; p++) {
       const i = PI[p]!;
@@ -368,30 +526,39 @@ export function createFx(o: FxOptions): FxHandle {
       const i = PI[p]!;
       bucket[bucketStart[pool.layer[i]! * 2 + pool.blend[i]!]!++] = p;
     }
-    const tints = pool.tints;
+    cur = frameBuffers(P);
+    const L = cur.list;
+    const Bx = cur.boxes;
+    let m = 0;
     for (let q = 0; q < n; q++) {
       const p = bucket[q]!;
-      const sl = pres.slot(C.label[p]!);
-      if (!sl) continue;
+      const k = P.slotIndex(C.label[p]!);
+      if (k < 0) continue;
+      const sl = P.slots[k]!;
       const i = PI[p]!;
-      const c = sl.ctx;
-      const blend = pool.blend[i]!;
-      if (sl.blend !== blend) {
-        c.globalCompositeOperation = blend ? 'lighter' : 'source-over';
-        sl.blend = blend;
-      }
-      c.globalAlpha = PAL[p]!;
       const s = sl.s;
-      const X = (PX[p]! - sl.x) * s;
-      const Y = (PY[p]! - sl.y) * s;
-      atlas.drawRaw(c, pool.anim[i]!, PF_[p]!, PA[p]! * s, PB[p]! * s, PC[p]! * s, PD[p]! * s, X, Y, pool.anchorX[i]!, pool.anchorY[i]!, tints[pool.tint[i]!]!);
-      pres.mark(sl, BX0[p]!, BY0[p]!, BX1[p]!, BY1[p]!);
+      const o = m * REC;
+      L[o + R_SLOT] = k;
+      L[o + R_ANIM] = pool.anim[i]!;
+      L[o + R_FRAME] = PF_[p]!;
+      L[o + R_A] = PA[p]! * s;
+      L[o + R_A + 1] = PB[p]! * s;
+      L[o + R_A + 2] = PC[p]! * s;
+      L[o + R_A + 3] = PD[p]! * s;
+      L[o + R_A + 4] = (PX[p]! - sl.x) * s;
+      L[o + R_A + 5] = (PY[p]! - sl.y) * s;
+      L[o + R_AX] = pool.anchorX[i]!;
+      L[o + R_AY] = pool.anchorY[i]!;
+      L[o + R_ALPHA] = PAL[p]!;
+      L[o + R_TINT] = pool.tint[i]! + 65536 * pool.blend[i]!;
+      const b = m * 4;
+      Bx[b] = (BX0[p]! - sl.x) * s;
+      Bx[b + 1] = (BY0[p]! - sl.y) * s;
+      Bx[b + 2] = (BX1[p]! - sl.x) * s;
+      Bx[b + 3] = (BY1[p]! - sl.y) * s;
+      m++;
     }
-    for (const sl of pres.slots) {
-      if (sl.blend < 0) continue;
-      sl.ctx.globalAlpha = 1;
-      sl.ctx.globalCompositeOperation = 'source-over';
-    }
+    submit(P, m);
   }
 
   /** Crisp backing scale: 1.5 capped by the DPR (1 on quality 'low'). */
@@ -473,9 +640,9 @@ export function createFx(o: FxOptions): FxHandle {
     let effect: Effect | null = null;
     let cancelled = false;
     const ready: Promise<Effect | null> = (async () => {
-      if (!atlas) await ensureAtlas();
+      const ok = await ensureReady();
       if (cancelled) return null;
-      if (!atlas || !ensureCanvas()) {
+      if (!ok || !ensureCanvas()) {
         runReduced(tl, reducedHooks());
         return null;
       }
@@ -560,7 +727,7 @@ export function createFx(o: FxOptions): FxHandle {
       if (q === 'off') handle.stopAll();
     },
     async preload() {
-      return !!(await ensureAtlas());
+      return ensureReady();
     },
     stats() {
       const pst = pres?.stats() ?? null;
@@ -574,9 +741,12 @@ export function createFx(o: FxOptions): FxHandle {
         effects: runner.effects.map((e) => e.tl.name),
         canvas: pst
           ? (() => {
-              const big = pres!.slots.filter((x) => x.shown).sort((a, b) => b.canvas.width * b.canvas.height - a.canvas.width * a.canvas.height)[0];
+              const P = pres!;
+              const px = (x: (typeof P.slots)[number]): number => P.classes[x.cls]!.w * P.classes[x.cls]!.h;
+              const big = P.slots.filter((x) => x.shown).sort((a, b) => px(b) - px(a))[0];
+              const K = big ? P.classes[big.cls]! : null;
               const u = pst.union;
-              return { hidden: pst.shown === 0, x: u?.x ?? 0, y: u?.y ?? 0, w: u?.width ?? 0, h: u?.height ?? 0, backingW: big?.canvas.width ?? 0, backingH: big?.canvas.height ?? 0, scale: big?.s ?? 0 };
+              return { hidden: pst.shown === 0, x: u?.x ?? 0, y: u?.y ?? 0, w: u?.width ?? 0, h: u?.height ?? 0, backingW: K?.w ?? 0, backingH: K?.h ?? 0, scale: big?.s ?? 0 };
             })()
           : null,
         slots: pst?.slots ?? [],
@@ -594,8 +764,11 @@ export function createFx(o: FxOptions): FxHandle {
     },
     dispose() {
       handle.stopAll();
-      pres?.dispose();
-      pres = null;
+      workerPres?.dispose();
+      mainPres?.dispose();
+      workerPres = mainPres = pres = null;
+      worker?.terminate();
+      worker = null;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     },
   };
