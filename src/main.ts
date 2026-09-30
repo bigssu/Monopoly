@@ -22,6 +22,7 @@ import { exitApp, hideNativeSplash, initNative, isNative } from '@/ui/shell/capa
 import { toast } from '@/ui/shell/dialog';
 import { handleBack } from '@/ui/shell/nav';
 import { calibrateFrameGrid, installCssAnimationQuantizer, setFrameRate } from '@/ui/fx/time';
+import { installAmbientCalm, runningAmbient } from '@/ui/fx/ambient';
 import { clearSavedGame, loadSavedGame, SAVE_BACKUP_KEY, SAVE_KEY, saveGame } from '@/ui/shell/persist';
 import { prefs, PREFS_KEY, type Prefs } from '@/ui/shell/prefs';
 import { kvFlush, kvHydrate } from '@/ui/shell/storage';
@@ -81,6 +82,7 @@ async function boot(): Promise<void> {
   prefs.reload();
 
   installCssAnimationQuantizer();
+  installAmbientCalm();
   calibrateFrameGrid();
   installSfx(synth);
   installHaptics(createHaptics(prefs.get().haptics));
@@ -120,6 +122,7 @@ async function boot(): Promise<void> {
       currentScreen,
       prefs,
       sfx,
+      runningAmbient,
       persist: { saveGame, loadSavedGame, clearSavedGame },
       /** Save a small sample game (for testing the Continue button). */
       makeSampleSave(players = 3, round = 6) {
