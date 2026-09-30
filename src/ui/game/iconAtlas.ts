@@ -25,6 +25,8 @@ const TINTED = new Set(ICON_IDS.filter((id) => iconMarkup(id).includes('currentC
 const GUTTER = 2;
 
 interface Atlas {
+  /** Increments per build (pattern ids of different atlases never collide). */
+  serial: number;
   url: string;
   cell: number;
   cols: number;
@@ -32,6 +34,7 @@ interface Atlas {
   index: Map<string, number>;
 }
 let atlas: Atlas | null = null;
+let serial = 0;
 let building: Promise<void> | null = null;
 
 const keyOf = (id: string, tint?: string): string => (TINTED.has(id) ? `${id}|${(tint ?? '').toLowerCase()}` : id);
@@ -66,20 +69,25 @@ export function atlasNode(id: string, tint?: string): HTMLElement | null {
 }
 
 /**
- * SVG markup showing the icon's atlas cell at (x, y, size) in the parent SVG's user units, or null.
- * `color` = the tint (tinted icons only).
+ * SVG markup showing the icon's atlas cell at (x, y, size) in the parent SVG's user units, or null:
+ * a `<rect>` filled with a pattern that maps the cell onto it (`def`, to put once into the SVG's
+ * `<defs>` under `defId`). A rect keeps the icon's bounding box exact; a nested `<svg viewBox>`
+ * around the whole atlas image would clip it visually but its box would span the whole atlas.
+ * `tint` = the color `currentColor` resolves to there (tinted icons only).
  */
-export function atlasSvg(id: string, x: number, y: number, size: number, cls: string, tint?: string): string | null {
+export function atlasSvg(id: string, x: number, y: number, size: number, cls: string, tint?: string): { markup: string; defId: string; def: string } | null {
   const n = cellOf(id, tint);
   if (n === null || !atlas) return null;
-  const { cols, rows, cell, url } = atlas;
+  const { cols, rows, cell, url, serial } = atlas;
   const col = n % cols;
   const row = Math.floor(n / cols);
+  const defId = `lr-ap${serial}-${n}`;
   const vb = `${col * cell + GUTTER} ${row * cell + GUTTER} ${cell - 2 * GUTTER} ${cell - 2 * GUTTER}`;
-  return (
-    `<svg x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${size}" height="${size}" class="${cls}" viewBox="${vb}">` +
-    `<image href="${url}" width="${cols * cell}" height="${rows * cell}"/></svg>`
-  );
+  return {
+    defId,
+    def: `<pattern id="${defId}" patternUnits="objectBoundingBox" width="1" height="1" viewBox="${vb}"><image href="${url}" width="${cols * cell}" height="${rows * cell}"/></pattern>`,
+    markup: `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${size}" height="${size}" class="${cls}" fill="url(#${defId})"/>`,
+  };
 }
 
 function artFor(e: AtlasEntry, x: number, y: number, size: number): string {
@@ -154,7 +162,7 @@ async function build(list: Array<[string, AtlasEntry]>, cell: number): Promise<v
   // Decoded before anything shows it (no half-drawn icons).
   await loadImage(url);
   // The previous atlas URL stays alive: elements made from it still show it.
-  atlas = { url, cell, cols, rows, index: new Map(list.map(([k], n) => [k, n])) };
+  atlas = { serial: ++serial, url, cell, cols, rows, index: new Map(list.map(([k], n) => [k, n])) };
 }
 
 /** Test/diagnostics: the current atlas geometry (null until built). */

@@ -34,6 +34,7 @@ export class Stage {
   private countId = 0;
   private fitRaf = 0;
   private stopFit: (() => void) | null = null;
+  private fitRo: ResizeObserver | null = null;
   private cardDone: (() => void) | null = null;
 
   constructor() {
@@ -167,11 +168,20 @@ export class Stage {
   }
 
   /**
-   * Hide the dice when a prompt leaves too little room for them (small screens). Measured in the
-   * next animation frame (coalesced) so building a prompt never forces a synchronous layout.
+   * Hide the dice when a prompt leaves too little room for them (small screens). A ResizeObserver
+   * on the dice slot and the dice reports their sizes after the frame's own layout, so nothing
+   * forces a synchronous style + layout (the old read in the next clock frame was the largest
+   * self-time JS item at 4x CPU throttle, docs/PERFORMANCE.md); a class it toggles still lands in
+   * that same frame. Without ResizeObserver: measured on the next clock frame.
    */
   fitDice(): void {
-    if (this.fitRaf) return;
+    if (this.fitRo || this.fitRaf) return;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.fitRo = new ResizeObserver(() => this.measureDice());
+      this.fitRo.observe(this.diceWrap);
+      this.fitRo.observe(this.dice.el);
+      return;
+    }
     // On the animation clock (a grid frame), not a bare rAF: the class it may toggle would
     // otherwise present an extra frame between two budgeted ones.
     this.fitRaf = 1;
@@ -184,11 +194,11 @@ export class Stage {
   }
 
   private measureDice(): void {
-    this.el.classList.remove('no-dice');
-    if (!this.el.classList.contains('has-prompt')) return;
+    // `no-dice` only hides the dice (visibility), so the sizes read the same with it on or off.
     const free = this.diceWrap.clientHeight;
     const need = this.dice.el.offsetHeight;
-    if (free > 0 && need > 0 && free < need * 0.9) this.el.classList.add('no-dice');
+    const hide = this.el.classList.contains('has-prompt') && free > 0 && need > 0 && free < need * 0.9;
+    if (hide !== this.el.classList.contains('no-dice')) this.el.classList.toggle('no-dice', hide);
   }
 
   clearTimer(): void {
@@ -357,6 +367,8 @@ export class Stage {
   }
 
   dispose(): void {
+    this.fitRo?.disconnect();
+    this.fitRo = null;
     this.stopFit?.();
     this.stopFit = null;
     this.fitRaf = 0;

@@ -30,6 +30,10 @@
  *           synchronous layout shows up as a long Layout).
  *   mount   Title → game screen (4x): the longest single Layout while the game mounts.
  *   full    (--full) a whole CPU game at 4x animation speed, no throttle: DOM nodes per round.
+ *   floor   (with play) info only, not a gate: the same rAF interval measurement on an empty page
+ *           (same throttle / DPR / length). This machine's own long frames (VM scheduling, CPU
+ *           throttler time slices): at 4x an empty page already shows 1-2 frames > 2 vsyncs per
+ *           60 s here, so a play count at that level is the environment, not the game.
  *   tap     (--phases tap) roll-button press/release input-to-paint (Event Timing), info only.
  *
  * Needs Playwright + Chromium: PLAYWRIGHT_MODULE / CHROMIUM_PATH, else the global install at
@@ -380,6 +384,36 @@ if (CFG.phases.includes('play')) {
   await ctx.close();
 }
 
+// ------------------------------------------------------------------------------------ floor (info)
+if (CFG.phases.includes('play') || CFG.phases.includes('floor')) {
+  const { ctx, page } = await newPage();
+  await page.setContent('<div id="d" style="font:40px sans-serif">0</div>');
+  await page.waitForTimeout(2000);
+  await page.evaluate(() => {
+    window.__frames = [];
+    let last = performance.now();
+    const tick = (t) => {
+      window.__frames.push(t - last);
+      last = t;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.waitForTimeout(CFG.seconds * 1000);
+  out.floor = await page.evaluate(() => {
+    const f = window.__frames.slice(1).sort((a, b) => a - b);
+    return {
+      frames: f.length,
+      p99: +f[Math.floor(f.length * 0.99)].toFixed(1),
+      max: Math.round(f[f.length - 1]),
+      over20: f.filter((x) => x > 20).length,
+      over33: f.filter((x) => x > 34).length,
+    };
+  });
+  log('floor', JSON.stringify(out.floor));
+  await ctx.close();
+}
+
 // ------------------------------------------------------------------------------------ layers (C)
 if (CFG.phases.includes('layers')) {
   const { ctx, page, cdp } = await newPage();
@@ -556,6 +590,10 @@ if (out.cap) {
   for (const [k, label] of [['fps', 'presented frames/s'], ['taskMsPerSec', 'main-thread task ms/s'], ['paintsPerSec', 'Paint/s'], ['rasterPerSec', 'RasterTask/s'], ['stylePerSec', 'style recalcs/s'], ['rafPerSec', 'rAF callbacks/s']]) {
     log(pad(label, 22) + pad(out.cap.on[k], 12) + out.cap.off[k]);
   }
+}
+if (out.floor) {
+  const fl = out.floor;
+  log(`\nenvironment floor (info, not a gate): an EMPTY page with the same ${CFG.throttle}x throttle / DPR ${CFG.dpr} / ${CFG.seconds} s: p99 ${fl.p99} ms, ${fl.over20} frames > 20 ms, ${fl.over33} frames > 2 vsyncs (max ${fl.max} ms)`);
 }
 if (out.unique) log(`\nunique presented frames/s (screencast hash): ON ${out.unique.on.uniquePerSec}, OFF ${out.unique.off.uniquePerSec}`);
 const failed = rows.filter((r) => !r.pass).length;

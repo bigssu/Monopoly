@@ -42,6 +42,8 @@ interface BaseText {
   m: DOMMatrix;
 }
 let baseTexts: BaseText[] | null = null;
+/** Atlas patterns the markup below referenced (Board.render moves them into its <defs>). */
+const atlasDefs = new Map<string, string>();
 let baseMatrix: DOMMatrix | null = null;
 
 function textEl(cls: string, x: number, y: number, size: number, text: string): string {
@@ -60,7 +62,10 @@ function textEl(cls: string, x: number, y: number, size: number, text: string): 
 function iconAt(id: string, x: number, y: number, size: number, cls = '', tint?: string): string {
   if (!baseTexts) {
     const bm = atlasSvg(iconId(id), x, y, size, cls, tint);
-    if (bm) return bm;
+    if (bm) {
+      if (!atlasDefs.has(bm.defId)) atlasDefs.set(bm.defId, bm.def);
+      return bm.markup;
+    }
   }
   return (baseTexts ? svgArt(id) : svg(id)).replace(
     '<svg ',
@@ -388,6 +393,8 @@ export class Board {
   private focusEl: HTMLElement | null = null;
   private dimEl: HTMLElement | null = null;
   private svgEl: SVGSVGElement;
+  private defsEl!: SVGDefsElement;
+  private definedPatterns = new Set<string>();
   private groups: SVGGElement[] = [];
   private sigs: string[] = [];
   private tokens = new Map<PlayerId, TokenEl>();
@@ -417,6 +424,7 @@ export class Board {
       `<defs><radialGradient id="lr-glow"><stop offset="0" stop-color="#FFE27A" stop-opacity=".95"/><stop offset="1" stop-color="#FFE27A" stop-opacity="0"/></radialGradient></defs>` +
       `<rect x="0" y="0" width="${VB}" height="${VB}" rx="70" class="board-face"/>` +
       `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="40" class="board-inner-rim"/>`;
+    this.defsEl = this.svgEl.querySelector('defs')!;
     for (let i = 0; i < 32; i++) {
       const grp = document.createElementNS(NS, 'g');
       grp.setAttribute('class', `sp sp-${BOARD[i]!.kind}`);
@@ -485,9 +493,10 @@ export class Board {
     if (!this.sized || this.disposed || typeof document === 'undefined') return;
     const { key, lang } = this.baseKeyNow();
     if (key === this.baseKey) return;
-    // A base in another language would show stale names: back to the full SVG until the new one lands.
-    if (this.baseImg && this.baseKey && !this.baseKey.endsWith(`|${lang}`)) this.setBase(null);
+    const stale = !!this.baseImg && !!this.baseKey && !this.baseKey.endsWith(`|${lang}`);
     this.baseKey = key;
+    // A base in another language would show stale names: back to the full SVG until the new one lands.
+    if (stale) this.setBase(null);
     const gen = ++this.baseGen;
     window.clearTimeout(this.baseTimer);
     // Coalesce a burst of resizes; the first one (game mount) goes right away.
@@ -571,6 +580,7 @@ export class Board {
         this.sigs[i] = sig;
         const g = GEOM[i]!;
         grp.innerHTML = hit ? hitMarkup(i) : g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
+        this.flushAtlasDefs();
       }
       // One-away pulse ring: a separate HTML mark above the space, recreated only on change.
       const ring = this.rings.get(i);
@@ -587,6 +597,19 @@ export class Board {
     }
     this.renderTokens(vs);
     this.ensureBase();
+  }
+
+  /** Put the atlas patterns the last markup referenced into this board's <defs> (once each). */
+  private flushAtlasDefs(): void {
+    if (!atlasDefs.size) return;
+    let add = '';
+    for (const [id, def] of atlasDefs) {
+      if (this.definedPatterns.has(id)) continue;
+      this.definedPatterns.add(id);
+      add += def;
+    }
+    atlasDefs.clear();
+    if (add) this.defsEl.insertAdjacentHTML('beforeend', add);
   }
 
   /** Brief highlight of a space (bought / built / stamped). */
