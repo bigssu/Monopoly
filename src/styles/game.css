@@ -120,18 +120,8 @@
   z-index: 40;
   overflow: hidden;
 }
-.pt {
-  position: absolute;
-  left: 0;
-  top: 0;
-  /* No will-change: running transform animations get their own layer anyway; idle (pooled,
-     display:none) particles must not keep 80 layers alive. */
-  border-radius: 2px;
-}
-.pt[data-kind='confetti'] { background: var(--c); }
-.pt[data-kind='confetti'] .pt-coin { display: none; }
-.pt[data-kind='coin'] { background: none; }
-.pt-coin, .pt-coin svg { display: block; width: 100%; height: 100%; }
+/* One temporary canvas per particle effect (fx/particles.ts), sized to the effect's box. */
+.pt-canvas { position: absolute; display: block; pointer-events: none; }
 
 /* Portrait → rotate */
 .rotate-overlay { display: none; }
