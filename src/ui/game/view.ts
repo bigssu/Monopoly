@@ -17,6 +17,12 @@ import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
 import { h, iconEl, isDevHook, prepareGameIcons } from './util';
 
+/** Dev A/B knob `?dev=1&fxpool=6.12` (canvas size classes, present.ts SLOT_CLASSES). */
+function devPool(): number[] | null {
+  const v = isDevHook() ? new URLSearchParams(location.search).get('fxpool') : null;
+  return v ? v.split('.').map(Number) : null;
+}
+
 /** Dev A/B knobs (`?dev=1&fxs=0.75&fxe=2`): crisp backing-scale cap, draw every n-th FX tick. */
 function devTune(): { sMax?: number; drawEvery?: number } {
   const q = new URLSearchParams(location.search);
@@ -77,7 +83,7 @@ export class GameView {
       // ~27-33 MB GPU layer at the moments the canvas is largest (layer-memory gate, docs/VFX.md §14).
       shake: (px, ms) => void shakeAll([this.fx], px, ms),
       highlight: (target, ms) => this.staticHighlight(target, ms),
-      dom: {
+      dom: isDevHook() && new URLSearchParams(location.search).get('fxdom') === '0' ? {} : {
         pop: (i, o) => this.board.popIcon(i, o),
         zoomPunch: (i, k) => this.board.zoomPunch(i, k),
         dim: (i, on) => this.board.dimIcon(i, on),
@@ -96,7 +102,12 @@ export class GameView {
       // 0.5 MP (engine default 0.9): the software canvas is copied to the compositor on every frame,
       // so the backing size is the main per-frame cost of an effect at 4x (docs/VFX.md §14). Small
       // effects keep their 1.5x backing; only table-wide ones (toll, takeover, finale) get softer.
-      maxCanvases: Number((isDevHook() && new URLSearchParams(location.search).get('fxk')) || 3),
+      // ONE canvas (a 400×400 backing, upgraded once to 960×600 if the effects outgrow it), painted
+      // by the FX worker: each extra shown canvas is a GPU layer and every show/hide is a Paint on
+      // the main thread, while a larger backing only costs the worker a larger copy (docs/VFX.md §15).
+      pool: devPool() ?? [6, 12],
+      maxCanvases: Number((isDevHook() && new URLSearchParams(location.search).get('fxk')) || 1),
+      frameBudget: 0.5e6,
       ...(isDevHook() ? { tune: devTune() } : {}),
       softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
       dev: isDevHook(),

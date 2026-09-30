@@ -766,7 +766,8 @@ export class Board {
    * Scale an SVG element through its `transform` ATTRIBUTE, stepped on the 30 Hz clock. A CSS
    * transform animation on an SVG child makes Chromium composite the board SVG, and the layers
    * painted above it (marks, tokens) then need their own overlap layers: +14 MB of layer memory
-   * per effect (docs/VFX.md §14). The attribute path costs one board repaint per frame, briefly.
+   * per effect (docs/VFX.md §14). The attribute path costs one board repaint per step, briefly, so
+   * it steps at 15 Hz (a 250 ms pop is 4 steps + the end).
    */
   private svgScale(el: SVGGraphicsElement, base: string, cx: number, cy: number, frames: number, scaleAt: (t: number) => number): void {
     if (instant()) return;
@@ -780,11 +781,13 @@ export class Board {
       if (v) el.setAttribute('transform', v);
       else el.removeAttribute('transform');
     };
+    let n = 0;
     const stop = onFrame((now) => {
       if (last >= 0) t += (now - last) * animSpeed() * (isSkipping() ? 5 : 1);
       last = now;
       const k = Math.min(1, t / dur);
-      set(scaleAt(k));
+      // 15 Hz steps (plus the exact end): each step repaints the board layer (docs/VFX.md §15).
+      if (n++ % 2 === 0 || k >= 1) set(scaleAt(k));
       if (k >= 1 || !el.isConnected) {
         this.svgTweens.delete(el);
         return false;

@@ -286,14 +286,27 @@ export interface PresenterOptions {
   layer: HTMLElement;
   /** Most canvases shown at once (each is a GPU layer). */
   maxShown: number;
+  /** Upload budget per frame (backing px) that sets the scale of large clusters. */
+  budget?: number;
   classes?: readonly SlotClass[];
   pool?: readonly number[];
 }
 
 /** Backing stores above this size are freed when the engine goes idle even with `retain`. */
 const RETAIN_MAX_PX = 160e3;
+/**
+ * A shown canvas is reused for a cluster that needs up to REUSE_AREA× less backing: showing another
+ * one costs a Paint on the main thread, a bigger canvas only costs the paint worker a larger copy.
+ */
+const REUSE_AREA = 8;
 /** Hide a shown canvas that has had no cluster for this many drawn frames (frees its layer). */
-const EMPTY_HIDE_FRAMES = 45;
+const EMPTY_HIDE_FRAMES = 150;
+/** …or this many when another canvas is shown too. */
+const EXTRA_HIDE_FRAMES = 45;
+/** CSS box of a canvas = backing px / BOX_K (see the constructor). */
+const BOX_K = 2;
+/** Smallest canvas shown for a new cluster (backing px). */
+const MIN_SHOW_PX = 150e3;
 
 /**
  * The pooled canvases' DOM side: assignment of clusters to canvases, placement (transform),
@@ -317,9 +330,10 @@ export class Presenter {
       c.className = 'fx-canvas';
       c.setAttribute('aria-hidden', 'true');
       const k = this.classes[cls]!;
-      // CSS box = backing size; the transform maps it onto the layer (translate + scale 1/s).
-      c.style.width = `${k.w}px`;
-      c.style.height = `${k.h}px`;
+      // CSS box = backing / BOX_K; the transform maps it onto the layer (translate + scale BOX_K/s).
+      // (A canvas layer's texture is its backing store: at DPR 2 the box is then exactly the texture.)
+      c.style.width = `${k.w / BOX_K}px`;
+      c.style.height = `${k.h / BOX_K}px`;
       c.style.visibility = 'hidden';
       c.width = 0;
       c.height = 0;
@@ -349,7 +363,7 @@ export class Presenter {
     sl.x = x;
     sl.y = y;
     sl.s = s;
-    sl.el.style.transform = `translate(${x}px,${y}px) scale(${1 / s})`;
+    sl.el.style.transform = `translate(${x}px,${y}px) scale(${BOX_K / s})`;
   }
 
   /** Rect (layer px) a slot covers. */
@@ -363,7 +377,8 @@ export class Presenter {
    * `sMax` = the crisp backing scale (min(1.5, DPR)); `budget` = backing px per frame that sets the
    * scale of large clusters.
    */
-  assign(sMax: number, budget = FRAME_BUDGET_PX): void {
+  assign(sMax: number, budget = this.o.budget ?? FRAME_BUDGET_PX): void {
+    const sticky = this.o.maxShown === 1;
     const C = this.clusterer;
     const n = C.count;
     if (this.slotOf.length < n) this.slotOf = new Int32Array(n * 2);
@@ -401,7 +416,7 @@ export class Presenter {
         const r = this.rect(sl);
         const ov = Math.max(0, Math.min(r.x + r.w, C.x1[k]!) - Math.max(r.x, C.x0[k]!)) * Math.max(0, Math.min(r.y + r.h, C.y1[k]!) - Math.max(r.y, C.y0[k]!));
         const K = this.classes[sl.cls]!;
-        if (ov > bestOv && fit(sl.cls) >= sT * 0.8 - 1e-9 && K.w * K.h <= wantArea * 3) {
+        if (ov > bestOv && fit(sl.cls) >= sT * 0.8 - 1e-9 && (sticky || K.w * K.h <= wantArea * REUSE_AREA)) {
           bestOv = ov;
           pick = sl;
         }
@@ -436,7 +451,9 @@ export class Presenter {
         this.drawn++;
       } else {
         if (sl.used) this.uploadPx += px; // one more paint: the clear
-        if (++sl.idle > EMPTY_HIDE_FRAMES) this.show(sl, false);
+        // Keep ONE emptied canvas shown (the next effect reuses it without a Paint); park extra
+        // ones soon (each shown canvas is a GPU layer).
+        if (++sl.idle > (this.shownCount() > 1 ? EXTRA_HIDE_FRAMES : EMPTY_HIDE_FRAMES)) this.show(sl, false);
       }
     }
   }
@@ -451,10 +468,26 @@ export class Presenter {
     const wantArea = this.classes[want]!.w * this.classes[want]!.h;
     const fits = (sl: Slot): boolean => quantScale(Math.min(this.classes[sl.cls]!.w / w, this.classes[sl.cls]!.h / h), sMax) >= sT * 0.8 - 1e-9;
     let best: Slot | null = null;
-    for (const sl of this.slots) if (sl.shown && sl.cluster < 0 && fits(sl) && area(sl) <= wantArea * 3 && (!best || area(sl) < area(best))) best = sl;
+    const sticky = this.o.maxShown === 1;
+    for (const sl of this.slots) if (sl.shown && sl.cluster < 0 && fits(sl) && (sticky || area(sl) <= wantArea * REUSE_AREA) && (!best || area(sl) < area(best))) best = sl;
+    // One canvas (sticky): a canvas that must be replaced mid-session is replaced by the largest
+    // one (one switch per session at most; every switch is a show + hide = a Paint).
+    if (sticky && this.shownCount() > 0) {
+      let cur: Slot | null = null;
+      for (const sl of this.slots) if (sl.shown && sl.cluster < 0 && (!cur || area(sl) > area(cur))) cur = sl;
+      for (const sl of this.slots) if (!sl.shown && (!best || area(sl) > area(best))) best = sl;
+      // Never trade down: the shown canvas stays when no hidden one is bigger.
+      if (cur && (!best || area(best) <= area(cur))) return cur;
+      if (best) return this.makeRoom(best);
+    }
     if (best) return best;
-    for (const sl of this.slots) if (!sl.shown && sl.cls === want) return this.makeRoom(sl);
-    for (const sl of this.slots) if (!sl.shown && fits(sl) && (!best || area(sl) < area(best))) best = sl;
+    // Showing costs a Paint: show a roomy canvas (≥ MIN_SHOW_PX, same aspect when possible) so the
+    // next clusters of the session fit in it by moving it (transform, no Paint).
+    const floor = Math.max(wantArea, MIN_SHOW_PX);
+    const aspect = this.classes[want]!.w / this.classes[want]!.h;
+    const score = (sl: Slot): number => area(sl) * (Math.abs(Math.log(this.classes[sl.cls]!.w / this.classes[sl.cls]!.h / aspect)) > 0.2 ? 1.5 : 1);
+    for (const sl of this.slots) if (!sl.shown && fits(sl) && area(sl) >= floor && (!best || score(sl) < score(best))) best = sl;
+    if (!best) for (const sl of this.slots) if (!sl.shown && fits(sl) && (!best || area(sl) < area(best))) best = sl;
     if (best) return this.makeRoom(best);
     // Nothing fits: any free canvas (a softer scale beats not drawing).
     for (const sl of this.slots) if (sl.cluster < 0 && (sl.shown || !best || area(sl) > area(best))) best = sl;
@@ -508,6 +541,12 @@ export class Presenter {
       const K = this.classes[sl.cls]!;
       if (free || K.w * K.h > RETAIN_MAX_PX) sl.sized = false;
     }
+  }
+
+  shownCount(): number {
+    let n = 0;
+    for (const sl of this.slots) if (sl.shown) n++;
+    return n;
   }
 
   get anyShown(): boolean {

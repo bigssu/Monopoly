@@ -55,6 +55,10 @@ export interface FxOptions extends CoordSource {
   maxBackingPixels?: number;
   /** Most FX canvases shown at once (each one is a GPU layer while shown). Default 3. */
   maxCanvases?: number;
+  /** Canvas pool (size-class indexes, present.ts SLOT_CLASSES); default SLOT_POOL. */
+  pool?: readonly number[];
+  /** Backing px per frame that sets the scale of large clusters (present.ts FRAME_BUDGET_PX). */
+  frameBudget?: number;
   /**
    * Paint the canvases in a worker (OffscreenCanvas, docs/VFX.md §15) when supported: the canvas
    * draw and its copy to the compositor leave the main thread. Default true; never with an injected
@@ -142,7 +146,12 @@ export interface FxHandle {
   settled(minTier?: Tier): Promise<void>;
 }
 
-const GRACE_TICKS = 8;
+/**
+ * Ticks to stay armed after the last particle (canvases stay shown, empty, nothing painted): the next
+ * effect of the same turn (dice → hop → buy …) then needs no show/hide = no Paint (each show/hide
+ * is one main-thread Paint; the 3 s cost ~0.3 ms per tick of an empty step).
+ */
+const GRACE_TICKS = 90;
 /** A particle younger than this (FX frames) keeps the 30 Hz presentation (VFX.md §15). */
 const TAIL_AGE = 8;
 /**
@@ -215,6 +224,8 @@ export function createFx(o: FxOptions): FxHandle {
   let drawnFrame = -1;
   let forceDraw = false;
   let sinceDraw = 0;
+  /** Records painted by the last draw (0 and no particle: nothing to paint or clear). */
+  let lastDrawn = 0;
   /** No timeline has ops left to run and every particle is older than TAIL_AGE frames. */
   function tailOnly(): boolean {
     for (const e of runner.effects) if (e.idx < e.tl.ops.length) return false;
@@ -357,7 +368,7 @@ export function createFx(o: FxOptions): FxHandle {
     const useWorker = workerWanted() && workerState === 'ready' && !!meta;
     if (useWorker) {
       if (!workerPres) {
-        workerPres = new Presenter({ layer: o.layer, maxShown: o.maxCanvases ?? 3 });
+        workerPres = new Presenter({ layer: o.layer, maxShown: o.maxCanvases ?? 3, ...(o.pool ? { pool: o.pool } : {}), ...(o.frameBudget ? { budget: o.frameBudget } : {}) });
         const offs = workerPres.slots.map((sl) => sl.el.transferControlToOffscreen());
         worker!.postMessage({ t: 'canvases', canvases: offs } satisfies ToWorker, offs);
       }
@@ -366,7 +377,7 @@ export function createFx(o: FxOptions): FxHandle {
     }
     if (!atlas) return false;
     if (!mainPres) {
-      mainPres = new Presenter({ layer: o.layer, maxShown: o.maxCanvases ?? 3 });
+      mainPres = new Presenter({ layer: o.layer, maxShown: o.maxCanvases ?? 3, ...(o.pool ? { pool: o.pool } : {}), ...(o.frameBudget ? { budget: o.frameBudget } : {}) });
       mainPainters = [];
       for (const sl of mainPres.slots) {
         const ctx = sl.el.getContext('2d', { alpha: true, willReadFrequently: software });
@@ -559,6 +570,7 @@ export function createFx(o: FxOptions): FxHandle {
       m++;
     }
     submit(P, m);
+    lastDrawn = m;
   }
 
   /** Crisp backing scale: 1.5 capped by the DPR (1 on quality 'low'). */
@@ -589,7 +601,8 @@ export function createFx(o: FxOptions): FxHandle {
     // is young (impacts, pops, fast bursts); every 2nd frame (15 Hz) for tails (fading, drifting).
     if (runner.frame !== drawnFrame) sinceDraw++;
     const every = o.tune?.drawEvery ?? (tailOnly() ? 2 : 1);
-    if ((runner.frame !== drawnFrame && sinceDraw >= every) || forceDraw) {
+    const empty = pool.liveCount === 0 && lastDrawn === 0;
+    if ((runner.frame !== drawnFrame && sinceDraw >= every && !empty) || forceDraw) {
       drawnFrame = runner.frame;
       sinceDraw = 0;
       forceDraw = false;
