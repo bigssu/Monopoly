@@ -104,11 +104,20 @@ registerScreen('game', (root, props) => {
   if (fresh) saveGame(state);
   void ctrl.start(fresh);
 
+  // Dev only (`npm run dev` → /?dev=1&fxdemo=1): "연출 미리보기" panel over the live board.
+  let unmountFxDemo: (() => void) | null = null;
+  if (import.meta.env.DEV && FX_DEMO) {
+    void import('@/ui/game/fxdemo').then((m) => {
+      if (!leaving) unmountFxDemo = m.mountFxDemo(view, () => ctrl.state);
+    });
+  }
+
   return () => {
     leaving = true;
     window.clearInterval(overlayPoll);
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('lotandroll:back', onBack);
+    unmountFxDemo?.();
     ctrl.dispose();
     view.dispose();
     flushAll();
@@ -118,15 +127,22 @@ registerScreen('game', (root, props) => {
 
 installDevHook();
 
+/** `?fxdemo=1` (dev server only): VFX preview panel + a 4-human game to try it on. */
+const FX_DEMO = import.meta.env.DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).get('fxdemo') === '1';
+
 // Dev: `/?dev=1#game` starts a seeded 4-CPU demo game as soon as the app has booted
 // (after the shell's first screen), or after 2.5 s if nothing else mounts a screen.
-if (isDevHook() && location.hash === '#game') {
+if (isDevHook() && (location.hash === '#game' || FX_DEMO)) {
   let started = false;
   const startDemo = (): void => {
     if (started) return;
     started = true;
     off();
-    window.setTimeout(() => showScreen('game', { settings: demoSettings(4, true), seed: 20260929 }), 0);
+    window.setTimeout(() => {
+      // The preview needs a quiet table: 4 humans, no prompt timer.
+      if (FX_DEMO) window.__lotAndRoll?.setPromptTimer(0);
+      showScreen('game', { settings: demoSettings(4, !FX_DEMO), seed: 20260929 });
+    }, 0);
   };
   const off = onScreenChange((name) => {
     if (name !== 'game') startDemo();

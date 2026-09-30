@@ -16,7 +16,7 @@ import { sfx, type SfxName } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
-import { h, iconEl, isDevHook, prepareGameIcons } from './util';
+import { h, iconEl, isDevHook, prepareGameIcons, SEAT_ANGLE } from './util';
 
 export class GameView {
   readonly root: HTMLElement;
@@ -141,6 +141,11 @@ export class GameView {
     for (const [pid, panel] of this.panels) panel.update(vs, { isTurn: pid === actor });
   }
 
+  /** The state the view last rendered (the sequencer's view state during playback). */
+  renderedState(): GameState {
+    return this.state;
+  }
+
   showInfo(i: number): void {
     this.stage.showInfo(spaceInfo(this.state, i));
   }
@@ -176,9 +181,14 @@ export class GameView {
     s.setProperty('--sx', `${r.x + r.width / 2 - L.left}px`);
     s.setProperty('--sy', `${r.y + r.height / 2 - L.top}px`);
     s.setProperty('--sr', `${Math.max(r.width, r.height) * 0.9}px`);
-    s.setProperty('--cx', `${b.left + b.width / 2 - L.left}px`);
-    s.setProperty('--cy', `${b.top + b.height / 2 - L.top}px`);
-    s.setProperty('--cr', `${(b.width / 32) * 3.9}px`);
+    // The close-up card sits 4.2 u above the stage centre in the acting seat's frame (vfx.css).
+    const u = b.width / 32;
+    const a = (SEAT_ANGLE[this.stage.currentSeat] * Math.PI) / 180;
+    const dx = 4.2 * u * Math.sin(a);
+    const dy = -4.2 * u * Math.cos(a);
+    s.setProperty('--cx', `${b.left + b.width / 2 + dx - L.left}px`);
+    s.setProperty('--cy', `${b.top + b.height / 2 + dy - L.top}px`);
+    s.setProperty('--cr', `${u * 3.9}px`);
   }
 
   /** Landmark spotlight: the table dims to 25 % around the space and the close-up card (fade 200 / 267 ms). */

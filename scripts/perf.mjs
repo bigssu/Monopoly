@@ -13,7 +13,7 @@
  * (`--throttle`), except where a gate says "no throttle". Demo games are seeded, so runs are
  * comparable. `scripts/perf-render.mjs` stays the detailed per-layer report.
  *
- * Phases (default: boot,idle,cap,play,layers,mount)
+ * Phases (default: boot,idle,cap,play,layers,mount,fx)
  *   boot    `/` → Title mounted and painted (median of 3), 4x.
  *   idle    criterion B. Waiting for a human (4 humans, roll prompt, timer off), the Title and the
  *           Result screen, 4x. Two windows each: "decorative" = the first seconds while the
@@ -35,6 +35,10 @@
  *           throttler time slices): at 4x an empty page already shows 1-2 frames > 2 vsyncs per
  *           60 s here, so a play count at that level is the environment, not the game.
  *   tap     (--phases tap) roll-button press/release input-to-paint (Event Timing), info only.
+ *   fx      VFX gates F1–F10 (docs/VFX.md §10.3): the worst-case effect chain replayed on a live
+ *           4-human game at 4x (toll XL → takeover → landmark + monopoly → bankruptcy → hub
+ *           victory): particles, layers / layer memory, presented + unique fps, rAF p95, task
+ *           ms/s, then idle zero, 20 replays (leaks), atlas bytes, skipped finale.
  *
  * Needs Playwright + Chromium: PLAYWRIGHT_MODULE / CHROMIUM_PATH, else the global install at
  * /opt/node22/lib/node_modules/playwright and /opt/pw-browsers/chromium.
@@ -62,7 +66,7 @@ const CFG = {
   seconds: Number(opt('seconds', 60)),
   capSeconds: Number(opt('cap-seconds', 30)),
   layerSeconds: Number(opt('layer-seconds', 40)),
-  phases: String(opt('phases', 'boot,idle,cap,play,layers,mount')).split(','),
+  phases: String(opt('phases', 'boot,idle,cap,play,layers,mount,fx')).split(','),
   json: opt('json', null),
 };
 if (opt('full', false) && !CFG.phases.includes('full')) CFG.phases.push('full');
@@ -471,6 +475,164 @@ if (CFG.phases.includes('mount')) {
   log('mount', JSON.stringify(out.mount));
 }
 
+// ------------------------------------------------------------------------------------ fx (F1–F10)
+/**
+ * VFX gates (docs/VFX.md §10.3). A 4-human game (4x, DPR 2) waiting at the roll prompt; the worst
+ * case of the catalogue is replayed on the live board through the dev hook: toll XL → takeover →
+ * landmark + monopoly → bankruptcy → hub victory (each awaited to its block frame, like the
+ * sequencer). Measured over that window: live particles (poll 100 ms), GPU layers / layer memory
+ * (LayerTree), presented / unique fps, rAF intervals, main-thread task time; then the 10 s idle
+ * window, a 20x replay for leaks, the atlas size, and a skipped finale.
+ */
+const FX_SCENARIO = [
+  ['tollPay', { payer: 0, receiver: 2, amount: 3000, space: 22, payerCashAfter: 200 }],
+  ['takeoverStamp', { space: 20, buyer: 1, seller: 3 }],
+  ['landmarkReveal', { space: 31, player: 2, group: { spaces: [30, 31], color: '#4A6CF7' } }],
+  ['bankruptcy', { player: 3 }],
+  ['victory', { winner: 1, kind: 'hubs', spaces: [5, 13, 21, 29] }],
+];
+async function fxScenario(page) {
+  await page.evaluate(async (list) => {
+    for (const [name, params] of list) await window.__lotAndRoll.playFx(name, params);
+  }, FX_SCENARIO);
+  await page.waitForFunction(() => !window.__lotAndRoll.fx().ticking, null, { timeout: 60000, polling: 100 });
+}
+if (CFG.phases.includes('fx')) {
+  const { ctx, page, cdp } = await newPage();
+  await page.goto(base + '/?dev=1');
+  await onTitle(page);
+  await page.evaluate(() => {
+    window.__lotAndRoll.setPromptTimer(0);
+    window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, false), 11);
+  });
+  await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy() && window.__lotAndRoll.fx()?.atlas === 'ready', null, { timeout: 60000 });
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => {
+    window.__lotAndRoll.fx();
+    window.__fx.resetStats();
+    window.__frames = [];
+    window.__rafOn = true;
+    let last = performance.now();
+    const tick = (t) => {
+      window.__frames.push(t - last);
+      last = t;
+      if (window.__rafOn) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  // Layers during the effects.
+  let peakLayers = 0;
+  let peakMB = 0;
+  let peakMBLayers = [];
+  const dev = CFG.dpr * CFG.dpr;
+  const onTree = (ev) => {
+    if (!ev.layers) return;
+    peakLayers = Math.max(peakLayers, ev.layers.length);
+    const mb = ev.layers.reduce((a, l) => a + (l.drawsContent ? l.width * l.height * 4 * dev : 0), 0) / 1048576;
+    if (mb > peakMB) {
+      peakMB = mb;
+      peakMBLayers = ev.layers.filter((l) => l.drawsContent).map((l) => `${Math.round(l.width)}x${Math.round(l.height)}`);
+    }
+  };
+  cdp.on('LayerTree.layerTreeDidChange', onTree);
+  await cdp.send('LayerTree.enable');
+  // Unique presented frames (screencast hash) during the effects.
+  let frames = 0;
+  let unique = 0;
+  let lastHash = '';
+  const onCast = (f) => {
+    frames++;
+    const h = createHash('md5').update(f.data).digest('hex');
+    if (h !== lastHash) unique++;
+    lastHash = h;
+    cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {});
+  };
+  cdp.on('Page.screencastFrame', onCast);
+  await cdp.send('Page.startScreencast', { format: 'png', maxWidth: 800, maxHeight: 500, everyNthFrame: 1 });
+  await cdp.send('Performance.enable');
+  const livePeak = [];
+  const poll = setInterval(() => {
+    page
+      .evaluate(() => window.__lotAndRoll.fx()?.live ?? 0)
+      .then((n) => livePeak.push(n))
+      .catch(() => {});
+  }, 100);
+  const t0 = await taskMs(cdp);
+  const tr = await trace(page, cdp, () => fxScenario(page));
+  const task = (await taskMs(cdp)) - t0;
+  clearInterval(poll);
+  await cdp.send('Page.stopScreencast');
+  cdp.off('Page.screencastFrame', onCast);
+  await cdp.send('LayerTree.disable').catch(() => {});
+  cdp.off('LayerTree.layerTreeDidChange', onTree);
+  const raf = await page.evaluate(() => {
+    window.__rafOn = false;
+    const f = window.__frames.slice(1).sort((a, b) => a - b);
+    const p = (q) => +f[Math.min(f.length - 1, Math.floor(f.length * q))].toFixed(1);
+    return { frames: f.length, p50: p(0.5), p95: p(0.95), p99: p(0.99), max: Math.round(f[f.length - 1]), over34: f.filter((x) => x > 34).length };
+  });
+  const stats = await page.evaluate(() => window.__lotAndRoll.fx());
+  const fxWindow = {
+    sec: r1(tr.sec),
+    drawFps: r1(tr.drawFrames / tr.sec),
+    uniqueFps: r1(unique / tr.sec),
+    screencastFps: r1(frames / tr.sec),
+    taskMsPerSec: r1(task / tr.sec),
+    paintsPerSec: r1(tr.paint / tr.sec),
+    rasterPerSec: r1(tr.raster / tr.sec),
+    layoutMaxMs: tr.layoutMaxMs,
+    raf,
+    peakLive: Math.max(stats.peak, ...livePeak),
+    dropped: stats.dropped,
+    peakLayers,
+    peakLayerMemoryMB: r1(peakMB),
+    peakMemoryLayers: peakMBLayers,
+    tick: stats.tick,
+    canvas: stats.canvas,
+    tintCacheMB: r1(stats.tintCacheBytes / 1048576),
+  };
+  log('fx window', JSON.stringify(fxWindow));
+  // F1: back to idle.
+  await page.waitForTimeout(500);
+  const idle = await measureWindow(page, cdp, 10000);
+  const after = await page.evaluate(() => ({ fx: window.__lotAndRoll.fx(), ticks: window.__lotAndRoll.activeTicks() }));
+  idle.pass = idleVerdict(idle) && !after.fx.ticking && (after.fx.canvas?.hidden ?? true) && after.ticks === 0;
+  idle.canvasHidden = after.fx.canvas?.hidden ?? true;
+  idle.backing = after.fx.canvas ? [after.fx.canvas.backingW, after.fx.canvas.backingH] : null;
+  idle.activeTicks = after.ticks;
+  log('fx idle', JSON.stringify(idle));
+  // F7: 20 replays (animation speed 3: same code paths, shorter run) — heap, DOM nodes, canvases.
+  await cdp.send('HeapProfiler.collectGarbage');
+  const heap0 = (await cdp.send('Runtime.getHeapUsage')).usedSize;
+  const nodes0 = await nodes(page);
+  await page.evaluate(() => window.__lotAndRoll.setAnimSpeed(3));
+  for (let i = 0; i < 20; i++) await fxScenario(page);
+  await page.evaluate(() => window.__lotAndRoll.setAnimSpeed(1));
+  await page.waitForTimeout(1000);
+  await cdp.send('HeapProfiler.collectGarbage');
+  const heap1 = (await cdp.send('Runtime.getHeapUsage')).usedSize;
+  const nodes1 = await nodes(page);
+  const leak = { heapMB: [r1(heap0 / 1048576), r1(heap1 / 1048576)], domNodes: [nodes0, nodes1], canvases: await page.evaluate(() => document.querySelectorAll('canvas.fx-canvas').length) };
+  log('fx leak', JSON.stringify(leak));
+  // F10: skip the finale 300 ms in → engine idle.
+  const skipMs = await page.evaluate(async () => {
+    const hook = window.__lotAndRoll;
+    void hook.playFx('victory', { winner: 0, kind: 'hubs', spaces: [5, 13, 21, 29] });
+    await new Promise((r) => setTimeout(r, 300));
+    const t = performance.now();
+    window.__fx.skip();
+    while (hook.fx().ticking) await new Promise((r) => requestAnimationFrame(r));
+    return Math.round(performance.now() - t);
+  });
+  await ctx.close();
+  // F8: atlas bytes.
+  const { statSync, readdirSync } = await import('node:fs');
+  const fxDir = resolve(ROOT, 'public/fx');
+  const atlasKB = r1(readdirSync(fxDir).reduce((a, f) => a + statSync(resolve(fxDir, f)).size, 0) / 1024);
+  out.fx = { window: fxWindow, idle, leak, skipMs, atlasKB };
+  log('fx', JSON.stringify({ skipMs, atlasKB }));
+}
+
 // ------------------------------------------------------------------------------------ full game DOM
 if (CFG.phases.includes('full')) {
   const { ctx, page } = await newPage(1);
@@ -578,6 +740,21 @@ if (out.layers) {
   gate('C  no forced layout > 50 ms during play', L.layoutMaxMs <= 50, `max Layout ${L.layoutMaxMs} ms`);
 }
 if (out.boot) gate('C  boot to Title painted <= 1500 ms (4x)', out.boot.medianTitlePaintedMs <= 1500, `${out.boot.medianTitlePaintedMs} ms`);
+if (out.fx) {
+  const w = out.fx.window;
+  const i = out.fx.idle;
+  const L = out.fx.leak;
+  gate('F1 fx: idle zero after the effects (10 s window)', i.pass, `layout ${i.layout}, paint ${i.paint}, raster ${i.raster}, style ${i.style}, rAF ${i.raf}, timers ${i.timers}, layerPainted ${i.layerPainted}, task ${i.taskMs} ms; canvas hidden ${i.canvasHidden}, clock callbacks ${i.activeTicks}`);
+  gate('F2 fx: live particles <= 300', w.peakLive <= 300, `peak ${w.peakLive} (dropped ${w.dropped})`);
+  gate('F3 fx: peak layers <= 20, layer memory <= 100 MB', w.peakLayers <= 20 && w.peakLayerMemoryMB <= 100, `${w.peakLayers} layers, ${w.peakLayerMemoryMB} MB`);
+  gate('F4 fx: presented fps <= 34, unique >= 24', w.drawFps <= 34 && w.uniqueFps >= 24, `${w.drawFps} fps presented, ${w.uniqueFps} unique`);
+  gate('F5 fx: rAF interval p95 <= 33 ms (4x)', w.raf.p95 <= 33.4, `p95 ${w.raf.p95} ms (p99 ${w.raf.p99}, max ${w.raf.max}, ${w.raf.over34} > 2 vsyncs)`);
+  gate('F6 fx: main-thread task <= 150 ms/s (4x)', w.taskMsPerSec <= 150, `${w.taskMsPerSec} ms/s`);
+  gate('F7 fx: 20 replays: heap +<= 5 MB, DOM +0, <= 1 canvas', L.heapMB[1] - L.heapMB[0] <= 5 && L.domNodes[1] - L.domNodes[0] <= 0 && L.canvases <= 1, `heap ${L.heapMB[0]} -> ${L.heapMB[1]} MB, nodes ${L.domNodes[0]} -> ${L.domNodes[1]}, canvases ${L.canvases}`);
+  gate('F8 fx: atlas + json <= 500 KB', out.fx.atlasKB <= 500, `${out.fx.atlasKB} KB`);
+  if (out.boot) gate('F9 fx: boot to Title <= 1500 ms (unchanged)', out.boot.medianTitlePaintedMs <= 1500, `${out.boot.medianTitlePaintedMs} ms`);
+  gate('F10 fx: skipped finale idle <= 500 ms', out.fx.skipMs <= 500, `${out.fx.skipMs} ms`);
+}
 if (out.full) gate('C  DOM bounded over a full game (max/min <= 1.3)', out.full.maxNodes / out.full.minNodes <= 1.3, `${out.full.minNodes}..${out.full.maxNodes} nodes over ${out.full.rounds} rounds`);
 out.gates = rows;
 

@@ -113,9 +113,20 @@ export interface FxHandle {
   dispose(): void;
   /** Effects running now (name, tier, frame, still running its timeline) — for the director / tests. */
   running(): RunningFx[];
+  /**
+   * Resolves once no effect of tier ≥ `minTier` is still running its timeline (particles may fade
+   * on). The sequencer waits on it before turning the stage to the next player, so a big moment's
+   * stamp and close-up card are not carried away mid-way. Immediate when nothing big runs.
+   */
+  settled(minTier?: Tier): Promise<void>;
 }
 
 const GRACE_TICKS = 8;
+/**
+ * FX time rate while skipping. The DOM side of a skip is ×5 (time.ts); effects run ×10 so even the
+ * 3.7 s finale is gone ≤ 500 ms after a tap (gate F10) — a skipped effect only needs to get out of the way.
+ */
+const SKIP_RATE = 10;
 const DEFAULT_MAX_BACKING = 0.9e6;
 
 /** Backing scale for a region (VFX.md §3.3): clamp(sqrt(budget/area), 0.75, min(1.5, dpr)), hard-capped by the budget. */
@@ -177,6 +188,17 @@ export function createFx(o: FxOptions): FxHandle {
     runner.effects
       .filter((e) => !e.finished)
       .map((e) => ({ name: e.tl.name, tier: e.tl.tier, f: e.f, active: e.idx < e.tl.ops.length, ...(e.tl.highlight ? { highlight: e.tl.highlight } : {}) }));
+  const settleWaiters: Array<{ tier: Tier; go: () => void }> = [];
+  const busyAt = (tier: Tier): boolean => runningFx().some((r) => r.active && r.tier >= tier);
+  function pumpSettled(): void {
+    for (let i = settleWaiters.length - 1; i >= 0; i--) {
+      const w = settleWaiters[i]!;
+      if (!busyAt(w.tier)) {
+        settleWaiters.splice(i, 1);
+        w.go();
+      }
+    }
+  }
   function pumpBig(frames: number): void {
     if (!bigQueue.length) return;
     const busy = bigBusy(runningFx());
@@ -353,7 +375,7 @@ export function createFx(o: FxOptions): FxHandle {
     let frames: number;
     if (last < 0) frames = 1;
     else {
-      acc += (now - last) * Math.max(0, clock.speed()) * (skipping ? 5 : 1);
+      acc += (now - last) * Math.max(0, clock.speed()) * (skipping ? SKIP_RATE : 1);
       frames = Math.floor((acc + FRAME_MS * 0.25) / FRAME_MS);
       acc -= frames * FRAME_MS;
       frames = Math.min(frames, skipping ? 20 : 8);
@@ -361,6 +383,7 @@ export function createFx(o: FxOptions): FxHandle {
     last = now;
     if (frames > 0) runner.advance(frames);
     if (frames > 0) pumpBig(frames);
+    if (settleWaiters.length) pumpSettled();
     if (frames > 0 || fullClear) draw();
     const dt = performance.now() - t0;
     tick.last = dt;
@@ -373,8 +396,9 @@ export function createFx(o: FxOptions): FxHandle {
     ring[tick.n % ring.length] = dt;
     tick.n++;
     if (runner.idle && !bigQueue.length) {
-      localSkip = false;
-      if (++grace > GRACE_TICKS) {
+      // After a skip there is nothing to wait for: short grace.
+      if (++grace > (skipping ? 2 : GRACE_TICKS)) {
+        localSkip = false;
         stopTick = null;
         teardown();
         return false;
@@ -478,9 +502,14 @@ export function createFx(o: FxOptions): FxHandle {
     stopAll() {
       runner.stopAll();
       for (const w of bigQueue.splice(0)) w.go();
+      for (const w of settleWaiters.splice(0)) w.go();
       teardown(true);
     },
     running: runningFx,
+    settled(minTier = 3) {
+      if (!stopTick || !busyAt(minTier)) return Promise.resolve();
+      return new Promise<void>((go) => settleWaiters.push({ tier: minTier, go }));
+    },
     setQuality(q) {
       quality = q;
       if (q === 'off') handle.stopAll();

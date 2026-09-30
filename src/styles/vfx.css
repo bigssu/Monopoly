@@ -36,7 +36,8 @@
 .fx-closeup {
   position: absolute;
   left: 50%;
-  top: 50%;
+  /* Above the stage centre (seat frame): the "명소 완성!" stamp lands in the middle, under the card. */
+  top: calc(50% - var(--u, 30px) * 4.2);
   width: calc(var(--u, 30px) * 5.2);
   height: calc(var(--u, 30px) * 5.2);
   margin: calc(var(--u, 30px) * -2.6) 0 0 calc(var(--u, 30px) * -2.6);

@@ -65,7 +65,15 @@ export async function playEvents(
     batch.prev = ev.type;
   }
   if (!alive()) return;
+  // The next prompt waits for a big moment (landmark, takeover, monopoly…) to finish its beats.
+  await settleBig(view);
+  if (!alive()) return;
   view.render(next);
+}
+
+/** Wait for running I3+ effects to finish their timeline (skip-aware: they run ×10 when skipped). */
+function settleBig(view: GameView): Promise<void> {
+  return fxOn() ? view.vfx.settled(3) : Promise.resolve();
 }
 
 function render(view: GameView, vs: GameState): void {
@@ -149,6 +157,8 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       return;
     }
     case 'TurnStarted': {
+      // Do not turn the stage away while the previous player's big moment (stamp, close-up) plays.
+      if (!fast) await settleBig(view);
       const steps = planFx(ev, ctx);
       vs.current = ev.playerId;
       vs.round = ev.round;
