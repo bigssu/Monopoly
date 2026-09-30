@@ -16,6 +16,7 @@ import { haptic } from '@/ui/audio/haptics';
 import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
 import { h, iconEl, isDevHook, prepareGameIcons } from './util';
+import { prefs } from '@/ui/shell/prefs';
 
 /** Dev A/B knob `?dev=1&fxpool=6.12` (canvas size classes, present.ts SLOT_CLASSES). */
 function devPool(): number[] | null {
@@ -51,6 +52,7 @@ export class GameView {
   onPortraitChange: ((portrait: boolean) => void) | null = null;
   private rotateOverlay: HTMLElement;
   private stopWatch: () => void = () => {};
+  private stopPrefs: () => void = () => {};
   private state: GameState;
 
   constructor(state: GameState) {
@@ -112,9 +114,11 @@ export class GameView {
       softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
       dev: isDevHook(),
     });
-    // Dev A/B (VFX.md §10.4): ?dev=1&fxq=low|off — particles ×0.5 / no canvas effects (sound + static highlight).
+    // Effects quality (Settings, docs/VFX.md §15.4), applied live; dev A/B override ?dev=1&fxq=auto|high|low|off.
     const q = isDevHook() ? new URLSearchParams(location.search).get('fxq') : null;
-    if (q === 'low' || q === 'off') this.vfx.setQuality(q);
+    const devQ = q === 'auto' || q === 'high' || q === 'low' || q === 'off' ? q : null;
+    this.vfx.setQuality(devQ ?? prefs.get().fxQuality);
+    if (!devQ) this.stopPrefs = prefs.onChange((n, prev) => n.fxQuality !== prev.fxQuality && this.vfx.setQuality(n.fxQuality));
     this.menuSlot = h('div', { class: 'menu-slot' });
     this.rotateOverlay = h(
       'div',
@@ -203,6 +207,7 @@ export class GameView {
   }
 
   dispose(): void {
+    this.stopPrefs();
     this.vfx.dispose();
     this.stage.dropCloseUp();
     this.stopWatch();

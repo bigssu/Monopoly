@@ -26,9 +26,16 @@ import { PF } from './pool';
 import { Presenter, type PresentStats } from './present';
 import { buildPreset, type PresetEnv, type PresetName, type PresetParams } from './presets';
 import { Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
-import { ACCENT_Q, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
+import { ACCENT_Q, ADAPTIVE_DEFAULTS, AdaptiveQuality, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
 
-export type FxQuality = 'high' | 'low' | 'off';
+/** The user setting (Settings → 연출 품질 / Effects). 'auto' adapts to the device (VFX.md §15.4). */
+export type FxQuality = 'auto' | 'high' | 'low' | 'off';
+/**
+ * What actually plays: 'high' everything; 'low' half the particles, no soft additive glows, no
+ * shake, 1× backing, 15 Hz presentation; 'minimal' / 'off' the reduced-motion path (sound, haptics,
+ * a static highlight, state applied at once — no canvas).
+ */
+export type FxTier = 'high' | 'low' | 'minimal' | 'off';
 
 export interface FxOptions extends CoordSource {
   /** The `.fx-layer` element (the canvas is appended to it). */
@@ -65,6 +72,8 @@ export interface FxOptions extends CoordSource {
    * `loadAtlas` or a manual clock (deterministic screenshots paint on the main thread).
    */
   worker?: boolean;
+  /** Initial quality setting (default 'high'; the game passes the user's pref, default 'auto'). */
+  quality?: FxQuality;
   /** Dev A/B knobs (VFX.md §15): crisp-scale cap, draw every n-th tick. */
   tune?: { sMax?: number; drawEvery?: number };
   /**
@@ -118,6 +127,10 @@ export interface FxStats {
   /** JS time per engine tick (update + draw), ms; p95 over the last 256 ticks. */
   tick: { last: number; max: number; avg: number; p95: number; n: number; maxAt: number; maxFrames: number };
   tintCacheBytes: number;
+  /** Quality setting, the tier playing now, and the adaptive controller's transitions (auto). */
+  quality: { setting: FxQuality; tier: FxTier; transitions: Array<{ at: number; from: FxTier; to: FxTier; why: string }> };
+  /** Paint backend of the current canvases. */
+  backend: 'worker' | 'main' | 'none';
 }
 
 export interface FxHandle {
@@ -128,6 +141,7 @@ export interface FxHandle {
   skip(): void;
   /** Drop every effect immediately (screen exit, resize, hidden tab). */
   stopAll(): void;
+  /** Quality setting, applied live ('off' stops running effects). */
   setQuality(q: FxQuality): void;
   /** Start loading the atlas (idle time after the game mounts). */
   preload(): Promise<boolean>;
@@ -193,7 +207,11 @@ export function createFx(o: FxOptions): FxHandle {
     o.seed ?? 0x5eed,
   );
   const pool = runner.pool;
-  let quality: FxQuality = 'high';
+  let quality: FxQuality = o.quality ?? 'high';
+  /** Adaptive tier while the setting is 'auto'. */
+  const aq = new AdaptiveQuality(ADAPTIVE_DEFAULTS, typeof performance !== 'undefined' ? performance.now() : 0);
+  const transitions: FxStats['quality']['transitions'] = [];
+  const tierNow = (): FxTier => (quality === 'auto' ? aq.tier : quality);
   const software = o.softwareCanvas ?? true;
   /** Full atlas on the main thread (main backend: tests, manual clock, no worker support). */
   let atlas: FxAtlas | null = null;
@@ -408,6 +426,7 @@ export function createFx(o: FxOptions): FxHandle {
     localSkip = false;
     drawnFrame = -1;
     sinceDraw = 0;
+    lastNow = -1;
     if (pres) {
       pres.hideAll(free);
       submit(pres, 0);
@@ -576,7 +595,16 @@ export function createFx(o: FxOptions): FxHandle {
   /** Crisp backing scale: 1.5 capped by the DPR (1 on quality 'low'). */
   function sMax(): number {
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    return Math.min(o.tune?.sMax ?? 9, quality === 'low' ? 1 : 1.5, Math.max(dpr, 0.5));
+    return Math.min(o.tune?.sMax ?? 9, tierNow() === 'low' ? 1 : 1.5, Math.max(dpr, 0.5));
+  }
+
+  // Adaptive quality (setting 'auto', VFX.md §15.4): director.ts AdaptiveQuality.
+  let lastNow = -1;
+  function noteTransition(from: FxTier, why: string | null): void {
+    if (!why || aq.tier === from) return;
+    transitions.push({ at: Math.round(performance.now()), from, to: aq.tier, why });
+    if (transitions.length > 20) transitions.shift();
+    if (o.dev) console.info(`[vfx] quality ${from} → ${aq.tier} (${why})`);
   }
 
   function step(now: number): boolean {
@@ -600,7 +628,7 @@ export function createFx(o: FxOptions): FxHandle {
     // Presentation rate: every FX frame (30 Hz) while a timeline still runs its beats or a particle
     // is young (impacts, pops, fast bursts); every 2nd frame (15 Hz) for tails (fading, drifting).
     if (runner.frame !== drawnFrame) sinceDraw++;
-    const every = o.tune?.drawEvery ?? (tailOnly() ? 2 : 1);
+    const every = o.tune?.drawEvery ?? (tierNow() === 'low' || tailOnly() ? 2 : 1);
     const empty = pool.liveCount === 0 && lastDrawn === 0;
     if ((runner.frame !== drawnFrame && sinceDraw >= every && !empty) || forceDraw) {
       drawnFrame = runner.frame;
@@ -618,6 +646,12 @@ export function createFx(o: FxOptions): FxHandle {
     tick.sum += dt;
     ring[tick.n % ring.length] = dt;
     tick.n++;
+    // Adaptive quality samples: real-time ticks with effects on screen (not skipping, not hand-stepped).
+    if (quality === 'auto' && lastNow >= 0 && !skipping && !clock.manual?.() && pool.liveCount > 0) {
+      const from = aq.tier;
+      noteTransition(from, aq.sample(dt, now - lastNow, now));
+    }
+    lastNow = now;
     if (runner.idle && !bigQueue.length) {
       // After a skip there is nothing to wait for: short grace.
       if (++grace > (skipping ? 2 : GRACE_TICKS)) {
@@ -641,6 +675,16 @@ export function createFx(o: FxOptions): FxHandle {
       acc = 0;
       stopTick = clock.onFrame(step);
     }
+  }
+
+  /** The reduced path plays (no canvas): OS / app reduced motion, setting 'off', or the adaptive 'minimal' tier. */
+  function reducedNow(): boolean {
+    if (clock.reducedMotion() || quality === 'off') return true;
+    if (quality === 'auto' && aq.tier === 'minimal') {
+      noteTransition('minimal', aq.onPlay(performance.now()));
+      return aq.tier === 'minimal';
+    }
+    return false;
   }
 
   const reducedHooks = () => ({
@@ -669,8 +713,9 @@ export function createFx(o: FxOptions): FxHandle {
       effect = runner.start(tl, {
         u: createCoords(o).u,
         ...(seed !== undefined ? { seed } : {}),
-        quality: (quality === 'low' ? 0.5 : 1) * (accent ? ACCENT_Q / 0.5 : 1),
+        quality: (tierNow() === 'low' ? 0.5 : 1) * (accent ? ACCENT_Q / 0.5 : 1),
         quiet: accent,
+        lite: tierNow() === 'low',
       });
       arm();
       return effect;
@@ -706,7 +751,7 @@ export function createFx(o: FxOptions): FxHandle {
     play(name, params, opt) {
       if (clock.instant()) return noopPlay(name);
       const tl = buildPreset(name, params, env());
-      if (clock.reducedMotion() || quality === 'off') {
+      if (reducedNow()) {
         runReduced(tl, reducedHooks());
         return noopPlay(tl.name, tl.tier);
       }
@@ -714,7 +759,7 @@ export function createFx(o: FxOptions): FxHandle {
     },
     run(tl, opt) {
       if (clock.instant()) return noopPlay();
-      if (clock.reducedMotion() || quality === 'off') {
+      if (reducedNow()) {
         runReduced(tl, reducedHooks());
         return noopPlay(tl.name, tl.tier);
       }
@@ -736,7 +781,9 @@ export function createFx(o: FxOptions): FxHandle {
       return new Promise<void>((go) => settleWaiters.push({ tier: minTier, go }));
     },
     setQuality(q) {
+      if (q === quality) return;
       quality = q;
+      if (q === 'auto') aq.set('high', performance.now());
       if (q === 'off') handle.stopAll();
     },
     async preload() {
@@ -768,6 +815,8 @@ export function createFx(o: FxOptions): FxHandle {
         frame: runner.frame,
         tick: { last: tick.last, max: tick.max, avg: tick.n ? tick.sum / tick.n : 0, p95: p95(), n: tick.n, maxAt: tick.maxAt, maxFrames: tick.maxFrames },
         tintCacheBytes: atlas?.cacheBytes() ?? 0,
+        quality: { setting: quality, tier: clock.reducedMotion() ? 'off' : tierNow(), transitions: transitions.slice() },
+        backend: !pres ? 'none' : pres === workerPres ? 'worker' : 'main',
       };
     },
     resetStats() {

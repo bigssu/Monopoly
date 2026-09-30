@@ -98,3 +98,90 @@ export class PitchLadder {
     this.lastIn = this.lastOut = -Infinity;
   }
 }
+
+/** Quality tiers the adaptive controller moves between (engine.ts FxTier minus 'off'). */
+export type AutoTier = 'high' | 'low' | 'minimal';
+
+export interface AdaptiveOptions {
+  /** p95 of the engine's JS per tick over a window above this → a bad window (ms). */
+  tickMs: number;
+  /** A tick later than this (gap since the previous one, ms; 30 Hz = 33.3) is late … */
+  gapMs: number;
+  /** … and more than this share of late ticks in a window makes it bad. */
+  lateShare: number;
+  /** Bad windows in a row before stepping down. */
+  downWindows: number;
+  /** Samples per window (≈ 1 s of effects at 30 Hz). */
+  window: number;
+  /** Healthy windows in a row before stepping up (low → high). */
+  upWindows: number;
+  /** In 'minimal' (no canvas → no samples), a new effect after this long tries 'low' again (ms). */
+  retryMs: number;
+}
+
+export const ADAPTIVE_DEFAULTS: AdaptiveOptions = { tickMs: 6, gapMs: 40, lateShare: 0.2, downWindows: 2, window: 30, upWindows: 10, retryMs: 20000 };
+
+/**
+ * Adaptive effects quality (docs/VFX.md §15.4) for the setting 'auto': fed one sample per real-time
+ * FX tick with particles on screen (engine JS ms, gap since the previous tick). A window (≈ 1 s) is
+ * bad when the tick p95 is over `tickMs` or more than `lateShare` of its ticks came late (gap over
+ * `gapMs`): one or two late ticks are the game's own event frames (a render, a prompt — they happen
+ * with effects off too), a device that cannot hold 30 fps shows many. `downWindows` bad windows in a
+ * row → one tier down (high → low → minimal); `upWindows` healthy ones → low → high. Nothing is
+ * persisted: every engine (game) starts at 'high'.
+ */
+export class AdaptiveQuality {
+  tier: AutoTier = 'high';
+  since: number;
+  private tick: Float32Array;
+  private gap: Float32Array;
+  private n = 0;
+  private good = 0;
+  private bad = 0;
+  constructor(
+    readonly o: AdaptiveOptions = ADAPTIVE_DEFAULTS,
+    now = 0,
+  ) {
+    this.tick = new Float32Array(o.window);
+    this.gap = new Float32Array(o.window);
+    this.since = now;
+  }
+
+  /** Force a tier (setting changed); resets the window. */
+  set(tier: AutoTier, now: number): void {
+    this.tier = tier;
+    this.since = now;
+    this.n = this.good = this.bad = 0;
+  }
+
+  /** One tick sample; returns the transition reason when the tier changed. */
+  sample(tickMs: number, gapMs: number, now: number): string | null {
+    if (this.tier === 'minimal') return null;
+    this.tick[this.n] = tickMs;
+    this.gap[this.n] = gapMs;
+    if (++this.n < this.o.window) return null;
+    this.n = 0;
+    const t = Array.from(this.tick).sort((x, y) => x - y)[Math.floor(this.o.window * 0.95)]!;
+    let late = 0;
+    for (const g of this.gap) if (g > this.o.gapMs) late++;
+    if (t > this.o.tickMs || late > this.o.lateShare * this.o.window) {
+      this.good = 0;
+      if (++this.bad < this.o.downWindows) return null;
+      this.set(this.tier === 'high' ? 'low' : 'minimal', now);
+      return `${this.o.downWindows} windows: tick p95 ${t.toFixed(1)} ms, ${late}/${this.o.window} ticks late`;
+    }
+    this.bad = 0;
+    if (this.tier === 'low' && ++this.good >= this.o.upWindows) {
+      this.set('high', now);
+      return `${this.o.upWindows} healthy windows`;
+    }
+    return null;
+  }
+
+  /** A new effect is about to play: 'minimal' retries 'low' after `retryMs`. Returns the reason on a change. */
+  onPlay(now: number): string | null {
+    if (this.tier !== 'minimal' || now - this.since < this.o.retryMs) return null;
+    this.set('low', now);
+    return `retry after ${this.o.retryMs / 1000} s`;
+  }
+}

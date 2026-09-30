@@ -1,5 +1,5 @@
 /**
- * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver).
+ * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality).
  *
  *   prefs.get().sound
  *   prefs.set({ volume: 0.6 })
@@ -21,7 +21,11 @@ export interface Prefs {
   lastSetup: SetupDraft | null;
   /** Battery saver: animations produce ~30 distinct frames per second instead of 60. */
   batterySaver: boolean;
+  /** Effects quality (docs/VFX.md §15.4): auto adapts to the device; off = static highlight + sound. */
+  fxQuality: FxQualityPref;
 }
+
+export type FxQualityPref = 'auto' | 'high' | 'low' | 'off';
 
 export const PREFS_KEY = 'lotandroll:prefs:v1';
 
@@ -38,7 +42,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'auto' };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -53,6 +57,7 @@ function sanitize(raw: unknown): Prefs {
     promptTimer: r.promptTimer === 0 || r.promptTimer === 15 || r.promptTimer === 30 ? r.promptTimer : d.promptTimer,
     lastSetup: r.lastSetup ? normalizeDraft(r.lastSetup) : null,
     batterySaver: typeof r.batterySaver === 'boolean' ? r.batterySaver : d.batterySaver,
+    fxQuality: r.fxQuality === 'auto' || r.fxQuality === 'high' || r.fxQuality === 'low' || r.fxQuality === 'off' ? r.fxQuality : d.fxQuality,
   };
 }
 

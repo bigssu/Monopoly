@@ -12,6 +12,7 @@ import { rotateStart } from '@/ui/shell/setupModel';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { createFx } from '@/ui/fx/vfx';
+import { prefs } from '@/ui/shell/prefs';
 import { anim, gridTimeout, instant } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
@@ -148,6 +149,7 @@ registerScreen('result', (root, { state }) => {
     getSpaceRect: () => ({ x: 0, y: 0, width: 0, height: 0 }),
     getPanelRect: () => null,
     getSeat: () => 'S',
+    quality: prefs.get().fxQuality,
   });
   sfx.play('win');
   void anim(hero, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {

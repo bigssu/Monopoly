@@ -199,6 +199,8 @@ export class Effect {
     q: number,
     /** Started while skipping: no shake / hit-stop. */
     readonly quiet: boolean,
+    /** Quality 'low': no `glow` sprites (the big soft additive ones), no shake. */
+    readonly lite = false,
   ) {
     this.cap = TIER_CAP[tl.tier];
     this.block = new Promise((r) => (this.resolveBlock = r));
@@ -207,6 +209,7 @@ export class Effect {
     const unit = u / 30;
     const one = (p: PSpec): boolean => {
       if (this.stats.spawned >= this.cap) return false;
+      if (lite && p.anim === 'glow') return false;
       const i = pool.alloc(tl.priority, id);
       if (i < 0) return false;
       writeParticle(pool, i, p, unit);
@@ -273,6 +276,8 @@ export interface StartOptions {
   quality?: number;
   /** Accent (§6.2 demotion): no shake / hit-stop / flash, like an effect started while skipping. */
   quiet?: boolean;
+  /** Quality 'low' (VFX.md §15.4): no soft additive glows (incl. flashes), no shake. */
+  lite?: boolean;
 }
 
 /** Log of executed side effects (tests / determinism checks). */
@@ -313,7 +318,7 @@ export class Runner {
     const rng = mulberry32(o.seed ?? mixSeed(this.baseSeed, id));
     const quiet = this.skipping || !!o.quiet;
     const q = (o.quality ?? 1) * (quiet ? 0.5 : 1);
-    const e = new Effect(id, tl, this, rng, o.u, q, quiet);
+    const e = new Effect(id, tl, this, rng, o.u, q, quiet, !!o.lite);
     this.effects.push(e);
     return e;
   }
@@ -382,7 +387,7 @@ export class Runner {
         a.fn(e.emit);
         return;
       case 'shake':
-        if (e.quiet || this.skipping) return;
+        if (e.quiet || e.lite || this.skipping) return;
         this.note(e, 'shake', `${a.px}/${a.ms}`);
         h.shake?.(a.px, a.ms);
         return;

@@ -1,5 +1,5 @@
 /**
- * Settings: language, sound + volume, vibration, prompt timer, battery saver, saved game, credits & licenses.
+ * Settings: language, sound + volume, vibration, prompt timer, battery saver, effects quality, saved game, credits & licenses.
  * Also usable as an overlay from the game menu:
  *   import { openSettingsOverlay } from '@/ui/screens/SettingsScreen';
  */
@@ -12,13 +12,14 @@ import { confirmDialog, openDialog, toast } from '@/ui/shell/dialog';
 import { markdownToHtml } from '@/ui/shell/markdown';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, savedGameSummary } from '@/ui/shell/persist';
-import { prefs } from '@/ui/shell/prefs';
+import { prefs, type FxQualityPref } from '@/ui/shell/prefs';
 import { segmented, switcher } from '@/ui/shell/widgets';
 import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
 import { version } from '../../../package.json';
 
 const GLOBE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12H21.5"/><path d="M12 2.5Q7 7 7 12T12 21.5Q17 17 17 12T12 2.5Z"/></svg>`;
 const BATTERY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="17" height="10" rx="2.5"/><path d="M22 10.5V13.5"/><path d="M11.5 8.8L8.8 12.2H12.2L9.5 15.2"/></svg>`;
+const SPARKLE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M10 3.5L11.8 8.2L16.5 10L11.8 11.8L10 16.5L8.2 11.8L3.5 10L8.2 8.2Z"/><path d="M18 14.5L18.9 16.6L21 17.5L18.9 18.4L18 20.5L17.1 18.4L15 17.5L17.1 16.6Z"/></svg>`;
 const LEVELS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 19V15M10 19V11M15 19V7.5M20 19V4"/></svg>`;
 
 function row(iconId: string | HTMLElement, label: string, control: HTMLElement, hint?: string): HTMLElement {
@@ -100,6 +101,18 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
 
     const test = iconButton('sound-on', t('settings.test'), () => sfx.play('win'), 'btn-ghost set-test');
 
+    const fxq = segmented<FxQualityPref>(
+      [
+        { value: 'auto', label: t('settings.fxAuto') },
+        { value: 'high', label: t('settings.fxHigh') },
+        { value: 'low', label: t('settings.fxLow') },
+        { value: 'off', label: t('settings.fxOff') },
+      ],
+      p.fxQuality,
+      (v) => prefs.set({ fxQuality: v }),
+      { label: t('settings.fx') },
+    );
+
     const timer = segmented(
       [0, 15, 30].map((v) => ({ value: v as 0 | 15 | 30, label: v === 0 ? t('setup.timerOff') : t('setup.seconds', { n: v }) })),
       p.promptTimer,
@@ -122,6 +135,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
         h('div', { class: 'set-inline' }, switcher(p.batterySaver, (v) => prefs.set({ batterySaver: v }), t('settings.batterySaver'))),
         t('settings.batterySaverHint'),
       ),
+      row(SPARKLE_SVG, t('settings.fx'), fxq, t('settings.fxHint')),
     );
 
     const summary = savedGameSummary();
