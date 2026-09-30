@@ -39,6 +39,9 @@ export class PlayerPanel {
   private target = 0;
   private stopTween: (() => void) | null = null;
   private sig = '';
+  private badgeKey = '';
+  /** Last rendered class + content (0 = empty, 1-3 pips, 4 = star) of every set slot. */
+  private slotState = new Map<number, { cls: string; content: number }>();
 
   constructor(readonly player: Player) {
     this.el = h('div', { class: player.isCpu ? 'pp is-cpu' : 'pp', 'data-seat': player.seat, 'data-pid': player.id });
@@ -106,8 +109,10 @@ export class PlayerPanel {
     const sig = [totalAssets(state, p.id), r, props.join(','), away.join(','), p.cards.join(','), p.islandTurns, state.festival, p.expressPending, p.travelPending].join('|');
     if (sig === this.sig) return;
     this.sig = sig;
-    this.assets.textContent = t('g.panel.assets', { amount: fmtMoney(totalAssets(state, p.id)) });
-    this.rank.textContent = r ? String(r) : '';
+    const assets = t('g.panel.assets', { amount: fmtMoney(totalAssets(state, p.id)) });
+    if (this.assets.textContent !== assets) this.assets.textContent = assets;
+    const rank = r ? String(r) : '';
+    if (this.rank.textContent !== rank) this.rank.textContent = rank;
     this.rank.classList.toggle('is-on', r > 0);
     this.rank.classList.toggle('is-first', r === 1);
     // Set grid.
@@ -117,8 +122,16 @@ export class PlayerPanel {
         const slot = this.slots.get(i)!;
         const pr = state.properties[i]!;
         const mine = pr.owner === p.id;
-        slot.className = `slot${BOARD[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
-        slot.innerHTML = '';
+        const cls = `slot${BOARD[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
+        // Only touch slots that changed: rebuilding all 28 on every money change restyled and
+        // re-laid-out ~250 elements per panel (docs/PERFORMANCE.md).
+        const content = mine ? pr.level : 0;
+        const prev = this.slotState.get(i);
+        if (prev && prev.cls === cls && prev.content === content) continue;
+        this.slotState.set(i, { cls, content });
+        if (slot.className !== cls) slot.className = cls;
+        if (prev?.content === content) continue;
+        slot.textContent = '';
         if (mine && pr.level > 0 && pr.level < 4) {
           const pips = h('span', { class: 'slot-pips' });
           for (let k = 0; k < pr.level; k++) pips.append(h('i'));
@@ -126,7 +139,10 @@ export class PlayerPanel {
         } else if (mine && pr.level === 4) slot.append(h('span', { class: 'slot-star', text: '★' }));
       }
     });
-    // Badges.
+    // Badges (rebuilt only when they change).
+    const badgeKey = [p.islandTurns, p.travelPending, p.expressPending, p.cards.join(',')].join('|');
+    if (badgeKey === this.badgeKey) return;
+    this.badgeKey = badgeKey;
     this.badges.innerHTML = '';
     if (p.islandTurns > 0) this.badges.append(h('span', { class: 'bdg is-island' }, iconEl('corner-island', 'ico bdg-ico'), h('b', { text: String(p.islandTurns) })));
     if (p.travelPending) this.badges.append(h('span', { class: 'bdg' }, iconEl('corner-tour', 'ico bdg-ico')));

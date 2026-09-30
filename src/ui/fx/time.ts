@@ -15,7 +15,8 @@
  *   ~30 times per second, on one global time grid shared by every animation and by `onFrame`;
  *   `{ smooth: true }` opts out (e.g. the stage rotation).
  * - CSS animations/transitions from the stylesheets are quantized when they start
- *   (`installCssAnimationQuantizer()`): `steps(n)` effect timing on the same grid.
+ *   (`installCssAnimationQuantizer()`, on animationstart/transitionstart): `steps(n)` effect
+ *   timing on the same grid.
  * - `setFrameRate(60)` restores every running animation to its original keyframes/timing.
  */
 import { quantizedEasing, stepKeyframes } from './quantize';
@@ -155,9 +156,6 @@ export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyfram
   return a.finished.then(
     () => {
       running.delete(a);
-      // Code awaiting this animation updates the DOM right now (the "update animations" step
-      // of this grid frame): quantize any CSS animation/transition it starts in this frame.
-      requestCssSweep();
     },
     () => {
       running.delete(a);
@@ -271,17 +269,11 @@ let vsync = 1000 / 60;
 /** The loop was idle before this callback (its first frame may fall anywhere in a slot). */
 let fresh = true;
 
-let postRaf = 0;
 let inLoop = false;
-/** The last clock frame ran JS steps (which may have started CSS animations/transitions). */
-let ticked = false;
 
 function schedule(): void {
   if (clockRaf || inLoop || typeof requestAnimationFrame !== 'function') return;
   clockRaf = requestAnimationFrame(clockLoop);
-  // Registered after the clock, so it runs in the same frame once the steps and every promise
-  // continuation they resolved have run (see `postTick`).
-  if (!postRaf) postRaf = requestAnimationFrame(postTick);
 }
 
 function clockLoop(now: number): void {
@@ -309,7 +301,6 @@ function clockLoop(now: number): void {
   fresh = false;
   if (due) {
     lastSlot = slot;
-    ticked = true;
     inLoop = true;
     try {
       for (const fn of [...ticks]) {
@@ -328,29 +319,6 @@ function clockLoop(now: number): void {
   }
   if (ticks.size) schedule();
   else fresh = true;
-}
-
-/**
- * Second rAF callback of a clock frame. The DOM changes of this frame are done, so CSS
- * animations/transitions they trigger can be created now (`getAnimations()` flushes style) and
- * quantized before the frame is painted: otherwise their first frames would run unquantized and
- * be re-timed a frame later (an extra, off-grid frame for every CSS animation start).
- */
-function postTick(): void {
-  postRaf = 0;
-  if (!ticked) return;
-  ticked = false;
-  sweepCss();
-}
-
-/**
- * Sweep for new CSS animations/transitions in this frame's animation-frame callbacks (after the
- * DOM changes made by promise continuations of finished animations, before the frame paints).
- */
-function requestCssSweep(): void {
-  if (!cssQuantizer || fps >= 60 || typeof requestAnimationFrame !== 'function') return;
-  ticked = true;
-  if (!postRaf) postRaf = requestAnimationFrame(postTick);
 }
 
 /**
@@ -481,9 +449,11 @@ function sweepCss(): void {
 
 /**
  * Quantize CSS animations and transitions as they start (their per-keyframe timing function is
- * kept; only the iteration clock is stepped at the frame budget, on the global grid): right
- * after clock frames (`postTick`) and, for ones started elsewhere (input, screen changes), on
- * their start events. Idempotent.
+ * kept; only the iteration clock is stepped at the frame budget, on the global grid), on their
+ * start events. Their first frame is therefore unquantized; the game keeps stylesheet animations
+ * rare during play (entry animations, ambient loops, a few one-shots), so this beats sweeping
+ * `document.getAnimations()` after every clock frame (a forced style flush: 8-16 ms per frame at
+ * 4x CPU throttle for ~1 new CSS animation per 30 frames, docs/PERFORMANCE.md). Idempotent.
  */
 export function installCssAnimationQuantizer(): void {
   if (cssQuantizer || typeof document === 'undefined' || typeof document.getAnimations !== 'function') return;

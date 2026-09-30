@@ -92,7 +92,9 @@
   margin-left: calc(var(--u) * -0.95);
   margin-top: calc(var(--u) * -1.1);
   z-index: 1;
-  transition: scale var(--t-med) var(--ease-out), opacity var(--t-slow) var(--ease-out);
+  /* Scale changes (moving / sharing a space) are instant: a CSS transition here started a new
+     stylesheet animation at every hop. */
+  transition: opacity var(--t-slow) var(--ease-out);
 }
 .token.is-shared { scale: 0.8; }
 .token.is-active { z-index: 2; }

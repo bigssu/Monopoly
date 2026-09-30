@@ -87,16 +87,19 @@ export class Particles {
     if (!parts.length || typeof document === 'undefined') return Promise.resolve();
     const canvas = document.createElement('canvas');
     canvas.className = 'pt-canvas';
-    const area = box.w * box.h;
-    // Full-screen confetti renders at 1x (fast-moving, and 4x less GPU memory); small bursts sharp.
-    const scale = Math.min(window.devicePixelRatio || 1, area > 400_000 ? 1 : 2);
+    // 1 canvas px per CSS px: particles are small and fast; a software canvas (see below) costs
+    // main-thread time per pixel drawn and uploaded.
+    const scale = 1;
+
     canvas.width = Math.max(1, Math.round(box.w * scale));
     canvas.height = Math.max(1, Math.round(box.h * scale));
     canvas.style.left = `${box.x}px`;
     canvas.style.top = `${box.y}px`;
     canvas.style.width = `${box.w}px`;
     canvas.style.height = `${box.h}px`;
-    const ctx = canvas.getContext('2d');
+    // Software canvas (willReadFrequently): an accelerated canvas made each commit wait on its
+    // upload in GPU-less WebViews (15-50 ms at 4x CPU throttle, docs/PERFORMANCE.md).
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return Promise.resolve();
     this.host.append(canvas);
     const speed = animSpeed() || 1;

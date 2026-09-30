@@ -134,41 +134,40 @@ export function cubeFaces(rx: number, ry: number): { n: number; visible: boolean
 }
 
 /**
- * Draw the cube (same look as the DOM faces: rounded gradient face, rim, pips, side shading,
- * contact shadow) into a 2D canvas: centre (cx, cy) and scale (sx, sy) in CSS px, `ds` = die
- * size in CSS px, `k` = canvas px per CSS px.
+ * Pre-rendered pieces of a die (same look as the DOM faces: rounded gradient face, rim, pips; a
+ * dark mask for the side shading; the contact shadow), at `k` canvas px per CSS px. Drawing a
+ * tumble frame is then a few affine `drawImage` calls instead of re-building gradients and paths
+ * (the canvas is a software one: its cost is main-thread time).
  */
-function drawCube(
-  ctx: CanvasRenderingContext2D,
-  rx: number,
-  ry: number,
-  ds: number,
-  k: number,
-  rim: number,
-  cx: number,
-  cy: number,
-  sx: number,
-  sy: number,
-): void {
-  // Contact shadow (the DOM die's ::after), squashed with the die.
-  ctx.setTransform(k * sx, 0, 0, k * sy, cx * k, cy * k);
-  const sh = ctx.createRadialGradient(0, 0.58 * ds, 0, 0, 0.58 * ds, 0.42 * ds);
-  sh.addColorStop(0, 'rgba(60, 40, 20, 0.28)');
-  sh.addColorStop(1, 'rgba(60, 40, 20, 0)');
-  ctx.fillStyle = sh;
-  ctx.beginPath();
-  ctx.ellipse(0, 0.58 * ds, 0.42 * ds, 0.1 * ds, 0, 0, Math.PI * 2);
-  ctx.fill();
+interface Sprites {
+  ds: number;
+  k: number;
+  faces: HTMLCanvasElement[];
+  mask: HTMLCanvasElement;
+  shadow: HTMLCanvasElement;
+}
+let spriteCache: Sprites | null = null;
+
+function sprites(ds: number, k: number): Sprites {
+  if (spriteCache && spriteCache.ds === ds && spriteCache.k === k) return spriteCache;
+  const px = Math.ceil(ds * k);
   const half = ds / 2;
   const rad = ds * 0.22;
+  const rim = Math.max(1.5, ds * 0.018);
+  const make = (w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    return [c, ctx];
+  };
   // 160deg CSS gradient line through the face centre.
   const dx = Math.sin((160 * Math.PI) / 180);
   const dy = -Math.cos((160 * Math.PI) / 180);
   const len = ds * (Math.abs(dx) + Math.abs(dy));
-  for (const f of facePoses(rx, ry)) {
-    if (!f.visible) continue;
-    const [a, b, c, d] = f.m;
-    ctx.setTransform(a * k * sx, b * k * sy, c * k * sx, d * k * sy, (cx + f.tx * ds * sx) * k, (cy + f.ty * ds * sy) * k);
+  const faces = [1, 2, 3, 4, 5, 6].map((n) => {
+    const [c, ctx] = make(px, px);
+    ctx.setTransform(k, 0, 0, k, (px) / 2, (px) / 2);
     const g = ctx.createLinearGradient((-dx * len) / 2, (-dy * len) / 2, (dx * len) / 2, (dy * len) / 2);
     g.addColorStop(0, '#FFFFFF');
     g.addColorStop(0.7, '#F3F5FA');
@@ -182,22 +181,57 @@ function drawCube(
     ctx.beginPath();
     ctx.roundRect(-half + rim / 2, -half + rim / 2, ds - rim, ds - rim, Math.max(0, rad - rim / 2));
     ctx.stroke();
-    const pr = ((f.n === 1 ? 11 : 9) / 100) * ds;
-    ctx.fillStyle = f.n === 1 ? '#EF5B5B' : '#2B3245';
-    for (const [px, py] of PIPS[f.n]!) {
+    const pr = ((n === 1 ? 11 : 9) / 100) * ds;
+    ctx.fillStyle = n === 1 ? '#EF5B5B' : '#2B3245';
+    for (const [x, y] of PIPS[n]!) {
       ctx.beginPath();
-      ctx.arc((px / 100) * ds - half, (py / 100) * ds - half, pr, 0, Math.PI * 2);
+      ctx.arc((x / 100) * ds - half, (y / 100) * ds - half, pr, 0, Math.PI * 2);
       ctx.fill();
     }
+    return c;
+  });
+  const [mask, mctx] = make(px, px);
+  mctx.setTransform(k, 0, 0, k, px / 2, px / 2);
+  mctx.fillStyle = '#2B3245';
+  mctx.beginPath();
+  mctx.roundRect(-half, -half, ds, ds, rad);
+  mctx.fill();
+  const [shadow, sctx] = make(Math.ceil(0.84 * ds * k), Math.ceil(0.2 * ds * k));
+  sctx.setTransform(1, 0, 0, 0.2 / 0.84, shadow.width / 2, shadow.height / 2);
+  const sg = sctx.createRadialGradient(0, 0, 0, 0, 0, shadow.width / 2);
+  sg.addColorStop(0, 'rgba(60, 40, 20, 0.28)');
+  sg.addColorStop(1, 'rgba(60, 40, 20, 0)');
+  sctx.fillStyle = sg;
+  sctx.fillRect(-shadow.width / 2, -shadow.width / 2, shadow.width, shadow.width);
+  spriteCache = { ds, k, faces, mask, shadow };
+  return spriteCache;
+}
+
+/**
+ * Draw one die (tumble pose rx/ry, centre cx/cy and squash sx/sy in CSS px) from its sprites.
+ * Returns the canvas-px box it may have touched (for dirty-rect clearing).
+ */
+function drawCube(ctx: CanvasRenderingContext2D, sp: Sprites, rx: number, ry: number, cx: number, cy: number, sx: number, sy: number): [number, number, number, number] {
+  const { ds, k } = sp;
+  const px = sp.faces[0]!.width;
+  // Contact shadow (the DOM die's ::after), squashed with the die.
+  ctx.globalAlpha = 1;
+  ctx.setTransform(k * sx, 0, 0, k * sy, cx * k, cy * k);
+  ctx.drawImage(sp.shadow, -0.42 * ds, 0.48 * ds, 0.84 * ds, 0.2 * ds);
+  for (const f of facePoses(rx, ry)) {
+    if (!f.visible) continue;
+    const [a, b, c, d] = f.m;
+    // Sprite px → face-local CSS px (1/k), then the face's affine pose.
+    ctx.setTransform(a * sx, b * sy, c * sx, d * sy, (cx + f.tx * ds * sx) * k, (cy + f.ty * ds * sy) * k);
+    ctx.drawImage(sp.faces[f.n - 1]!, -px / 2, -px / 2);
     if (f.shade > 0.001) {
       ctx.globalAlpha = f.shade;
-      ctx.fillStyle = '#2B3245';
-      ctx.beginPath();
-      ctx.roundRect(-half, -half, ds, ds, rad);
-      ctx.fill();
+      ctx.drawImage(sp.mask, -px / 2, -px / 2);
       ctx.globalAlpha = 1;
     }
   }
+  const r = ds * 0.9 * Math.max(sx, sy) * k;
+  return [cx * k - r, cy * k - r, 2 * r, 2 * r + ds * 0.3 * k];
 }
 
 const ROLL_EASE = cubicBezier(0.18, 0.7, 0.3, 1);
@@ -350,7 +384,9 @@ export class Dice {
     const u = board / 32;
     const ds = Math.max(38, u * 3.3);
     const gap = u * 1.3;
-    const k = Math.min(window.devicePixelRatio || 1, 2);
+    // Tumbling dice render at 1 canvas px per CSS px: motion hides the softness, the landed dice
+    // are the crisp DOM ones again, and a software canvas costs per pixel (draw + upload).
+    const k = 1;
     const padX = ds * 0.6;
     const padTop = ds * 1.9;
     const padBottom = ds * 0.8;
@@ -364,9 +400,12 @@ export class Dice {
     canvas.style.top = `${-padTop}px`;
     canvas.style.width = `${w}px`;
     canvas.style.height = `${hgt}px`;
-    const ctx = canvas.getContext('2d');
+    // A software canvas (willReadFrequently): an accelerated one in a headless / GPU-less
+    // WebView made every commit wait on the canvas upload (15-50 ms at 4x CPU throttle).
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx || typeof ctx.roundRect !== 'function') return Promise.resolve();
-    const rim = Math.max(1.5, ds * 0.018);
+    const sp = sprites(ds, k);
+    let dirty: [number, number, number, number][] = [];
     const duration = D(900);
     const centres = [0, 1].map((i) => padX + ds / 2 + i * (ds + gap));
     const cy = padTop + ds / 2;
@@ -374,14 +413,17 @@ export class Dice {
     let last = -1;
     const draw = (): boolean => {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+      // Clear only what the previous frame drew.
+      for (const [x, y, w, h] of dirty) ctx.clearRect(x, y, w, h);
+      dirty = [];
       let running = false;
-      spins.forEach((sp, i) => {
-        const t = Math.min(1, Math.max(0, (elapsed - D(sp.delay)) / duration));
+      spins.forEach((spin, i) => {
+        const t = Math.min(1, Math.max(0, (elapsed - D(spin.delay)) / duration));
         if (t < 1) running = true;
         const e = ROLL_EASE(t);
         const [ty, sx, sy] = bounceAt(t);
-        drawCube(ctx, sp.x0 + (sp.x1 - sp.x0) * e, sp.y0 + (sp.y1 - sp.y0) * e, ds, k, rim, centres[i]!, cy + ty * ds, sx, sy);
+        dirty.push(drawCube(ctx, sp, spin.x0 + (spin.x1 - spin.x0) * e, spin.y0 + (spin.y1 - spin.y0) * e, centres[i]!, cy + ty * ds, sx, sy));
       });
       return running;
     };
