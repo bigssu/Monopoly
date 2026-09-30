@@ -981,9 +981,142 @@ groupFinale · plot650 · free3 · passStartLanded · victoryHubs`
 - 권장: 연동 시 **`retainBacking: true`**(게임 화면 동안 숨긴 캔버스가 ≤3.6 MB CPU 메모리를 유지 — GPU 레이어 아님, rAF·타이머 0 유지).
   `stopAll()`(리사이즈·화면 이탈·탭 숨김)과 `dispose()`는 항상 해제한다. 게이트 F1–F10의 최종 판정은 연동 후 `perf.mjs fx` 페이즈에서.
 
-### 13.6 남은 일 (연동 단계)
+### 13.6 남은 일 (연동 단계) — §14에서 완료
 
 `docs/VFX-WIRING.md`: CSS import, `time.ts reducedMotion()` 노출, `Board.spaceRect/popIcon/zoomPunch/dimIcon/highlight`,
 `PlayerPanel.clientRect`, `view.ts` 엔진 생성·수명, `shakeAll([table, fxLayer])`, `Stage` `.fx-closeup`·좌표 헬퍼, `animate.ts`의
 전 이벤트 매핑과 **`swap`/`frame` cue까지 `render()` 지연**, `Built.free` 분기, 파생 `GroupCompleted`, 스킵 핸들러 `vfx.skip()`,
 dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·제거, e2e. 실기기 A/B(§10.4)는 그 이후.
+
+---
+
+## 14. 인게임 연결 결과 (연동 단계, 2026-09-30)
+
+`docs/VFX-WIRING.md`의 체크리스트를 모두 적용해 엔진을 실제 게임 화면에 붙였다. 아래는 **연결된 것, 이벤트별 재생 내용,
+보고 나서 고친 것, 측정, 남은 한계**다.
+
+### 14.1 연결된 것
+
+| 영역 | 파일 | 내용 |
+|---|---|---|
+| CSS | `src/styles/index.css` | `@import './vfx.css'` (구 `.pt-canvas` 삭제) |
+| 클록 | `src/ui/fx/time.ts`, `vfx/clock.ts` | `reducedMotion()`/`setReducedMotion()` 분리(엔진이 사용), `instant()` = 속도 0 ∨ reduced. **dev 전용 수동 클록** `setManualClock/stepClock`: rAF 없이 `onFrame`·`sleep`·`gridTimeout`·`anim()`(WAAPI를 멈춰 `currentTime`으로 전진)을 한 프레임씩 — 실제 게임의 결정적 필름스트립 |
+| 보드 | `src/ui/board/Board.ts` | `spaceRect`, `popIcon`/`zoomPunch`(**SVG `transform` 속성 트윈**, 30 Hz — 14.3-4), `dimIcon`(칸 그룹 클래스), `highlight`(reduced-motion 정적 테두리 마크), 레벨 아이콘을 `g.sp-lvl`로 묶음, `hop(…, onLand)` |
+| 패널 | `PlayerPanel.ts` | `clientRect`, `floatText`, `highlight` |
+| 스테이지 | `Stage.ts`, `Dice.ts` | `.fx-closeup`(행위자 좌석으로 회전, 스테이지 중심 4.2u 위 — 스탬프와 겹치지 않게), `spotlight` = 스테이지 안 정적 베일(카드 둘레만 투명), `cardClientCenter`, `dropCloseUp`, `Dice.clientCenters` |
+| 뷰 | `src/ui/game/view.ts` | `createFx` 생성·`dispose`, 리사이즈 시 `stopFx()`, `retainBacking: true`, **백킹 예산 0.5 MP**(14.3-6), `policy: fxPolicy` + `serializeBig`, 쉐이크 = `.fx-layer`만, 모든 cash-in/out은 `playSfx`(피치 래더), dev A/B 노브 `?dev=1&fxq=low|off&fxmp=0.45&fxsw=0` |
+| 시퀀서 | `src/ui/fx/animate.ts` + **`src/ui/fx/fxmap.ts`**(순수 매핑) | 모든 `GameEvent` → 프리셋(14.2). 블록 프레임만 대기, 꼬리는 백그라운드. 구매/건설/인수는 `frame`/`swap` cue에서 상태 적용 + `render()`. 파생 `GroupCompleted` → `groupChain`(+ "OO 독점!" 스탬프, 배지 cue에 패널 범프). 턴이 바뀔 때와 배치 끝에서 **`vfx.settled(3)`** — 큰 순간(명소·인수·독점)의 스탬프/클로즈업이 다음 플레이어 쪽으로 돌아가 버리지 않게 |
+| 엔진 추가 | `vfx/engine.ts`, `vfx/director.ts`, `vfx/timeline.ts` | §6.2 규칙(14.4), `settled()`, `running()`, `FxPlay.name/tier`, 스킵 ×10(FX만, DOM은 ×5) + 스킵 후 유예 2틱, 효과가 끝나면 남은 효과 영역으로 **캔버스 축소(refit)**, 보존 백킹 재사용 조건 25 % → 70 %, 액센트는 플래시도 생략 |
+| 구 파티클 | `src/ui/fx/particles.ts` 삭제 | 통과 샤워 → `passStart`, 통행료 호 → `tollPay`, 승리 색종이 → `victory`, 결과 화면 색종이 → 새 프리셋 `confettiRain`(결과 화면 전용 엔진 인스턴스) |
+| 스킵 | `controller.ts` | 탭 → `skip()` + `vfx.skip()`(대기 cue 즉시) + `stage.hurry()` |
+| dev 훅 | `devhook.ts` | `fx()`, `playFx(name, params)`, `activeTicks()`, `manualClock(on)`, `stepFrames(n)` |
+| 연출 미리보기 | `src/ui/game/fxdemo.ts`, `Game.ts` | **`npm run dev` → `/?dev=1&fxdemo=1`**: 사람 4명 게임 + 좌측 패널(좌석 선택, 속도 ×1/×0.5/×0.25, 순간 버튼 35개, 건너뛰기, 원래대로). 합성 이벤트를 **실제 시퀀서**(`playEvents`)로 재생 — 상태 스왑·스탬프·클로즈업·사운드까지 실전과 동일, 게임 상태는 안 바뀜. `import.meta.env.DEV` 뒤라 프로덕션 번들에 없음 |
+
+### 14.2 이벤트별 재생 (`fxmap.ts`, 단위 테스트 `src/ui/fx/__tests__/fxmap.test.ts`)
+
+| 이벤트 | 프리셋 (대기) | 상태 적용 | 지운 기존 호출 |
+|---|---|---|---|
+| RoundStarted (마지막 3라운드) | `ringPulse` 스테이지 호박색 | — | (토스트·warning 유지) |
+| TurnStarted | `ringPulse` 토큰 칸 후광 (앞 효과 `settled` 후) | — | — |
+| DiceRolled | `diceLand` 두 주사위 · 더블 `doublesFlash` · 3연속 `doublesFlash{triple}`(블록) | — | 3연속 `haptic('warning')` |
+| TokenMoved walk / jump | 착지 홉에 `hopDust`(6칸 이상 속도선) / `cometJump` ∥ `board.jump` | — | — |
+| PassedStart | `passStart`(landed: I3) | — | `sfx pass-start`, `haptic`, `coinShower` |
+| MoneyChanged | card+ `billRain` · card−/tax/donation/bail `coinIn` 패널→칸 · toll 수령자 숫자는 `tollPay`의 `arrive` cue에 | — | 이유별 `cash-in/out`(pot·sale만 유지) |
+| PotChanged + | `ringPulse` 출발 칸(팟 표시 위치) | — | — |
+| PropertyBought | `plotClaim`(블록 f10) → 그룹 완성 시 `groupChain` | `frame` | `sfx buy`, `haptic`, `pulseSpace(stamp)` |
+| CannotAfford | `puff` 패널 | — | — |
+| Built L1–L3 / L4 / free | `buildSeq` / `landmarkReveal`(스탬프 = `stamp` cue) / `buildSeq{free, from: 카드}` | `swap` | `sfx build/landmark`, `haptic`, `pulseSpace(pop)` |
+| Demolished | 태풍 `puff{smoke 3, bricks 8}`(블록) · 매각 `puff{bricks 3}` | — | — |
+| TollPaid | `tollPay`(label null, 블록) ∥ 톨 카드 | — | `sfx toll`, `haptic`, `coinArc`, 수령자 `cash-in`+범프 |
+| TakenOver | `takeoverStamp`(스탬프 = `stamp` cue) → 그룹 완성 시 `groupChain` | `frame` | `sfx takeover`, `haptic`, `shake(table)`, `pulseSpace` |
+| TakeoverBlocked | `ringPulse` 하늘 2겹 | — | — |
+| CardDrawn | `cardReveal`(톤: 좋음/나쁨/이동/보관, 뒤집힘 정점 430 ms) | — | — |
+| CardKept / CardUsed / CardNoEffect / ExpressGranted | `ringPulse` 보라 / `puff` 흰 / `puff` / `ringPulse` | — | — |
+| SentToIsland | `islandSiren`(블록; 3연속 더블은 경광등이 이미 나왔으므로 물보라만) | — | `sfx island`, `haptic` |
+| IslandStay / Escaped | `ringPulse` 섬 | — | — |
+| FestivalSet | `festivalBurst`(블록) · 해제 `puff` | — | `sfx festival`, `haptic`, `pulseSpace` |
+| TravelGranted / Debt* / AuctionStarted / AuctionBid | `ringPulse` 변형 | — | — |
+| BuildingSold / PropertySold | `coinIn` 칸→패널 (+`puff`) | — | — |
+| PropertyTransferred | `ringPulse` 수령자 색, 배치당 처음 6칸 | — | — |
+| Bankrupt | `bankruptcy` ∥ `breakApart` ∥ 스탬프 | — | `sfx`, `haptic`, `shake(table)` |
+| OneAway | `oneAway` + 기존 `edgeToast` | — | `sfx warning`, `haptic` |
+| GameOver | (파산 직후면 400 ms 쉼) `victory`(triple: 그룹마다 한 칸+그룹색, line: 변의 도시, hubs: 허브 4) ∥ 스탬프 | — | `sfx win`, `haptic`, `confetti(76)` |
+| TurnEnded / TravelDeclined / AuctionDropped / AuctionEnded / PromptOpened | 없음 | | |
+
+`EVENT_FX`는 `{ [K in GameEventType]: … }` 타입이라 새 엔진 이벤트는 컴파일 에러, 테스트는 추가로 `src/engine/types.ts`의
+`GameEvent` 유니온을 런타임에 읽어 매핑 키와 비교한다(누락 시 실패). 이벤트마다 샘플 → 기대 프리셋 목록 → 각 호출이 유효한
+타임라인을 만드는지, `applyAt` cue가 타임라인에 있는지 확인(45개 테스트).
+
+### 14.3 보고 나서 고친 것 (스크린샷·필름스트립 검토)
+
+1. **명소 스탬프·클로즈업이 다음 턴으로 돌아감**: 블록(f24)만 기다리면 곧바로 `TurnStarted`가 스테이지를 다음 좌석으로 돌려
+   "명소 완성!" 스탬프와 클로즈업 카드가 옆 사람 쪽을 봤다 → `vfx.settled(3)`을 턴 전환 전과 배치 끝에서 대기.
+2. **클로즈업 카드가 스탬프에 가려짐**: 둘 다 스테이지 중앙 → 카드를 좌석 기준 4.2u 위로(스탬프는 아래 중앙).
+3. **스포트라이트가 1600×1000 레이어**(페이드 중 25 MB): 스테이지 안 정적 베일(카드 둘레 투명)로 교체 — 레이어 0.
+4. **SVG 팝/줌펀치가 보드를 합성시킴**: CSS transform 애니메이션이 보드 SVG를 합성 → 위의 마크 레이어가 오버랩 레이어로 +14 MB
+   → `transform` 속성을 30 Hz로 트윈(보드 1회 리페인트/프레임, 400 ms).
+5. **쉐이크 레이어**: `.table` 쉐이크는 33 MB, `.board`는 27 MB 레이어 → 쉐이크는 `.fx-layer`(캔버스)만. 승리 12 px 쉐이크와
+   승자 패널 범프는 제거(전면 스쿼시 레이어 24 MB) → 히트스톱만.
+6. **연쇄 효과가 전체 화면 캔버스를 남김**: 합집합 영역이 마지막 파티클까지 유지 → 효과가 끝날 때 남은 효과 영역으로 축소,
+   보존 백킹 재사용은 새 영역이 70 % 이상일 때만, 승리 영역은 보드+승자 패널로 제한.
+7. **4× 프레임 예산**: 소프트웨어 캔버스는 매 프레임 백킹 전체를 합성기로 복사(Commit) → 게임 안 백킹 예산 0.9 → 0.5 MP
+   (작은 효과는 1.5× 그대로, 테이블 전체 효과만 부드러워짐), 홉 먼지는 착지 홉만(걷는 내내 캔버스가 살아 있었음).
+8. **결과 화면 색종이가 장식 구간 게이트를 깸**: 마운트 시점에 결정(속도 0/reduced면 없음 — 구 동작과 동일).
+9. 수신자 금액 팝이 코인 도착(`arrive` cue) 전에 뜸 → `MoneyChanged(toll,+)`가 cue를 기다림. E/N/W 좌석: 망치·크라운·태그·
+   스탬프·클로즈업이 행위자 좌석으로 회전하는 것, 효과가 올바른 칸에 붙는 것, 캔버스가 보드 가장자리에서 잘리지 않는 것을
+   `e2e/__screenshots__/vfx-*-{E,N,W}-*.png`로 확인.
+
+### 14.4 등급·콤보 규칙 (§6.2, `vfx/director.ts`, 테스트 `director.test.ts`)
+
+- 병합: 같은 프리셋·같은 대상이 12 FX 프레임(400 ms) 안에 다시 오면 **액센트**(파티클 ×0.4, 쉐이크·히트스톱·플래시 없음, 소리 유지).
+- 체인 강등: I3+ 타임라인이 도는 동안 시작한 I1–I2는 액센트. 동시 상한 I2 2개 · I1 4개(초과분 액센트).
+- I3/I4는 한 번에 하나: 엔진이 앞 큰 효과의 타임라인이 끝날 때까지(최대 27 FX 프레임) 시작을 미룬다(`serializeBig`).
+- 피치 래더: 1.5 s 안 연속 `cash-in`은 반음씩 상승(최대 +7), `cash-out`은 하강(최대 −4). 모든 게임 사운드 경로(프리셋 포함)에 적용.
+- 명소+독점 복합 프리셋은 규칙상 동시에 생기지 않는다(독점은 소유 변경 시점, 명소는 건설) — 엔진에는 남아 있고 연결은 안 함.
+
+### 14.5 스크린샷·필름스트립 (`e2e/vfx.spec.ts`)
+
+수작업 상태(사람 4명, 시드 7) + dev 훅 `dispatch`, **수동 클록으로 2틱마다 1장**. 시퀀스: 구매+파랑 독점(S) → 건설 L1·L2·L3·
+명소 L4(E) → 통행료(N이 W의 호텔에) → 인수+빨강 독점(N) → 명소(W) → 허브 승리(W). 1600×1000 전부, 800×450은 명소(W) 제외.
+
+- 필름스트립: `docs/assets/vfx-ingame/<장면>-<W>x<H>.png` (영역 = 그 장면 효과의 캔버스 영역)
+- 가장 붐비는 프레임: `e2e/__screenshots__/vfx-<장면>-<W>x<H>.png`
+- 각 장면: 콘솔 에러 0, 라이브 파티클 > 0(피크 18–121, ≤ 300), 끝나면 캔버스 hidden · `ticking=false` · `activeTicks()=0`.
+- 추가 테스트: reduced motion(캔버스 0개, `.bm-hl` 정적 표식, 상태 적용), 효과(클로즈업+베일) 도중 프롬프트 버튼 클릭 가능,
+  피날레 중 탭 → 엔진 유휴까지 404–431 ms(≤ 500).
+
+### 14.6 성능 (`npm run perf -- --full --unique`, 원자료 `docs/assets/perf-fx.json`)
+
+`fx` 페이즈: 사람 4명 게임(굴림 대기)에서 dev 훅으로 최악 연쇄(통행료 XL → 인수 → 명소+독점 → 파산 → 허브 승리)를 워밍업 1회 뒤 재생.
+
+| 결과 | 게이트 | 값 |
+|---|---|---|
+| PASS | F1 FX 후 유휴 0 (500 ms 뒤 10 s) | Layout/Paint/Raster/style/rAF/timer/layerPainted 0, task 2 ms, 캔버스 hidden, 클록 콜백 0 |
+| PASS | F2 라이브 파티클 ≤ 300 | 피크 117, 드롭 0 |
+| PASS | F3 레이어 ≤ 20 · 메모리 ≤ 100 MB | 16개, 98.2 MB (루트 24.4 + 메뉴 스쿼시 24.4 + 캔버스 1488×1000 22.7 + 토큰 14.4 + 스테이지 7.5 …) |
+| PASS | F4 표시 ≤ 34 fps · 고유 ≥ 24 (스로틀 없음) | 29.2 / 28.3 (4×: 30.5) |
+| PASS | F5 rAF p95 ≤ 33 ms (4×) | 16.8 ms (p99 33.3) |
+| **FAIL** | F6 메인 스레드 ≤ 150 ms/s (4×) | 380.8 ms/s — **같은 측정의 4× CPU 데모 게임 자체가 332.9 ms/s**. 150은 데모 페이지 벤치 기준이라 실제 게임(레이어 16개의 커밋·스타일)에는 맞지 않는다. 가장 큰 항목은 Commit(소프트웨어 캔버스 복사) |
+| PASS | F7 20회 반복 | 힙 2.9 → 3.0 MB, DOM 1617 → 1617, 캔버스 1 |
+| PASS | F8 아틀라스 | 287.1 KB |
+| PASS | F9 부팅 | 407 ms |
+| PASS | F10 피날레 스킵 | 420 ms |
+
+기존 게이트(같은 실행): A 31.5 / 57.7 fps PASS, B 유휴 0(게임·타이틀·결과, 장식 루프) 전부 PASS, 레이어 피크 19 · 메모리
+97.9 MB PASS, 마운트 65.6 ms, 부팅 407 ms, DOM 상한 PASS. **회귀**: C p99 16.8 → 33.4 ms, "33 ms 초과" 22프레임, Paint 22/s(> 20).
+원인은 FX 자체(4× CPU 데모 60 s × 3회, 20 ms 초과 프레임: FX 끔 48–59 · 0.9 MP 122–145 · **현재 0.5 MP + 착지 먼지 79–100** ·
+0.3 MP 74–88). 연동 전 코드도 이 VM에서 20 ms 초과가 31–64/분으로 p99 문턱(≈35/분) 근처였다. Paint는 캔버스가 보이거나
+크기가 바뀔 때 문서 레이어 재기록(연동 전 18.3/s, FX 없음 20.2/s, 현재 22–23/s).
+
+### 14.7 남은 것 / 거친 부분
+
+- **4× p99·Paint/s·F6 미달**(14.6). 다음 후보: 캔버스를 격자 단위로 여유 있게 키워 크기 변경 줄이기, 효과가 없는 프레임의
+  업로드 생략, 테이블 전체 효과(통행료·인수: 패널→패널 코인)의 영역을 두 개 캔버스로 나누기(레이어 +1), 실기기(GPU 합성)에서는
+  복사 비용이 다르므로 §10.4 A/B(`?dev=1&fxmp=…&fxsw=0&fxq=low`)로 결정.
+- 쉐이크는 FX 레이어만 흔든다(보드·패널은 고정) — 레이어 예산 때문. 실기기에서 부족하면 보드 쉐이크를 I3에만 되살리는 A/B.
+- 스포트라이트는 스테이지 안만 어둡게 한다(칸은 밝은 채) — 전체 화면 베일은 25 MB 레이어.
+- reduced motion: 엔진 규칙대로 타임라인의 첫 sfx/햅틱만 — 건설은 첫 소리가 납품 `cash-out`이라 `build` 소리가 안 난다(`rm`
+  표시를 프리셋에 추가하면 해결).
+- 필름스트립 PNG 17장 8.5 MB. 클로즈업 카드는 스테이지 중앙이라 캔버스 영역으로 자른 스트립에는 안 보이고 전체 화면
+  스크린샷(`e2e/__screenshots__/vfx-build4-*`, `vfx-landmark-W-*`)에서 보인다.
+- "앱 설정: 애니메이션 줄이기" 토글 UI는 없음(`setReducedMotion()`만 준비).

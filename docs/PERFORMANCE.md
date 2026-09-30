@@ -40,6 +40,37 @@
 | 스타일 재계산/s | 28.9 | 28.9 |
 | rAF 콜백/s | 26.6 | 24.1 |
 
+### 1.1 VFX 연동 후 (`npm run perf -- --full --unique`, 2026-09-30, 원자료 `docs/assets/perf-fx.json`)
+
+캔버스 VFX 엔진을 게임에 연결한 뒤(설계·결과 `docs/VFX.md` §14) 같은 명령을 다시 돌린 결과. 새 `fx` 페이즈(F1–F10) 포함 **24/28**.
+
+| 결과 | 게이트 | 연동 전(위 표) | 연동 후 |
+|---|---|---|---|
+| PASS | A 절전 ON 26–34 fps / OFF ≥ 55 | 30.6 / 58.0 | 31.5 / 57.7 (고유 29.9 / 52.2) |
+| PASS | B 유휴 0 — 게임·타이틀·결과 + 장식 루프 | 전부 PASS | 전부 PASS (task 3 / 3 / 7 ms) |
+| **FAIL** | C 프레임 p99 ≤ 20 ms (4×) | 16.8 | 33.4 |
+| FAIL | C 33 ms 초과 0 (4×) | 7 | 22 |
+| PASS | C 마운트 ≤ 100 ms | 58.9 | 65.6 |
+| PASS | C 피크 레이어 ≤ 20 / 중앙값 ≤ 25 | 18 / 12 | 19 / 12 |
+| PASS | C 피크 레이어 메모리 ≤ 100 MB | 97 | 97.9 |
+| **FAIL** | C Paint ≤ 20/s (4×) | 17.2 | 22 |
+| PASS | C 강제 레이아웃 ≤ 50 ms | 9.1 | 13.9 |
+| PASS | C 부팅 ≤ 1.5 s | 367 | 407 |
+| PASS | C DOM 상한 | 1.12 | 1.10 (1,706–1,869) |
+| PASS | F1 FX 후 유휴 0 · F2 파티클 ≤ 300 · F3 레이어 ≤ 20 & ≤ 100 MB · F4 ≤ 34 fps & 고유 ≥ 24 · F5 rAF p95 ≤ 33 ms | — | task 2 ms · 117 · 16개 98.2 MB · 29.2 / 28.3 · 16.8 ms |
+| **FAIL** | F6 FX 창 메인 스레드 ≤ 150 ms/s (4×) | — | 380.8 (4× CPU 데모 게임 자체 332.9) |
+| PASS | F7 누수 · F8 아틀라스 · F9 부팅 · F10 스킵 ≤ 500 ms | — | +0.1 MB / DOM +0 · 287 KB · 407 ms · 420 ms |
+
+- **p99/33 ms 초과/Paint 회귀는 FX 비용**이다(4× CPU 데모 60 s × 3회, 20 ms 초과 프레임 수: 연동 전 코드 31–64/분, FX 끔 48–59,
+  백킹 0.9 MP 122–145, **채택(0.5 MP + 착지 홉만 먼지) 79–100**, 0.3 MP 74–88). 소프트웨어 캔버스는 매 프레임 백킹 전체를
+  합성기로 복사하므로(Commit +96 ms/s @4×) 백킹 크기가 효과의 주 비용이다. Paint는 캔버스가 나타나거나 크기가 바뀔 때마다
+  문서 레이어가 다시 기록되는 것(연동 전 18.3/s → FX 없음 20.2 → 22). 개선 후보는 `docs/VFX.md` §14.7.
+- 레이어 메모리를 100 MB 안에 두려고 바꾼 것: 스포트라이트 = 스테이지 안 정적 베일(전체 화면 페이드 레이어 25 MB 제거),
+  쉐이크 = `.fx-layer`만(`.table` 33 MB / `.board` 27 MB 레이어 제거), 보드 SVG 팝·줌펀치 = `transform` 속성 트윈(CSS 애니메이션은
+  보드를 합성시켜 마크 레이어 +14 MB), 캔버스 영역 축소(refit)·재사용 조건 70 %·승리 영역 제한.
+- `fx` 페이즈 측정 세부: F4는 스로틀 없이(4×에서는 스크린캐스트가 30장/s를 못 보냄), F5/F6는 추적·스크린캐스트 없는 별도 재생,
+  F1의 task는 LayerTree 에이전트 없는 창(에이전트를 다시 켜는 것만으로 4×에서 ~110 ms — 하네스 비용).
+
 ## 2. 측정 방법론
 
 - **환경**: Playwright + Chromium 141 헤드리스(소프트웨어 합성), 1600×1000 뷰포트, DPR 2, CDP CPU 스로틀 4×
@@ -205,7 +236,8 @@
 
 ```sh
 npm run perf                       # 빌드 + 게이트(boot, idle, cap, play, layers, mount) ≈ 5분, PASS/FAIL 표 출력
-npm run perf -- --full --unique    # + 게임 전체 DOM, 스크린캐스트 고유 프레임
+npm run perf -- --full --unique    # + 게임 전체 DOM, 스크린캐스트 고유 프레임 (기본 페이즈에 VFX `fx` = F1–F10 포함)
+node scripts/perf.mjs --phases fx  # VFX 게이트만 (먼저 `npx vite build`, 약 3분)
 node scripts/perf.mjs --phases idle,cap --json out.json   # 일부만 (먼저 `npx vite build`)
 npm run perf:render                # 레이어별 상세 보고서 (docs/assets/perf-render-baseline.json 형식)
 node scripts/perf-render.mjs --out docs/assets/perf-render-after.json   # 작업 후 보고서 갱신 (먼저 `npx vite build`)

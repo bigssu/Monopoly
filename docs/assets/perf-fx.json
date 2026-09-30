@@ -7,20 +7,20 @@
  ],
  "chromium": "141.0.7390.37",
  "boot": {
-  "medianTitleMountedMs": 221,
-  "medianTitlePaintedMs": 387,
+  "medianTitleMountedMs": 270,
+  "medianTitlePaintedMs": 407,
   "runs": [
    {
-    "titleMountedMs": 221,
-    "titlePaintedMs": 411
+    "titleMountedMs": 224,
+    "titlePaintedMs": 309
    },
    {
-    "titleMountedMs": 202,
-    "titlePaintedMs": 288
+    "titleMountedMs": 285,
+    "titlePaintedMs": 533
    },
    {
-    "titleMountedMs": 229,
-    "titlePaintedMs": 387
+    "titleMountedMs": 270,
+    "titlePaintedMs": 407
    }
   ]
  },
@@ -37,11 +37,11 @@
     "timers": 0,
     "drawFrames": 210,
     "layerPainted": 0,
-    "taskMs": 20,
+    "taskMs": 18,
     "pass": true
    },
    "calm": {
-    "sec": 10.001,
+    "sec": 10.002,
     "layout": 0,
     "layoutMaxMs": 0,
     "paint": 0,
@@ -51,7 +51,7 @@
     "timers": 0,
     "drawFrames": 0,
     "layerPainted": 0,
-    "taskMs": 1,
+    "taskMs": 3,
     "pass": true
    },
    "pass": true
@@ -63,16 +63,16 @@
     "layoutMaxMs": 0,
     "paint": 0,
     "raster": 0,
-    "style": 1,
+    "style": 0,
     "raf": 0,
     "timers": 0,
     "drawFrames": 211,
     "layerPainted": 0,
-    "taskMs": 140,
+    "taskMs": 128,
     "pass": true
    },
    "calm": {
-    "sec": 10.001,
+    "sec": 10.002,
     "layout": 0,
     "layoutMaxMs": 0,
     "paint": 0,
@@ -82,7 +82,7 @@
     "timers": 0,
     "drawFrames": 0,
     "layerPainted": 0,
-    "taskMs": 2,
+    "taskMs": 3,
     "pass": true
    },
    "pass": true
@@ -90,20 +90,20 @@
   "result": {
    "decorative": {
     "sec": 7.001,
-    "layout": 1,
-    "layoutMaxMs": 1.2,
-    "paint": 3,
-    "raster": 29,
-    "style": 44,
-    "raf": 88,
+    "layout": 0,
+    "layoutMaxMs": 0,
+    "paint": 0,
+    "raster": 0,
+    "style": 1,
+    "raf": 0,
     "timers": 0,
-    "drawFrames": 213,
-    "layerPainted": 38,
-    "taskMs": 497,
-    "pass": false
+    "drawFrames": 210,
+    "layerPainted": 0,
+    "taskMs": 22,
+    "pass": true
    },
    "calm": {
-    "sec": 10.001,
+    "sec": 10,
     "layout": 0,
     "layoutMaxMs": 0,
     "paint": 0,
@@ -113,41 +113,41 @@
     "timers": 0,
     "drawFrames": 0,
     "layerPainted": 0,
-    "taskMs": 2,
+    "taskMs": 7,
     "pass": true
    },
-   "pass": false
+   "pass": true
   },
-  "pass": false
+  "pass": true
  },
  "cap": {
   "seconds": 30,
   "on": {
-   "fps": 31.4,
-   "taskMsPerSec": 111.3,
-   "paintsPerSec": 29,
-   "rasterPerSec": 46.3,
-   "stylePerSec": 49.1,
-   "rafPerSec": 56.9
+   "fps": 31.5,
+   "taskMsPerSec": 101.8,
+   "paintsPerSec": 23.9,
+   "rasterPerSec": 47.3,
+   "stylePerSec": 43,
+   "rafPerSec": 50
   },
   "off": {
-   "fps": 58.2,
-   "taskMsPerSec": 117.5,
-   "paintsPerSec": 35.9,
-   "rasterPerSec": 52.5,
-   "stylePerSec": 49,
-   "rafPerSec": 56.2
+   "fps": 57.7,
+   "taskMsPerSec": 108,
+   "paintsPerSec": 28.2,
+   "rasterPerSec": 50.2,
+   "stylePerSec": 40.8,
+   "rafPerSec": 45.4
   },
   "pass": true
  },
  "unique": {
   "on": {
-   "framesPerSec": 32.2,
-   "uniquePerSec": 30.6
+   "framesPerSec": 31.7,
+   "uniquePerSec": 29.9
   },
   "off": {
-   "framesPerSec": 53.4,
-   "uniquePerSec": 50.7
+   "framesPerSec": 54,
+   "uniquePerSec": 52.2
   }
  },
  "play": {
@@ -160,65 +160,65 @@
   ],
   "domNodes": [
    1621,
-   1725
+   1731
   ],
   "frameTimes": {
-   "frames": 3506,
+   "frames": 3526,
    "p50": 16.7,
    "p95": 16.8,
    "p99": 33.4,
-   "max": 83,
-   "over20": 97,
+   "max": 67,
+   "over20": 79,
    "over33": 22,
-   "over33raw": 41,
+   "over33raw": 36,
    "over50": 7,
-   "longTasks": 14,
-   "longTaskMax": 80
+   "longTasks": 8,
+   "longTaskMax": 76
   }
  },
  "floor": {
-  "frames": 3581,
+  "frames": 3589,
   "p99": 16.8,
-  "max": 183,
+  "max": 50,
   "over20": 9,
-  "over33": 2
+  "over33": 3
  },
  "layers": {
   "seconds": 40,
-  "medianLayers": 13,
+  "medianLayers": 12,
   "peakLayers": 19,
   "peakLayerMemoryMB": 97.9,
-  "paintsPerSec": 27.6,
-  "rasterPerSec": 47.3,
-  "layoutMaxMs": 15
+  "paintsPerSec": 22,
+  "rasterPerSec": 46,
+  "layoutMaxMs": 13.9
  },
  "mount": {
-  "layoutMaxMs": 54.8,
+  "layoutMaxMs": 65.6,
   "runs": [
-   45.3,
-   54.8,
-   57.9
+   57.9,
+   65.6,
+   69.4
   ]
  },
  "fx": {
   "window": {
    "sec": 9.7,
-   "drawFps4x": 31.9,
-   "drawFps": 26.9,
-   "uniqueFps": 26.3,
-   "screencastFps": 27,
-   "taskMsPerSec": 464.7,
-   "playTaskMsPerSec": 413.8,
+   "drawFps4x": 30.5,
+   "drawFps": 29.2,
+   "uniqueFps": 28.3,
+   "screencastFps": 29.3,
+   "taskMsPerSec": 380.8,
+   "playTaskMsPerSec": 332.9,
    "paintsPerSec": 8.2,
-   "rasterPerSec": 14.6,
-   "layoutMaxMs": 3.4,
+   "rasterPerSec": 14.4,
+   "layoutMaxMs": 2.5,
    "raf": {
-    "frames": 559,
+    "frames": 569,
     "p50": 16.7,
     "p95": 16.8,
-    "p99": 33.4,
-    "max": 100,
-    "over34": 2
+    "p99": 33.3,
+    "max": 83,
+    "over34": 3
    },
    "peakLive": 117,
    "dropped": 0,
@@ -237,12 +237,12 @@
    ],
    "peakMemoryDuring": "takeoverStamp+landmark+monopoly canvas 1488x1000",
    "tick": {
-    "last": 0.10000000149011612,
-    "max": 38.69999999925494,
-    "avg": 2.03992932858505,
-    "p95": 5.300000190734863,
-    "n": 283,
-    "maxAt": 803,
+    "last": 0,
+    "max": 31,
+    "avg": 1.9031690141894448,
+    "p95": 4.599999904632568,
+    "n": 284,
+    "maxAt": 779,
     "maxFrames": 1
    },
    "canvas": {
@@ -251,14 +251,14 @@
     "y": 0,
     "w": 1594,
     "h": 1000,
-    "backingW": 1198,
-    "backingH": 751,
-    "scale": 0.7514102174784365
+    "backingW": 893,
+    "backingH": 560,
+    "scale": 0.5600681084232282
    },
    "tintCacheMB": 6.3
   },
   "idle": {
-   "sec": 10.001,
+   "sec": 10.002,
    "layout": 0,
    "layoutMaxMs": 0,
    "paint": 0,
@@ -268,13 +268,13 @@
    "timers": 0,
    "drawFrames": 0,
    "layerPainted": 0,
-   "taskMs": 93,
-   "taskMsWithLayerTreeAgent": 4,
+   "taskMs": 2,
+   "taskMsWithLayerTreeAgent": 111,
    "pass": true,
    "canvasHidden": true,
    "backing": [
-    1198,
-    751
+    893,
+    560
    ],
    "activeTicks": 0
   },
@@ -289,13 +289,13 @@
    ],
    "canvases": 1
   },
-  "skipMs": 404,
+  "skipMs": 420,
   "atlasKB": 287.1
  },
  "full": {
   "rounds": 9,
-  "minNodes": 1696,
-  "maxNodes": 1872,
+  "minNodes": 1706,
+  "maxNodes": 1869,
   "perRound": [
    [
     1,
@@ -303,27 +303,27 @@
    ],
    [
     2,
-    1696
+    1706
    ],
    [
     3,
-    1732
+    1745
    ],
    [
     4,
-    1746
+    1757
    ],
    [
     5,
-    1766
+    1786
    ],
    [
     6,
-    1796
+    1799
    ],
    [
     7,
-    1837
+    1836
    ],
    [
     8,
@@ -331,11 +331,11 @@
    ],
    [
     9,
-    1872
+    1869
    ],
    [
     9,
-    1859
+    1862
    ]
   ]
  },
@@ -343,17 +343,17 @@
   {
    "name": "A  presented fps, battery saver ON, no throttle: 26-34",
    "pass": true,
-   "value": "31.4 fps"
+   "value": "31.5 fps"
   },
   {
    "name": "A  presented fps, battery saver OFF, no throttle: >= 55",
    "pass": true,
-   "value": "58.2 fps"
+   "value": "57.7 fps"
   },
   {
    "name": "B  idle zero, game: 10 s calm window",
    "pass": true,
-   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 2 ms"
+   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 3 ms"
   },
   {
    "name": "B  decorative loops compositor-only, game",
@@ -363,7 +363,7 @@
   {
    "name": "B  idle zero, title: 10 s calm window",
    "pass": true,
-   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 1 ms"
+   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 3 ms"
   },
   {
    "name": "B  decorative loops compositor-only, title",
@@ -373,12 +373,12 @@
   {
    "name": "B  idle zero, result: 10 s calm window",
    "pass": true,
-   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 2 ms"
+   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 7 ms"
   },
   {
    "name": "B  decorative loops compositor-only, result",
-   "pass": false,
-   "value": "layout 1, paint 3, raster 29, layerPainted 38 (213 compositor frames)"
+   "pass": true,
+   "value": "layout 0, paint 0, raster 0, layerPainted 0 (210 compositor frames)"
   },
   {
    "name": "C  frame p99 <= 20 ms (4x, after the first 2 s)",
@@ -388,22 +388,22 @@
   {
    "name": "C  no frame > 33 ms (4x, after the first 2 s)",
    "pass": false,
-   "value": "22 frames > 2 vsyncs (max 83 ms; raw > 33.4 ms: 41)"
+   "value": "22 frames > 2 vsyncs (max 67 ms; raw > 33.4 ms: 36)"
   },
   {
    "name": "C  mount layout <= 100 ms (4x)",
    "pass": true,
-   "value": "54.8 ms"
+   "value": "65.6 ms"
   },
   {
    "name": "C  peak layers <= 20 (4x play)",
    "pass": true,
-   "value": "19 (median 13)"
+   "value": "19 (median 12)"
   },
   {
    "name": "C  median layers <= 25",
    "pass": true,
-   "value": "13"
+   "value": "12"
   },
   {
    "name": "C  peak layer memory <= 100 MB",
@@ -413,22 +413,22 @@
   {
    "name": "C  Paint <= 20/s (4x play)",
    "pass": false,
-   "value": "27.6/s"
+   "value": "22/s"
   },
   {
    "name": "C  no forced layout > 50 ms during play",
    "pass": true,
-   "value": "max Layout 15 ms"
+   "value": "max Layout 13.9 ms"
   },
   {
    "name": "C  boot to Title painted <= 1500 ms (4x)",
    "pass": true,
-   "value": "387 ms"
+   "value": "407 ms"
   },
   {
    "name": "F1 fx: idle zero after the effects (10 s window)",
    "pass": true,
-   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 93 ms; canvas hidden true, clock callbacks 0"
+   "value": "layout 0, paint 0, raster 0, style 0, rAF 0, timers 0, layerPainted 0, task 2 ms; canvas hidden true, clock callbacks 0"
   },
   {
    "name": "F2 fx: live particles <= 300",
@@ -443,17 +443,17 @@
   {
    "name": "F4 fx: presented fps <= 34, unique >= 24 (no throttle)",
    "pass": true,
-   "value": "26.9 fps presented, 26.3 unique (4x: 31.9 presented)"
+   "value": "29.2 fps presented, 28.3 unique (4x: 30.5 presented)"
   },
   {
    "name": "F5 fx: rAF interval p95 <= 33 ms (4x)",
    "pass": true,
-   "value": "p95 16.8 ms (p99 33.4, max 100, 2 > 2 vsyncs)"
+   "value": "p95 16.8 ms (p99 33.3, max 83, 3 > 2 vsyncs)"
   },
   {
    "name": "F6 fx: main-thread task <= 150 ms/s (4x)",
    "pass": false,
-   "value": "464.7 ms/s (the 4x CPU demo game itself: 413.8 ms/s)"
+   "value": "380.8 ms/s (the 4x CPU demo game itself: 332.9 ms/s)"
   },
   {
    "name": "F7 fx: 20 replays: heap +<= 5 MB, DOM +0, <= 1 canvas",
@@ -468,17 +468,17 @@
   {
    "name": "F9 fx: boot to Title <= 1500 ms (unchanged)",
    "pass": true,
-   "value": "387 ms"
+   "value": "407 ms"
   },
   {
    "name": "F10 fx: skipped finale idle <= 500 ms",
    "pass": true,
-   "value": "404 ms"
+   "value": "420 ms"
   },
   {
    "name": "C  DOM bounded over a full game (max/min <= 1.3)",
    "pass": true,
-   "value": "1696..1872 nodes over 9 rounds"
+   "value": "1706..1869 nodes over 9 rounds"
   }
  ]
 }
