@@ -2,6 +2,11 @@
 """
 Build the app's consolidated font subsets (docs/PERFORMANCE.md, "글꼴").
 
+Each face holds the UI's own characters PLUS all 2,350 Hangul syllables of KS X 1001 (the
+"complete" modern set used by virtually every Korean name), so a player name typed at Setup renders
+from the preloaded face without a late font swap. The remaining rare syllables (11,172 - 2,350) come
+from the lazily loaded full-family fallback slices.
+
 Google Fonts splits Korean fonts into ~100 `unicode-range` slices per family/weight. Blink pays
 for every slice whenever it resolves a new font (size/weight) and relayouts the whole document
 each time a slice finishes loading mid-game, which produced 200-700 ms layouts on a 4x-throttled
@@ -43,8 +48,21 @@ EXTRA_RANGES = [
 ]
 
 
+def ksx1001_syllables():
+    """The 2,350 precomposed Hangul syllables of KS X 1001 (EUC-KR rows 0xB0-0xC8)."""
+    out = set()
+    for hi in range(0xB0, 0xC9):
+        for lo in range(0xA1, 0xFF):
+            try:
+                out.add(ord(bytes([hi, lo]).decode('euc_kr')))
+            except UnicodeDecodeError:
+                pass
+    assert len(out) == 2350, len(out)
+    return out
+
+
 def app_chars():
-    chars = set()
+    chars = ksx1001_syllables()
     files = [os.path.join(ROOT, 'index.html')]
     for ext in ('ts', 'css'):
         files += glob.glob(os.path.join(ROOT, 'src', '**', f'*.{ext}'), recursive=True)

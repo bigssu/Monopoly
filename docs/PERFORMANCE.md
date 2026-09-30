@@ -63,3 +63,10 @@
 - **7단계** — 프레임 상한 정밀화: 격자 밖 프레임의 원인을 트레이스로 추적. (1) 새 합성 애니메이션의 `notifyCompositorAnimationStarted`
   왕복 커밋, (2) 메인 프레임 내용 활성화 지연과 합성기 계단식 펄스가 서로 다른 vsync에 그려지는 경우. CPU 턴의 패널 턴 링 펄스를
   사람 차례에만 두어(CPU 차례는 정적 글로우) 1× CPU 데모 기준 DrawFrame 34.6 → 31.8 /s, 고유 프레임(스크린캐스트 해시) 29.9 /s.
+- **8단계** — `scripts/perf.mjs`를 제품 책임자 게이트 그대로 재작성(PASS/FAIL 표 + 상한 on/off 비교표, `--full`, `--unique`,
+  미리보기 서버 프로세스 그룹 정리). 첫 실행: 17개 중 15개 통과(실패: 4× 프레임 p99 33.3 ms, 33 ms 초과 프레임 21개).
+  - Android: `FrameRatePlugin`(설정 토글 → 네이티브 즉시 반영), API 35+에서 WebView `setRequestedFrameRate(30f)`
+    (`Build.VERSION_CODES.VANILLA_ICE_CREAM` 가드, compileSdk 36). 로컬 SDK가 없어 API 스텁으로 javac 타입 검사만 수행.
+  - 글꼴: 서브셋 이후 추가된 UI 문자(절전 모드 문구의 "애/션/껴")가 서브셋에 없던 문제 발견 → 재생성. 서브셋에
+    KS X 1001 완성형 2,350자 포함(이름 입력 대부분을 선로딩 글꼴로), 나머지 음절은 기존 Google 분할 폴백(11,172자 전부)으로.
+    `src/ui/shell/__tests__/fonts.test.ts`가 둘 다 검사.

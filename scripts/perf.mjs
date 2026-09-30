@@ -1,32 +1,44 @@
 #!/usr/bin/env node
 /**
- * Runtime performance check for Lot & Roll on an emulated mid-range tablet
- * (CDP CPU throttling 4x, DPR 2, 1600x1000). See docs/PERFORMANCE.md.
+ * Performance gates for Lot & Roll (docs/PERFORMANCE.md). Prints a PASS/FAIL table against the
+ * product owner's acceptance criteria and a side-by-side of the 30 fps cap on vs off.
  *
- *   npm run perf                      # build + all phases (~3 min)
- *   node scripts/perf.mjs --phases boot,tap --throttle 4
- *   node scripts/perf.mjs --full      # also: DOM size across a whole 15-round game (unthrottled)
- *   node scripts/perf.mjs --json out.json
+ *   npm run perf                              # vite build + default phases (~5 min)
+ *   node scripts/perf.mjs --phases idle,cap   # a subset (after `npx vite build`)
+ *   node scripts/perf.mjs --full              # + DOM size over a whole game (unthrottled, ~3 min)
+ *   node scripts/perf.mjs --unique            # + unique presented frames via screencast hashing
+ *   node scripts/perf.mjs --json perf.json    # machine-readable results
  *
- * Phases
- *   boot   real path `/` → time until the Title screen is mounted and the splash starts hiding.
- *   play   `/?dev=1#game` (seeded 4-CPU demo) for --seconds: frame intervals (rAF), long tasks,
- *          heap after GC, DOM node count at start/end.
- *   tap    2-human game: press + release the roll button with the mouse; Event Timing duration
- *          (input → next paint) of pointerdown / pointerup.
- *   idle   criterion B ("zero idle load"): 4-human game waiting at the roll prompt (timer off),
- *          the Title and the Result screen; 10 s each (throttled): Layout / Paint / RasterTask /
- *          style recalcs / rAF callbacks / timer fires from a trace, LayerTree.layerPainted, and
- *          main-thread TaskDuration (Performance.getMetrics).
- *   cap    criterion A (frame budget): CPU demo game, NO throttle, battery saver on vs off:
- *          presented frames/s (compositor DrawFrame), main-thread task ms/s, paints/s, raster/s.
- *   full   (--full) whole game at 4x animation speed, no throttle: DOM nodes per round.
+ * Environment: emulated mid-range tablet = 1600x1000 viewport, DPR 2, CDP CPU throttling 4x
+ * (`--throttle`), except where a gate says "no throttle". Demo games are seeded, so runs are
+ * comparable. `scripts/perf-render.mjs` stays the detailed per-layer report.
  *
- * Needs the global Playwright (/opt/node22/lib/node_modules/playwright) + Chromium
- * (/opt/pw-browsers/chromium); override with PLAYWRIGHT_MODULE / CHROMIUM_PATH.
+ * Phases (default: boot,idle,cap,play,layers,mount)
+ *   boot    `/` → Title mounted and painted (median of 3), 4x.
+ *   idle    criterion B. Waiting for a human (4 humans, roll prompt, timer off), the Title and the
+ *           Result screen, 4x. Two windows each: "decorative" = the first seconds while the
+ *           perpetual decorative loops still run (they must be compositor-only: 0 Layout / Paint /
+ *           Raster / layerPainted), then "calm" = 10 s once they stopped (~10 s after the last
+ *           input, fx/ambient.ts): 0 Layout, 0 Paint, 0 RasterTask, <= 1 style recalc, no rAF, no
+ *           timer fires, 0 layerPainted, main-thread task time < 100 ms.
+ *   cap     criterion A. CPU demo game, NO throttle, battery saver on vs off: presented frames/s
+ *           (renderer DrawFrame), main-thread task ms/s, Paint/s, Raster/s, style/s, rAF/s.
+ *   play    CPU demo game, 4x, --seconds (default 60): rAF frame intervals after the first 2 s
+ *           (p50/p95/p99/max, frames > 33 ms), long tasks, DOM nodes, heap.
+ *   layers  CPU demo game, 4x, 40 s: GPU layers (LayerTree: median / peak count, peak memory =
+ *           sum of w*h*4*DPR^2 over drawing layers), Paint/s, RasterTask/s, max Layout (a forced
+ *           synchronous layout shows up as a long Layout).
+ *   mount   Title → game screen (4x): the longest single Layout while the game mounts.
+ *   full    (--full) a whole CPU game at 4x animation speed, no throttle: DOM nodes per round.
+ *   tap     (--phases tap) roll-button press/release input-to-paint (Event Timing), info only.
+ *
+ * Needs Playwright + Chromium: PLAYWRIGHT_MODULE / CHROMIUM_PATH, else the global install at
+ * /opt/node22/lib/node_modules/playwright and /opt/pw-browsers/chromium.
  */
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -43,33 +55,59 @@ const CFG = {
   url: opt('url', null),
   throttle: Number(opt('throttle', 4)),
   dpr: Number(opt('dpr', 2)),
-  seconds: Number(opt('seconds', 120)),
-  phases: String(opt('phases', 'boot,play,tap,idle,cap')).split(','),
-  capSeconds: Number(opt('cap-seconds', 40)),
-  full: !!opt('full', false),
+  seconds: Number(opt('seconds', 60)),
+  capSeconds: Number(opt('cap-seconds', 30)),
+  layerSeconds: Number(opt('layer-seconds', 40)),
+  phases: String(opt('phases', 'boot,idle,cap,play,layers,mount')).split(','),
   json: opt('json', null),
 };
-if (CFG.full && !CFG.phases.includes('full')) CFG.phases.push('full');
+if (opt('full', false) && !CFG.phases.includes('full')) CFG.phases.push('full');
+if (opt('unique', false) && !CFG.phases.includes('unique')) CFG.phases.push('unique');
 
-const PW = process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/node_modules/playwright/index.mjs';
-const { chromium } = await import(pathToFileURL(PW).href).then((m) => (m.chromium ? m : m.default));
-const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium';
+// ------------------------------------------------------------------------------------ setup
+async function loadChromium() {
+  const candidates = [process.env.PLAYWRIGHT_MODULE, '/opt/node22/lib/node_modules/playwright/index.mjs'].filter(Boolean);
+  for (const c of candidates) if (existsSync(c)) return (await import(pathToFileURL(c).href)).chromium;
+  const req = createRequire(resolve(ROOT, 'package.json'));
+  for (const m of ['playwright', 'playwright-core']) {
+    try {
+      return (await import(pathToFileURL(req.resolve(m)).href)).chromium;
+    } catch {
+      /* next */
+    }
+  }
+  throw new Error('Playwright not found: set PLAYWRIGHT_MODULE');
+}
+const chromium = await loadChromium();
+const CHROMIUM = process.env.CHROMIUM_PATH || (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
 let server = null;
 const base = CFG.url || `http://localhost:${CFG.port}`;
 if (!CFG.url) {
-  server = spawn('npx', ['vite', 'preview', '--port', String(CFG.port), '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
-  for (let i = 0; i < 60; i++) {
+  // Own process group, so the preview server dies with us (npx forks it).
+  server = spawn('npx', ['vite', 'preview', '--port', String(CFG.port), '--strictPort'], { cwd: ROOT, stdio: 'ignore', detached: true });
+  const kill = () => {
     try {
-      if ((await fetch(base + '/')).ok) break;
+      process.kill(-server.pid);
     } catch {
-      /* not up yet */
+      /* gone */
     }
-    await new Promise((r) => setTimeout(r, 250));
+  };
+  process.on('exit', kill);
+  process.on('SIGINT', () => process.exit(130));
+  let up = false;
+  for (let i = 0; i < 80 && !up; i++) {
+    try {
+      up = (await fetch(base + '/')).ok;
+    } catch {
+      await new Promise((r) => setTimeout(r, 250));
+    }
   }
+  if (!up) throw new Error(`preview server did not start on ${base} (run \`npx vite build\` first)`);
 }
 const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
-const out = { cpuThrottle: `${CFG.throttle}x`, dpr: CFG.dpr, viewport: [1600, 1000] };
+const out = { cpuThrottle: `${CFG.throttle}x`, dpr: CFG.dpr, viewport: [1600, 1000], chromium: browser.version() };
+const log = (...a) => console.error(...a);
 
 async function newPage(throttle = CFG.throttle) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: CFG.dpr });
@@ -78,8 +116,70 @@ async function newPage(throttle = CFG.throttle) {
   if (throttle > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
   return { ctx, page, cdp };
 }
-
+const onTitle = (page) => page.waitForFunction(() => window.__lotAndRoll && window.__lotAndRollShell && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 30000 });
 const nodes = (page) => page.evaluate(() => document.querySelectorAll('*').length);
+const r1 = (x) => Math.round(x * 10) / 10;
+
+// ------------------------------------------------------------------------------------ trace helper
+async function trace(page, cdp, fn, extra = []) {
+  const events = [];
+  const onData = (ev) => events.push(...ev.value);
+  cdp.on('Tracing.dataCollected', onData);
+  const done = new Promise((res) => cdp.once('Tracing.tracingComplete', res));
+  await cdp.send('Tracing.start', {
+    categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame', ...extra].join(','),
+    transferMode: 'ReportEvents',
+  });
+  const t0 = Date.now();
+  await fn();
+  const wall = (Date.now() - t0) / 1000;
+  await cdp.send('Tracing.end');
+  await done;
+  cdp.off('Tracing.dataCollected', onData);
+  const threads = new Map();
+  for (const e of events) if (e.ph === 'M' && e.name === 'thread_name') threads.set(`${e.pid}:${e.tid}`, e.args.name);
+  const key = (e) => `${e.pid}:${e.tid}`;
+  const mains = [...threads].filter(([, n]) => n === 'CrRendererMain').map(([k]) => k);
+  const busy = (k) => events.filter((e) => key(e) === k && (e.name === 'FunctionCall' || e.name === 'UpdateLayoutTree' || e.name === 'Layout')).length;
+  const main = mains.sort((a, b) => busy(b) - busy(a))[0];
+  const pid = main ? Number(main.split(':')[0]) : null;
+  const onMain = (e) => key(e) === main;
+  const inRenderer = (e) => e.pid === pid;
+  const complete = (e) => e.ph === 'X' || e.ph === 'B' || e.ph === 'I' || e.ph === 'i' || e.ph === 'n';
+  const pick = (name, where) => events.filter((e) => e.name === name && complete(e) && where(e));
+  const layouts = pick('Layout', onMain);
+  return {
+    sec: wall,
+    layout: layouts.length,
+    layoutMaxMs: r1(Math.max(0, ...layouts.map((e) => (e.dur || 0) / 1000))),
+    paint: pick('Paint', inRenderer).length,
+    raster: pick('RasterTask', inRenderer).length,
+    style: pick('UpdateLayoutTree', onMain).length,
+    raf: pick('FireAnimationFrame', onMain).length,
+    timers: pick('TimerFire', onMain).length,
+    drawFrames: pick('DrawFrame', inRenderer).length,
+  };
+}
+
+async function taskMs(cdp) {
+  const { metrics } = await cdp.send('Performance.getMetrics');
+  return (metrics.find((m) => m.name === 'TaskDuration')?.value ?? 0) * 1000;
+}
+
+/** A trace window + LayerTree repaint count + main-thread task time. */
+async function measureWindow(page, cdp, ms) {
+  await cdp.send('Performance.enable');
+  let painted = 0;
+  const onPaint = () => painted++;
+  cdp.on('LayerTree.layerPainted', onPaint);
+  await cdp.send('LayerTree.enable');
+  const t0 = await taskMs(cdp);
+  const tr = await trace(page, cdp, () => page.waitForTimeout(ms));
+  const task = (await taskMs(cdp)) - t0;
+  await cdp.send('LayerTree.disable').catch(() => {});
+  cdp.off('LayerTree.layerPainted', onPaint);
+  return { ...tr, layerPainted: painted, taskMs: Math.round(task) };
+}
 
 // ------------------------------------------------------------------------------------ boot
 if (CFG.phases.includes('boot')) {
@@ -89,59 +189,144 @@ if (CFG.phases.includes('boot')) {
     await page.addInitScript(() => {
       const w = window;
       w.__boot = {};
-      let sawSplash = false;
       new MutationObserver(() => {
-        const app = document.getElementById('app');
-        if (app?.dataset.screen === 'title' && !w.__boot.title) {
+        if (document.getElementById('app')?.dataset.screen === 'title' && !w.__boot.title) {
           w.__boot.title = performance.now();
-          // First frame that contains the Title (rAF → next task ≈ after that frame's paint).
+          // First frame containing the Title (rAF → next task ≈ after that frame's paint).
           requestAnimationFrame(() => setTimeout(() => (w.__boot.titlePainted = performance.now()), 0));
         }
-        const sp = document.getElementById('splash');
-        if (sp) sawSplash = true;
-        if (sawSplash && (!sp || sp.classList.contains('is-hidden')) && !w.__boot.splash) w.__boot.splash = performance.now();
-      }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-screen'] });
+      }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-screen'] });
     });
     await page.goto(base + '/');
-    await page.waitForFunction(() => window.__boot?.titlePainted && window.__boot?.splash, null, { timeout: 30000 });
-    await page.waitForTimeout(500);
-    runs.push(
-      await page.evaluate(() => {
-        const n = performance.getEntriesByType('navigation')[0];
-        const fcp = performance.getEntriesByType('paint').find((x) => x.name === 'first-contentful-paint');
-        const res = performance.getEntriesByType('resource');
-        const fonts = res.filter((r) => r.name.includes('.woff2'));
-        return {
-          titleMountedMs: Math.round(window.__boot.title),
-          titlePaintedMs: Math.round(window.__boot.titlePainted),
-          splashHideMs: Math.round(window.__boot.splash),
-          domContentLoadedMs: Math.round(n.domContentLoadedEventEnd),
-          fcpMs: Math.round(fcp?.startTime ?? -1),
-          fontFiles: fonts.length,
-          fontKB: Math.round(fonts.reduce((a, r) => a + (r.encodedBodySize || r.transferSize || 0), 0) / 1024),
-        };
-      }),
-    );
+    await page.waitForFunction(() => window.__boot?.titlePainted, null, { timeout: 30000 });
+    runs.push(await page.evaluate(() => ({ titleMountedMs: Math.round(window.__boot.title), titlePaintedMs: Math.round(window.__boot.titlePainted) })));
     await ctx.close();
   }
-  const med = (k) => [...runs.map((r) => r[k])].sort((a, b) => a - b)[1];
-  out.boot = { runs: runs.length, medianTitleMountedMs: med('titleMountedMs'), medianTitlePaintedMs: med('titlePaintedMs'), medianSplashHideMs: med('splashHideMs'), detail: runs };
-  console.error('boot', JSON.stringify(out.boot));
+  const med = (k) => runs.map((r) => r[k]).sort((a, b) => a - b)[1];
+  out.boot = { medianTitleMountedMs: med('titleMountedMs'), medianTitlePaintedMs: med('titlePaintedMs'), runs };
+  log('boot', JSON.stringify(out.boot));
 }
 
-// ------------------------------------------------------------------------------------ play
+// ------------------------------------------------------------------------------------ idle (B)
+const CALM_WAIT_MS = 12000; // decorative loops end ~10 s after the last input / their start
+const idleVerdict = (r) => r.layout === 0 && r.paint === 0 && r.raster === 0 && r.style <= 1 && r.raf === 0 && r.timers === 0 && r.layerPainted === 0 && r.taskMs < 100;
+const decoVerdict = (r) => r.layout === 0 && r.paint === 0 && r.raster === 0 && r.layerPainted === 0;
+async function idlePair(page, cdp, label) {
+  // Decorative window: from ~1.5 s after the screen settled until the loops stop.
+  const deco = await measureWindow(page, cdp, 7000);
+  deco.pass = decoVerdict(deco);
+  await page.waitForTimeout(Math.max(0, CALM_WAIT_MS - 1500 - 7000));
+  const calm = await measureWindow(page, cdp, 10000);
+  calm.pass = idleVerdict(calm);
+  log(`idle ${label}: decorative ${JSON.stringify(deco)}`);
+  log(`idle ${label}: calm       ${JSON.stringify(calm)}`);
+  return { decorative: deco, calm, pass: deco.pass && calm.pass };
+}
+if (CFG.phases.includes('idle')) {
+  out.idle = {};
+  {
+    const { ctx, page, cdp } = await newPage();
+    await page.goto(base + '/?dev=1');
+    await onTitle(page);
+    await page.waitForTimeout(1500);
+    out.idle.title = await idlePair(page, cdp, 'title');
+    await page.evaluate(() => {
+      window.__lotAndRoll.setPromptTimer(0);
+      window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, false), 11);
+    });
+    await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy() && document.querySelector('.roll-btn:not([disabled])'), null, { timeout: 60000 });
+    await page.waitForTimeout(1500);
+    out.idle.game = await idlePair(page, cdp, 'game (4 humans, roll prompt, timer off)');
+    await ctx.close();
+  }
+  {
+    const { ctx, page, cdp } = await newPage();
+    await page.goto(base + '/?dev=1');
+    await onTitle(page);
+    await page.evaluate(() => {
+      window.__lotAndRoll.setAnimSpeed(0);
+      window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(2, true), 5);
+    });
+    await page.waitForFunction(() => document.getElementById('app')?.dataset.screen === 'result', null, { timeout: 180000, polling: 250 });
+    await page.evaluate(() => window.__lotAndRoll.setAnimSpeed(1));
+    await page.waitForTimeout(1500);
+    out.idle.result = await idlePair(page, cdp, 'result');
+    await ctx.close();
+  }
+  out.idle.pass = ['title', 'game', 'result'].every((k) => out.idle[k].pass);
+}
+
+// ------------------------------------------------------------------------------------ cap (A)
+async function capRun(saver) {
+  const { ctx, page, cdp } = await newPage(1);
+  await page.goto(base + '/?dev=1');
+  await onTitle(page);
+  await page.evaluate((v) => window.__lotAndRollShell.prefs.set({ batterySaver: v }), saver);
+  await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
+  await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await cdp.send('Performance.enable');
+  const t0 = await taskMs(cdp);
+  const tr = await trace(page, cdp, () => page.waitForTimeout(CFG.capSeconds * 1000));
+  const task = (await taskMs(cdp)) - t0;
+  await ctx.close();
+  const per = (n) => r1(n / tr.sec);
+  return { fps: per(tr.drawFrames), taskMsPerSec: per(task), paintsPerSec: per(tr.paint), rasterPerSec: per(tr.raster), stylePerSec: per(tr.style), rafPerSec: per(tr.raf) };
+}
+if (CFG.phases.includes('cap')) {
+  const on = await capRun(true);
+  const off = await capRun(false);
+  out.cap = { seconds: CFG.capSeconds, on, off, pass: on.fps >= 26 && on.fps <= 34 && off.fps >= 55 };
+  log('cap', JSON.stringify(out.cap));
+}
+
+// ------------------------------------------------------------------------------------ unique frames (info)
+if (CFG.phases.includes('unique')) {
+  out.unique = {};
+  for (const saver of [true, false]) {
+    const { ctx, page, cdp } = await newPage(1);
+    await page.goto(base + '/?dev=1');
+    await onTitle(page);
+    await page.evaluate((v) => window.__lotAndRollShell.prefs.set({ batterySaver: v }), saver);
+    await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
+    await page.waitForTimeout(2000);
+    let frames = 0;
+    let unique = 0;
+    let last = '';
+    cdp.on('Page.screencastFrame', (f) => {
+      frames++;
+      const h = createHash('md5').update(f.data).digest('hex');
+      if (h !== last) unique++;
+      last = h;
+      cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {});
+    });
+    await cdp.send('Page.startScreencast', { format: 'png', maxWidth: 800, maxHeight: 500, everyNthFrame: 1 });
+    await page.waitForTimeout(20000);
+    await cdp.send('Page.stopScreencast');
+    out.unique[saver ? 'on' : 'off'] = { framesPerSec: r1(frames / 20), uniquePerSec: r1(unique / 20) };
+    await ctx.close();
+  }
+  log('unique', JSON.stringify(out.unique));
+}
+
+// ------------------------------------------------------------------------------------ play (frames)
 if (CFG.phases.includes('play')) {
   const { ctx, page, cdp } = await newPage();
-  const t0 = Date.now();
-  await page.goto(base + '/?dev=1#game');
-  await page.waitForFunction(() => window.__lotAndRoll && window.__lotAndRoll.getState(), null, { timeout: 30000 });
-  const bootToGameMs = Date.now() - t0;
+  await page.goto(base + '/?dev=1');
+  await onTitle(page);
   await page.evaluate(() => {
     window.__lt = [];
     window.__frames = [];
     new PerformanceObserver((l) => {
       for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration));
     }).observe({ entryTypes: ['longtask'] });
+  });
+  await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
+  await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
+  // Frame intervals from the first 2 s after the game is up are not counted (mount + first paint).
+  await page.waitForTimeout(2000);
+  await page.evaluate(() => {
+    window.__lt = [];
     let last = performance.now();
     const tick = (t) => {
       window.__frames.push(t - last);
@@ -149,26 +334,25 @@ if (CFG.phases.includes('play')) {
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-    window.__lotAndRoll.setAnimSpeed(1);
   });
   const heap0 = (await cdp.send('Runtime.getHeapUsage')).usedSize;
   const nodes0 = await nodes(page);
-  const start = Date.now();
-  while (Date.now() - start < CFG.seconds * 1000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < CFG.seconds * 1000) {
     await page.waitForTimeout(1000);
     const k = await page.evaluate(() => window.__lotAndRoll.getState()?.phase.kind);
     if (k === 'gameOver' || !k) break;
   }
   const st = await page.evaluate(() => {
     const s = window.__lotAndRoll.getState();
-    return { turns: s.turn, round: s.round, owned: s.properties.filter((p) => p && p.owner !== null).length };
+    return { turns: s?.turn, round: s?.round };
   });
   await cdp.send('HeapProfiler.collectGarbage');
   const heap1 = (await cdp.send('Runtime.getHeapUsage')).usedSize;
   const nodes1 = await nodes(page);
-  const frames = await page.evaluate(() => {
-    const f = window.__frames.slice(5).sort((a, b) => a - b);
-    const p = (q) => +f[Math.floor(f.length * q)].toFixed(1);
+  const f = await page.evaluate(() => {
+    const f = window.__frames.slice(1).sort((a, b) => a - b);
+    const p = (q) => +f[Math.min(f.length - 1, Math.floor(f.length * q))].toFixed(1);
     const lt = window.__lt;
     return {
       frames: f.length,
@@ -176,41 +360,120 @@ if (CFG.phases.includes('play')) {
       p95: p(0.95),
       p99: p(0.99),
       max: Math.round(f[f.length - 1]),
-      over33: f.filter((x) => x > 33).length,
+      over20: f.filter((x) => x > 20).length,
+      over33: f.filter((x) => x > 33.4).length,
       over50: f.filter((x) => x > 50).length,
-      over100: f.filter((x) => x > 100).length,
       longTasks: lt.length,
-      longTasksOver100: lt.filter((x) => x > 100).length,
       longTaskMax: Math.max(0, ...lt),
     };
   });
-  out.play = {
-    seconds: Math.round((Date.now() - start) / 1000),
-    bootToGameMs,
-    ...st,
-    heapMB: [+(heap0 / 1048576).toFixed(1), +(heap1 / 1048576).toFixed(1)],
-    domNodes: [nodes0, nodes1],
-    frameTimes: frames,
-  };
-  console.error('play', JSON.stringify(out.play));
+  out.play = { seconds: Math.round((Date.now() - t0) / 1000), ...st, heapMB: [r1(heap0 / 1048576), r1(heap1 / 1048576)], domNodes: [nodes0, nodes1], frameTimes: f };
+  log('play', JSON.stringify(out.play));
   await ctx.close();
 }
 
-// ------------------------------------------------------------------------------------ tap
+// ------------------------------------------------------------------------------------ layers (C)
+if (CFG.phases.includes('layers')) {
+  const { ctx, page, cdp } = await newPage();
+  await page.goto(base + '/?dev=1');
+  await onTitle(page);
+  await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
+  await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
+  await page.waitForTimeout(2500);
+  const counts = [];
+  let peak = 0;
+  let peakMB = 0;
+  const dev = CFG.dpr * CFG.dpr;
+  const onTree = (ev) => {
+    if (!ev.layers) return;
+    counts.push(ev.layers.length);
+    peak = Math.max(peak, ev.layers.length);
+    peakMB = Math.max(peakMB, ev.layers.reduce((a, l) => a + (l.drawsContent ? l.width * l.height * 4 * dev : 0), 0) / 1048576);
+  };
+  cdp.on('LayerTree.layerTreeDidChange', onTree);
+  await cdp.send('LayerTree.enable');
+  const tr = await trace(page, cdp, () => page.waitForTimeout(CFG.layerSeconds * 1000));
+  await cdp.send('LayerTree.disable').catch(() => {});
+  cdp.off('LayerTree.layerTreeDidChange', onTree);
+  const sorted = [...counts].sort((a, b) => a - b);
+  out.layers = {
+    seconds: r1(tr.sec),
+    medianLayers: sorted[sorted.length >> 1] ?? 0,
+    peakLayers: peak,
+    peakLayerMemoryMB: r1(peakMB),
+    paintsPerSec: r1(tr.paint / tr.sec),
+    rasterPerSec: r1(tr.raster / tr.sec),
+    layoutMaxMs: tr.layoutMaxMs,
+  };
+  log('layers', JSON.stringify(out.layers));
+  await ctx.close();
+}
+
+// ------------------------------------------------------------------------------------ mount
+if (CFG.phases.includes('mount')) {
+  const runs = [];
+  for (let i = 0; i < 3; i++) {
+    const { ctx, page, cdp } = await newPage();
+    await page.goto(base + '/?dev=1');
+    await onTitle(page);
+    await page.waitForTimeout(1000);
+    const tr = await trace(page, cdp, async () => {
+      await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, false), 11));
+      await page.waitForFunction(() => document.querySelector('.roll-btn'), null, { timeout: 30000 });
+      await page.waitForTimeout(1500);
+    });
+    runs.push(tr.layoutMaxMs);
+    await ctx.close();
+  }
+  out.mount = { layoutMaxMs: runs.sort((a, b) => a - b)[1], runs };
+  log('mount', JSON.stringify(out.mount));
+}
+
+// ------------------------------------------------------------------------------------ full game DOM
+if (CFG.phases.includes('full')) {
+  const { ctx, page } = await newPage(1);
+  await page.goto(base + '/?dev=1');
+  await onTitle(page);
+  await page.evaluate(() => {
+    window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929);
+    window.__lotAndRoll.setAnimSpeed(4);
+  });
+  await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
+  const snap = () =>
+    page.evaluate(() => {
+      const s = window.__lotAndRoll.getState();
+      return s ? { round: s.round, nodes: document.querySelectorAll('*').length, phase: s.phase.kind } : null;
+    });
+  const rows = [await snap()];
+  const t0 = Date.now();
+  while (Date.now() - t0 < 15 * 60 * 1000) {
+    await page.waitForTimeout(3000);
+    const s = await snap();
+    if (!s) break;
+    if (s.round !== rows[rows.length - 1].round || s.phase === 'gameOver') rows.push(s);
+    if (s.phase === 'gameOver') break;
+  }
+  const ns = rows.map((r) => r.nodes);
+  out.full = { rounds: rows[rows.length - 1].round, minNodes: Math.min(...ns), maxNodes: Math.max(...ns), perRound: rows.map((r) => [r.round, r.nodes]) };
+  log('full', JSON.stringify(out.full));
+  await ctx.close();
+}
+
+// ------------------------------------------------------------------------------------ tap (info)
 if (CFG.phases.includes('tap')) {
   const { ctx, page } = await newPage();
   await page.goto(base + '/?dev=1');
-  await page.waitForFunction(() => window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 30000 });
+  await onTitle(page);
   await page.evaluate(() => {
     window.__lotAndRoll.setPromptTimer(0);
     window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(2, false), 7);
   });
   const samples = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy(), null, { timeout: 60000 });
     const btn = page.locator('.roll-btn:not([disabled])');
     await btn.waitFor({ state: 'visible' });
-    await page.waitForTimeout(600); // let the prompt's entry animation finish
+    await page.waitForTimeout(600);
     const box = await btn.boundingBox();
     await page.evaluate(() => {
       window.__ev = [];
@@ -226,9 +489,8 @@ if (CFG.phases.includes('tap')) {
     await page.mouse.up();
     await page.waitForTimeout(1200);
     const ev = await page.evaluate(() => window.__ev);
-    const get = (n) => ev.find((e) => e.name === n)?.duration ?? 16; // below threshold = ≤ 16 ms
+    const get = (n) => ev.find((e) => e.name === n)?.duration ?? 16;
     samples.push({ pointerdown: get('pointerdown'), pointerup: get('pointerup') });
-    // Let the move finish and any follow-up prompt be answered by the CPU policy.
     for (let k = 0; k < 20; k++) {
       const s = await page.evaluate(() => ({ kind: window.__lotAndRoll.getState()?.phase.kind, busy: window.__lotAndRoll.isBusy() }));
       if (s.kind === 'preRoll' && !s.busy) break;
@@ -236,196 +498,59 @@ if (CFG.phases.includes('tap')) {
       await page.waitForTimeout(500);
     }
   }
-  const worst = (k) => Math.max(...samples.map((s) => s[k]));
-  out.tap = { samples, worstPointerdownMs: worst('pointerdown'), worstPointerupMs: worst('pointerup') };
-  console.error('tap', JSON.stringify(out.tap));
-  await ctx.close();
-}
-
-// ------------------------------------------------------------------------------------ trace helper
-async function traceWindow(page, cdp, ms, extraCategories = []) {
-  const events = [];
-  const onData = (ev) => events.push(...ev.value);
-  cdp.on('Tracing.dataCollected', onData);
-  const done = new Promise((res) => cdp.once('Tracing.tracingComplete', res));
-  await cdp.send('Tracing.start', {
-    categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline', 'disabled-by-default-devtools.timeline.frame', ...extraCategories].join(','),
-    transferMode: 'ReportEvents',
-  });
-  await page.waitForTimeout(ms);
-  await cdp.send('Tracing.end');
-  await done;
-  cdp.off('Tracing.dataCollected', onData);
-  const threads = new Map();
-  for (const e of events) if (e.ph === 'M' && e.name === 'thread_name') threads.set(`${e.pid}:${e.tid}`, e.args.name);
-  const procs = new Map();
-  for (const e of events) if (e.ph === 'M' && e.name === 'process_name') procs.set(e.pid, e.args.name);
-  const main = [...threads].find(([k, n]) => n === 'CrRendererMain' && events.some((e) => `${e.pid}:${e.tid}` === k && e.name === 'FunctionCall' || `${e.pid}:${e.tid}` === k && e.name === 'UpdateLayoutTree'))?.[0]
-    ?? [...threads].find(([, n]) => n === 'CrRendererMain')?.[0];
-  const rendererPid = main ? Number(main.split(':')[0]) : null;
-  const count = (name, where = () => true) => events.filter((e) => e.name === name && (e.ph === 'X' || e.ph === 'B' || e.ph === 'I' || e.ph === 'i' || e.ph === 'n') && where(e)).length;
-  const onMain = (e) => `${e.pid}:${e.tid}` === main;
-  const inRenderer = (e) => e.pid === rendererPid;
-  const ts = events.filter((e) => e.ts).map((e) => e.ts);
-  const sec = ts.length ? (Math.max(...ts) - Math.min(...ts)) / 1e6 : ms / 1000;
-  return {
-    sec,
-    layout: count('Layout', onMain),
-    paint: count('Paint', inRenderer),
-    raster: count('RasterTask', inRenderer),
-    style: count('UpdateLayoutTree', onMain),
-    raf: count('FireAnimationFrame', onMain),
-    timers: count('TimerFire', onMain),
-    drawFrames: count('DrawFrame', inRenderer),
-  };
-}
-
-async function taskMs(cdp) {
-  const { metrics } = await cdp.send('Performance.getMetrics');
-  return (metrics.find((m) => m.name === 'TaskDuration')?.value ?? 0) * 1000;
-}
-
-async function measureIdle(page, cdp, label) {
-  await cdp.send('Performance.enable');
-  let painted = 0;
-  const onPaint = () => painted++;
-  cdp.on('LayerTree.layerPainted', onPaint);
-  await cdp.send('LayerTree.enable');
-  const t0 = await taskMs(cdp);
-  const tr = await traceWindow(page, cdp, 10000);
-  const taskDelta = (await taskMs(cdp)) - t0;
-  await cdp.send('LayerTree.disable').catch(() => {});
-  cdp.off('LayerTree.layerPainted', onPaint);
-  const r = { ...tr, layerPainted: painted, taskMs: Math.round(taskDelta) };
-  r.pass = r.layout === 0 && r.paint === 0 && r.raster === 0 && r.style <= 1 && r.raf === 0 && r.timers === 0 && r.layerPainted === 0 && r.taskMs < 100;
-  console.error(`idle ${label}`, JSON.stringify(r));
-  return r;
-}
-
-// ------------------------------------------------------------------------------------ idle (B)
-if (CFG.phases.includes('idle')) {
-  out.idle = {};
-  {
-    const { ctx, page, cdp } = await newPage();
-    await page.goto(base + '/?dev=1');
-    await page.waitForFunction(() => window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 30000 });
-    await page.waitForTimeout(3000);
-    out.idle.title = await measureIdle(page, cdp, 'title');
-    await page.evaluate(() => {
-      window.__lotAndRoll.setPromptTimer(0);
-      window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, false), 11);
-    });
-    await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy() && document.querySelector('.roll-btn:not([disabled])'), null, { timeout: 60000 });
-    await page.waitForTimeout(3000);
-    out.idle.game = await measureIdle(page, cdp, 'game (4 humans, roll prompt, timer off)');
-    await ctx.close();
-  }
-  {
-    const { ctx, page, cdp } = await newPage();
-    await page.goto(base + '/?dev=1');
-    await page.waitForFunction(() => window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 30000 });
-    await page.evaluate(() => {
-      window.__lotAndRoll.setAnimSpeed(0);
-      window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(2, true), 5);
-    });
-    await page.waitForFunction(() => document.getElementById('app')?.dataset.screen === 'result', null, { timeout: 120000, polling: 250 });
-    await page.evaluate(() => window.__lotAndRoll.setAnimSpeed(1));
-    await page.waitForTimeout(3000);
-    out.idle.result = await measureIdle(page, cdp, 'result');
-    await ctx.close();
-  }
-  out.idle.pass = Object.values(out.idle).every((r) => r.pass);
-}
-
-// ------------------------------------------------------------------------------------ cap (A)
-if (CFG.phases.includes('cap')) {
-  const runCap = async (saver) => {
-    const { ctx, page, cdp } = await newPage(1);
-    await page.goto(base + '/?dev=1');
-    await page.waitForFunction(() => window.__lotAndRollShell && window.__lotAndRoll, null, { timeout: 30000 });
-    await page.evaluate((v) => window.__lotAndRollShell.prefs.set({ batterySaver: v }), saver);
-    await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
-    await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
-    await page.waitForTimeout(2000);
-    await cdp.send('Performance.enable');
-    const t0 = await taskMs(cdp);
-    const tr = await traceWindow(page, cdp, CFG.capSeconds * 1000);
-    const task = (await taskMs(cdp)) - t0;
-    await ctx.close();
-    return {
-      fps: +(tr.drawFrames / tr.sec).toFixed(1),
-      taskMsPerSec: +(task / tr.sec).toFixed(1),
-      paintsPerSec: +(tr.paint / tr.sec).toFixed(1),
-      rasterPerSec: +(tr.raster / tr.sec).toFixed(1),
-      stylePerSec: +(tr.style / tr.sec).toFixed(1),
-      rafPerSec: +(tr.raf / tr.sec).toFixed(1),
-    };
-  };
-  const on = await runCap(true);
-  const off = await runCap(false);
-  out.cap = { seconds: CFG.capSeconds, on, off, pass: on.fps >= 26 && on.fps <= 34 && off.fps >= 55 };
-  console.error('cap', JSON.stringify(out.cap));
-}
-
-// ------------------------------------------------------------------------------------ full game DOM
-if (CFG.phases.includes('full')) {
-  const { ctx, page } = await newPage(1);
-  await page.goto(base + '/?dev=1#game');
-  await page.waitForFunction(() => window.__lotAndRoll && window.__lotAndRoll.getState(), null, { timeout: 30000 });
-  await page.evaluate(() => window.__lotAndRoll.setAnimSpeed(4));
-  const snap = () =>
-    page.evaluate(() => {
-      const s = window.__lotAndRoll.getState();
-      if (!s) return null;
-      const svg = document.querySelector('.board-svg');
-      return {
-        round: s.round,
-        nodes: document.querySelectorAll('*').length,
-        boardSvg: svg ? svg.querySelectorAll('*').length : 0,
-        owned: s.properties.filter((p) => p && p.owner !== null).length,
-        phase: s.phase.kind,
-      };
-    });
-  const rows = [await snap()];
-  const t0 = Date.now();
-  while (Date.now() - t0 < 15 * 60 * 1000) {
-    await page.waitForTimeout(4000);
-    const s = await snap();
-    if (!s) break;
-    if (s.round !== rows[rows.length - 1].round || s.phase === 'gameOver') rows.push(s);
-    if (s.phase === 'gameOver') break;
-  }
-  const a = rows[0];
-  const b = rows[rows.length - 1];
-  out.full = {
-    rounds: b.round,
-    start: a,
-    end: b,
-    nonBoardGrowth: b.nodes - b.boardSvg - (a.nodes - a.boardSvg),
-    perRound: rows.map((r) => [r.round, r.nodes, r.boardSvg, r.owned]),
-  };
-  console.error('full', JSON.stringify({ start: a, end: b, nonBoardGrowth: out.full.nonBoardGrowth }));
+  out.tap = { samples };
+  log('tap', JSON.stringify(out.tap));
   await ctx.close();
 }
 
 await browser.close();
-server?.kill();
 
 // ------------------------------------------------------------------------------------ verdicts
-const verdicts = [];
-const check = (name, ok, detail) => verdicts.push({ name, pass: !!ok, detail });
-if (out.cap) check('A frame budget: 26-34 fps with battery saver, >= 55 without (no throttle)', out.cap.pass, `on ${out.cap.on.fps} fps, off ${out.cap.off.fps} fps`);
-if (out.idle) check('B zero idle load (game / title / result)', out.idle.pass, ['game', 'title', 'result'].map((k) => `${k}: ${out.idle[k]?.pass ? 'ok' : 'FAIL'}`).join(', '));
-if (out.boot) check('boot: Title painted <= 1500 ms (4x throttle)', out.boot.medianTitlePaintedMs <= 1500, `${out.boot.medianTitlePaintedMs} ms`);
+const rows = [];
+const gate = (name, pass, value) => rows.push({ name, pass: !!pass, value });
+if (out.cap) {
+  gate('A  presented fps, battery saver ON, no throttle: 26-34', out.cap.on.fps >= 26 && out.cap.on.fps <= 34, `${out.cap.on.fps} fps`);
+  gate('A  presented fps, battery saver OFF, no throttle: >= 55', out.cap.off.fps >= 55, `${out.cap.off.fps} fps`);
+}
+if (out.idle) {
+  for (const k of ['game', 'title', 'result']) {
+    const r = out.idle[k];
+    const c = r.calm;
+    gate(`B  idle zero, ${k}: 10 s calm window`, c.pass, `layout ${c.layout}, paint ${c.paint}, raster ${c.raster}, style ${c.style}, rAF ${c.raf}, timers ${c.timers}, layerPainted ${c.layerPainted}, task ${c.taskMs} ms`);
+    const d = r.decorative;
+    gate(`B  decorative loops compositor-only, ${k}`, d.pass, `layout ${d.layout}, paint ${d.paint}, raster ${d.raster}, layerPainted ${d.layerPainted} (${d.drawFrames} compositor frames)`);
+  }
+}
 if (out.play) {
   const f = out.play.frameTimes;
-  check('play: long tasks > 100 ms <= 3', f.longTasksOver100 <= 3, `${f.longTasksOver100} (max ${f.longTaskMax} ms)`);
-  check('play: frames > 50 ms <= 10', f.over50 <= 10, `${f.over50}`);
-  check('play: p99 frame <= 34 ms', f.p99 <= 34, `${f.p99} ms`);
+  gate('C  frame p99 <= 20 ms (4x, after the first 2 s)', f.p99 <= 20, `${f.p99} ms`);
+  gate('C  no frame > 33 ms (4x, after the first 2 s)', f.over33 === 0, `${f.over33} frames > 33 ms (max ${f.max} ms)`);
 }
-if (out.tap) check('tap: roll button input-to-paint < 100 ms', Math.max(out.tap.worstPointerdownMs, out.tap.worstPointerupMs) < 100, `down ${out.tap.worstPointerdownMs} ms, up ${out.tap.worstPointerupMs} ms`);
-out.verdicts = verdicts;
-for (const v of verdicts) console.error(`${v.pass ? 'PASS' : 'FAIL'}  ${v.name}  (${v.detail})`);
-const text = JSON.stringify(out, null, 1);
-if (CFG.json) writeFileSync(resolve(ROOT, CFG.json), text + '\n');
-console.log(text);
+if (out.mount) gate('C  mount layout <= 100 ms (4x)', out.mount.layoutMaxMs <= 100, `${out.mount.layoutMaxMs} ms`);
+if (out.layers) {
+  const L = out.layers;
+  gate('C  peak layers <= 20 (4x play)', L.peakLayers <= 20, `${L.peakLayers} (median ${L.medianLayers})`);
+  gate('C  median layers <= 25', L.medianLayers <= 25, `${L.medianLayers}`);
+  gate('C  peak layer memory <= 100 MB', L.peakLayerMemoryMB <= 100, `${L.peakLayerMemoryMB} MB`);
+  gate('C  Paint <= 20/s (4x play)', L.paintsPerSec <= 20, `${L.paintsPerSec}/s`);
+  gate('C  no forced layout > 50 ms during play', L.layoutMaxMs <= 50, `max Layout ${L.layoutMaxMs} ms`);
+}
+if (out.boot) gate('C  boot to Title painted <= 1500 ms (4x)', out.boot.medianTitlePaintedMs <= 1500, `${out.boot.medianTitlePaintedMs} ms`);
+if (out.full) gate('C  DOM bounded over a full game (max/min <= 1.3)', out.full.maxNodes / out.full.minNodes <= 1.3, `${out.full.minNodes}..${out.full.maxNodes} nodes over ${out.full.rounds} rounds`);
+out.gates = rows;
+
+const pad = (s, n) => String(s).padEnd(n);
+log('\n' + pad('RESULT', 7) + pad('GATE', 58) + 'VALUE');
+for (const r of rows) log(pad(r.pass ? 'PASS' : 'FAIL', 7) + pad(r.name, 58) + r.value);
+if (out.cap) {
+  log('\n30 fps cap (battery saver) ON vs OFF — CPU demo game, no throttle');
+  log(pad('', 22) + pad('ON', 12) + 'OFF');
+  for (const [k, label] of [['fps', 'presented frames/s'], ['taskMsPerSec', 'main-thread task ms/s'], ['paintsPerSec', 'Paint/s'], ['rasterPerSec', 'RasterTask/s'], ['stylePerSec', 'style recalcs/s'], ['rafPerSec', 'rAF callbacks/s']]) {
+    log(pad(label, 22) + pad(out.cap.on[k], 12) + out.cap.off[k]);
+  }
+}
+if (out.unique) log(`\nunique presented frames/s (screencast hash): ON ${out.unique.on.uniquePerSec}, OFF ${out.unique.off.uniquePerSec}`);
+const failed = rows.filter((r) => !r.pass).length;
+log(`\n${rows.length - failed}/${rows.length} gates passed`);
+if (CFG.json) writeFileSync(resolve(ROOT, CFG.json), JSON.stringify(out, null, 1) + '\n');
+process.exitCode = failed ? 1 : 0;

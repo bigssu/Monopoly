@@ -5,7 +5,7 @@
  * Android project setup (manifest orientation, immersive mode) is done by the packaging
  * step; this module only calls the JS APIs.
  */
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 
 export function isNative(): boolean {
@@ -56,6 +56,26 @@ export async function initNative(handlers: NativeHandlers): Promise<void> {
       })
       .catch((e) => console.warn('[native] app listeners failed', e)),
   ]);
+}
+
+interface FrameRatePlugin {
+  set(opts: { hz: number }): Promise<void>;
+}
+let frameRatePlugin: FrameRatePlugin | null = null;
+
+/**
+ * Ask the Android display for `hz` (30 = battery saver; 60 = no preference) — the app's own
+ * FrameRate plugin (android/.../FrameRatePlugin.java). No-op on the web or on an older native
+ * build without the plugin. Panels without a 30 Hz mode ignore the request (docs/PERFORMANCE.md).
+ */
+export async function setNativeFrameRate(hz: number): Promise<void> {
+  if (!isNative()) return;
+  try {
+    frameRatePlugin ??= registerPlugin<FrameRatePlugin>('FrameRate');
+    await frameRatePlugin.set({ hz });
+  } catch {
+    /* plugin missing */
+  }
 }
 
 export async function hideNativeSplash(): Promise<void> {
