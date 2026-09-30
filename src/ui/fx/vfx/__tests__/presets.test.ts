@@ -95,6 +95,7 @@ describe('presets: spawn totals within tier caps (VFX.md §6.1, §7.2b)', () => 
     ['puff', { at: { panel: 1 } }, 2],
     ['cometJump', { from: 3, to: 8, player: 0 }, 10],
     ['billRain', { player: 3, n: 6 }, 10],
+    ['confettiRain', { n: 60 }, 60],
   ];
   for (const [name, params, expected] of cases) {
     it(`${name} ${JSON.stringify(params)}`, () => {

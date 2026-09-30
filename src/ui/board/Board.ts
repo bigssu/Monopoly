@@ -870,7 +870,7 @@ export class Board {
   }
 
   /** Walk a token space-by-space along `path` (hop + squash & stretch). */
-  async hop(pid: PlayerId, path: readonly number[], backward = false): Promise<void> {
+  async hop(pid: PlayerId, path: readonly number[], backward = false, onLand?: (n: number) => void): Promise<void> {
     const tk = this.tokens.get(pid);
     if (!tk || path.length === 0) return;
     tk.moving = true;
@@ -906,6 +906,7 @@ export class Board {
           { duration: d, easing: 'linear' },
         ),
       ]);
+      onLand?.(n);
     }
     tk.moving = false;
     tk.root.classList.remove('is-moving');

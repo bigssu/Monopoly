@@ -11,8 +11,8 @@ import { go } from '@/ui/shell/nav';
 import { rotateStart } from '@/ui/shell/setupModel';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { Particles } from '@/ui/fx/particles';
-import { anim } from '@/ui/fx/time';
+import { createFx } from '@/ui/fx/vfx';
+import { anim, gridTimeout } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 
@@ -136,13 +136,30 @@ registerScreen('result', (root, { state }) => {
   });
   card.addEventListener('transitionend', () => card.classList.remove('is-turning'));
 
-  const particles = new Particles(fx);
+  // Confetti on the VFX canvas engine (one canvas, freed when the last piece lands: idle zero).
+  const vfx = createFx({
+    layer: fx,
+    getLayerRect: () => fx.getBoundingClientRect(),
+    getBoardRect: () => {
+      const r = fx.getBoundingClientRect();
+      const s = Math.min(r.width, r.height);
+      return { x: r.left + (r.width - s) / 2, y: r.top + (r.height - s) / 2, width: s, height: s };
+    },
+    getSpaceRect: () => ({ x: 0, y: 0, width: 0, height: 0 }),
+    getPanelRect: () => null,
+    getSeat: () => 'S',
+  });
   sfx.play('win');
   void anim(hero, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
     duration: 520,
     easing: 'cubic-bezier(.34,1.56,.64,1)',
   });
-  void particles.confetti(60);
+  // After the screen's entry (its layout settles first).
+  const cancelConfetti = gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
 
-  return () => stop();
+  return () => {
+    cancelConfetti();
+    vfx.dispose();
+    stop();
+  };
 });

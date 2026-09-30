@@ -1721,6 +1721,32 @@ export function billRain(p: BillRainParams, env: PresetEnv): Timeline {
   return b.build('billRain', 1, PRIORITY.misc, { panel: p.player });
 }
 
+export interface ConfettiRainParams {
+  /** Pieces (≤ 90). */
+  n?: number;
+}
+
+/**
+ * Screen-wide celebration (Result screen, replaces the old `particles.confetti`): two cannons at
+ * the bottom corners of the layer shoot confetti up and inward in two waves; gravity pulls it down (I2).
+ */
+export function confettiRain(p: ConfettiRainParams, env: PresetEnv): Timeline {
+  const b = new B(env);
+  const c = env.c;
+  const W = c.width;
+  const H = c.height;
+  const n = Math.min(90, p.n ?? 60);
+  const per = Math.max(1, Math.floor(n / 4));
+  for (const side of [-1, 1]) {
+    const q = { x: side < 0 ? W * 0.06 : W * 0.94, y: H * 0.98 };
+    const dir = side < 0 ? -62 : -118;
+    for (const f of [0, 9]) confetti(b, q, per, f, { dir, spread: 16, speed: [26, 38], g: [0, 16], drag: 0.95, colors: CONFETTI, life: [50, 66], stagger: 0.3 });
+  }
+  b.at(0, block());
+  b.bb.add(0, 0).add(W, H);
+  return b.build('confettiRain', 2, PRIORITY.victory, { stage: true });
+}
+
 /** Preset registry (name → builder). */
 export const PRESETS = {
   plotClaim,
@@ -1748,6 +1774,7 @@ export const PRESETS = {
   puff,
   cometJump,
   billRain,
+  confettiRain,
 } as const;
 
 export type PresetName = keyof typeof PRESETS;

@@ -125,7 +125,6 @@
   overflow: hidden;
 }
 /* One temporary canvas per particle effect (fx/particles.ts), sized to the effect's box. */
-.pt-canvas { position: absolute; display: block; pointer-events: none; }
 
 /* Portrait → rotate */
 .rotate-overlay { display: none; }

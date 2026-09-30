@@ -11,7 +11,6 @@ import { PlayerPanel } from '@/ui/panels/PlayerPanel';
 import { createFx, type FxHandle, type HighlightTarget } from '@/ui/fx/vfx';
 import { fxPolicy, PitchLadder } from '@/ui/fx/vfx/director';
 import { shakeAll } from '@/ui/fx/shake';
-import { Particles } from '@/ui/fx/particles';
 import { anim } from '@/ui/fx/time';
 import { sfx, type SfxName } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
@@ -30,8 +29,6 @@ export class GameView {
   readonly fx: HTMLElement;
   /** Canvas sprite/particle engine (docs/VFX.md, wiring: docs/VFX-WIRING.md). */
   readonly vfx: FxHandle;
-  /** Old canvas particles (removed once animate.ts is migrated to presets). */
-  readonly particles: Particles;
   private spot: HTMLElement;
   private spotOn = false;
   private ladder = new PitchLadder();
@@ -63,7 +60,6 @@ export class GameView {
     this.spot.hidden = true;
     // Under the canvas (the canvas is appended on the first play()).
     this.fx.append(this.spot);
-    this.particles = new Particles(this.fx);
     this.vfx = createFx({
       layer: this.fx,
       getLayerRect: () => this.fx.getBoundingClientRect(),
