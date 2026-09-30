@@ -41,7 +41,7 @@ export class PlayerPanel {
   private sig = '';
 
   constructor(readonly player: Player) {
-    this.el = h('div', { class: 'pp', 'data-seat': player.seat, 'data-pid': player.id });
+    this.el = h('div', { class: player.isCpu ? 'pp is-cpu' : 'pp', 'data-seat': player.seat, 'data-pid': player.id });
     setPlayerVars(this.el, player.colorId);
     const badge = h('span', { class: 'pp-tok', html: svg(player.tokenId) });
     this.rank = h('span', { class: 'pp-rank' });

@@ -42,7 +42,9 @@
 }
 .pp.is-turn::before { opacity: 0; }
 .pp.is-turn::after { opacity: 1; }
-.pp.is-turn .pp-card::before {
+/* The pulsing ring calls a HUMAN to act; a CPU's turn keeps the static glow (a compositor pulse
+   running under the CPU's dense main-thread updates cost ~2 extra presented frames/s). */
+.pp.is-turn:not(.is-cpu) .pp-card::before {
   content: '';
   position: absolute;
   inset: 0;
