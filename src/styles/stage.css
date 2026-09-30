@@ -1,6 +1,13 @@
 /* Stage: the rotating centre of the board. Sizes in --u; text never below 12px. */
 
-.stage { position: absolute; inset: 0; }
+.stage {
+  position: absolute;
+  inset: 0;
+  /* Paint containment: while the stage turns, its rotated square's corners would otherwise poke
+     ~40 px past the board into the seat panels' shadows, forcing both side panels into one
+     full-screen "overlap" GPU layer for the turn (docs/PERFORMANCE.md). */
+  contain: layout paint;
+}
 .stage-bg {
   position: absolute;
   inset: 0;
@@ -87,14 +94,15 @@
   align-items: center;
   justify-content: center;
   gap: calc(var(--u) * 0.3);
-  transition: opacity var(--t-med), transform var(--t-med) var(--ease-out);
+  /* No transition: animating the shrink promoted the dice area to a layer (and repainted it on
+     promotion and demotion) at every prompt; an instant transform change costs no paint. */
   pointer-events: none;
 }
 .stage.has-prompt .st-dice { transform: scale(0.92); }
 .stage.has-big .st-dice { display: none; }
 .stage.no-dice .st-dice > * { visibility: hidden; }
 .dice { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 0.35); }
-.dice-pair { display: flex; gap: calc(var(--u) * 1.3); }
+.dice-pair { position: relative; display: flex; gap: calc(var(--u) * 1.3); }
 .die {
   --ds: max(38px, calc(var(--u) * 3.3));
   width: var(--ds);
@@ -132,6 +140,9 @@
   pointer-events: none;
 }
 .face svg { width: 100%; height: 100%; display: block; }
+/* Rolling: Dice.ts draws both tumbling, bouncing dice into one canvas over the pair. */
+.dice-canvas { position: absolute; pointer-events: none; }
+.dice.is-rolling .die { visibility: hidden; }
 .dice.is-shaking .die { animation: lr-shake 110ms linear infinite; }
 .dice.is-shaking .die:nth-child(2) { animation-delay: -55ms; }
 @keyframes lr-shake {
@@ -148,6 +159,8 @@
   content: '';
   position: absolute;
   inset: 0;
+  /* Above the cube: an animated glow painted under the faces forced them into overlap layers. */
+  z-index: 1;
   border-radius: 22%;
   box-shadow: 0 0 calc(var(--u) * 0.8) calc(var(--u) * 0.12) #FFD66B;
   opacity: 0;
@@ -174,7 +187,6 @@
   display: none;
   font-weight: 800;
   color: var(--ink-3);
-  animation: lr-blink 1.2s ease-in-out infinite;
 }
 .st-thinking.is-on { display: block; }
 @keyframes lr-blink { 50% { opacity: 0.4; } }
@@ -298,6 +310,8 @@
 .lp-cell .lvl-land { width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); }
 .lp-cell.is-next { color: var(--ink); }
 .lp-cell.is-next .lvl-ico { animation: lr-bob 1.4s var(--ease-in-out) infinite; }
+/* CPU prompt cards are read, not operated: no perpetual decoration (each is a GPU layer). */
+.pcard.is-cpu .lvl-ico { animation: none; }
 .lp-arrow { width: calc(var(--u) * 1); height: calc(var(--u) * 1); color: var(--ink-3); }
 .lp-arrow svg { width: 100%; height: 100%; }
 @keyframes lr-bob { 50% { transform: translateY(-8%) scale(1.06); } }
@@ -337,7 +351,7 @@
 .pbtn:disabled { opacity: 0.42; cursor: default; }
 .pcard.is-cpu .pc-buttons { opacity: 0.75; }
 .pcard.is-cpu .pbtn:disabled { opacity: 0.55; }
-.pc-cpu { text-align: center; margin-top: calc(var(--u) * 0.35); font-weight: 800; color: var(--ink-3); animation: lr-blink 1.2s ease-in-out infinite; }
+.pc-cpu { text-align: center; margin-top: calc(var(--u) * 0.35); font-weight: 800; color: var(--ink-3); }
 
 /* Roll */
 .pc-roll {

@@ -54,8 +54,8 @@
 .bmark > svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .bmark rect { fill: none; }
 .bm-ring rect { stroke-width: 18; stroke-dasharray: 40 22; }
-.bm-ring { animation: lr-ring 1.3s ease-in-out infinite; }
-@keyframes lr-ring { 50% { opacity: 0.25; } }
+/* Static: a pulsing ring was the first GPU layer in the board's paint order, lifting the stage,
+   tokens and overlay above it onto "overlap" layers for as long as the warning stood. */
 .bm-pick rect { stroke: var(--brand); stroke-width: 8; }
 .bm-pick { animation: lr-pick 1s ease-in-out infinite; }
 @keyframes lr-pick { 50% { opacity: 0.35; } }
@@ -85,6 +85,8 @@
 
 .token {
   position: absolute;
+  left: 0;
+  top: 0;
   width: calc(var(--u) * 1.9);
   height: calc(var(--u) * 1.9);
   margin-left: calc(var(--u) * -0.95);

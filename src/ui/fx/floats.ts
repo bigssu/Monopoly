@@ -4,7 +4,7 @@
  */
 import type { Player, Seat } from '@/engine';
 import { t } from '@/i18n';
-import { anim, instant, sleep } from './time';
+import { instant, sleep } from './time';
 import { h, iconEl, SEAT_ANGLE, tokenBadge } from '@/ui/game/util';
 
 export async function edgeToast(
@@ -29,12 +29,8 @@ export async function edgeToast(
     host.append(el);
     return el;
   });
-  await Promise.all(
-    els.map((el) =>
-      anim(el, [{ opacity: 0, scale: '0.6' }, { opacity: 1, scale: '1' }], { duration: 280, easing: 'cubic-bezier(.34,1.56,.64,1)' }),
-    ),
-  );
-  await sleep(1100);
-  await Promise.all(els.map((el) => anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 250 })));
+  // Shown and removed without a fade: animating the four copies made four GPU layers at once
+  // (plus overlap layers), the worst moment of a turn for the layer budget (docs/PERFORMANCE.md).
+  await sleep(1630);
   els.forEach((el) => el.remove());
 }

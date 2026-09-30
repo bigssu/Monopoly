@@ -281,7 +281,9 @@ export class Board {
   }
 
   setSize(px: number): void {
+    if (px === this.px) return;
     this.px = px;
+    for (const tk of this.tokens.values()) this.setTokenXY(tk, tk.x, tk.y);
   }
 
   /** Board-unit → px scale. */
@@ -479,8 +481,9 @@ export class Board {
   private setTokenXY(tk: TokenEl, x: number, y: number): void {
     tk.x = x;
     tk.y = y;
-    tk.root.style.left = `${(x / VB) * 100}%`;
-    tk.root.style.top = `${(y / VB) * 100}%`;
+    // Positioned with the `translate` property, not left/top: moving a token is then a transform
+    // change (no repaint of the board's token layer, docs/PERFORMANCE.md).
+    tk.root.style.translate = `${Math.round(x * this.k * 100) / 100}px ${Math.round(y * this.k * 100) / 100}px`;
   }
 
   /** Put every resting token on its slot (FLIP-animated when it shifts). */
