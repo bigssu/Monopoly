@@ -8,7 +8,7 @@ import type { GameState, Player, Seat } from '@/engine';
 import { ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, instant, onFrame, sleep } from '@/ui/fx/time';
+import { anim, gridTimeout, instant, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 
@@ -234,10 +234,11 @@ export class Stage {
     if (iconId) el.append(iconEl(iconId, 'ico st-toast-ico'));
     el.append(h('span', { text }));
     this.noticeLayer.append(el);
-    // Real time (not the animation clock): it must stay readable even at test speeds.
-    await new Promise((r) => window.setTimeout(r, 1600));
+    // Real time (not the animation speed): it must stay readable even at test speeds. The DOM
+    // changes still land in budgeted frames (gridTimeout).
+    await new Promise<void>((r) => gridTimeout(r, 1600));
     el.classList.add('is-leaving');
-    await new Promise((r) => window.setTimeout(r, 260));
+    await new Promise<void>((r) => gridTimeout(r, 260));
     el.remove();
   }
 
