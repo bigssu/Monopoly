@@ -2,7 +2,7 @@
 
 .game,
 .result {
-  position: fixed;
+  position: absolute;
   inset: 0;
   overflow: hidden;
   background:
@@ -114,7 +114,7 @@
 
 /* Particles */
 .fx-layer {
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 40;

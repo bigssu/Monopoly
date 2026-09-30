@@ -21,7 +21,7 @@ import { currentScreen, showScreen } from '@/ui/router';
 import { exitApp, hideNativeSplash, initNative, isNative } from '@/ui/shell/capacitor';
 import { toast } from '@/ui/shell/dialog';
 import { handleBack } from '@/ui/shell/nav';
-import { calibrateFrameGrid, installCssAnimationQuantizer, setFrameRate } from '@/ui/fx/time';
+import { anim, calibrateFrameGrid, frameGrid, installCssAnimationQuantizer, onFrame, setFrameRate, sleep } from '@/ui/fx/time';
 import { installAmbientCalm, runningAmbient } from '@/ui/fx/ambient';
 import { clearSavedGame, loadSavedGame, SAVE_BACKUP_KEY, SAVE_KEY, saveGame } from '@/ui/shell/persist';
 import { prefs, PREFS_KEY, type Prefs } from '@/ui/shell/prefs';
@@ -123,6 +123,8 @@ async function boot(): Promise<void> {
       prefs,
       sfx,
       runningAmbient,
+      /** Animation clock primitives (perf experiments, scripts/perf.mjs). */
+      fx: { anim, onFrame, sleep, frameGrid },
       persist: { saveGame, loadSavedGame, clearSavedGame },
       /** Save a small sample game (for testing the Continue button). */
       makeSampleSave(players = 3, round = 6) {

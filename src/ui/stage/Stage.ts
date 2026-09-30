@@ -8,7 +8,7 @@ import type { GameState, Player, Seat } from '@/engine';
 import { ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, instant, sleep } from '@/ui/fx/time';
+import { anim, instant, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 
@@ -33,6 +33,7 @@ export class Stage {
   private tickId = 0;
   private countId = 0;
   private fitRaf = 0;
+  private stopFit: (() => void) | null = null;
   private cardDone: (() => void) | null = null;
 
   constructor() {
@@ -68,11 +69,12 @@ export class Stage {
     const from = this.angle;
     this.angle += delta;
     this.rot.style.transform = `rotate(${this.angle}deg)`;
-    // Smooth even with the 30 Hz frame budget: a stepped turn of the whole stage reads as judder.
+    // On the 30 Hz frame budget like everything else (a 60 Hz turn every turn change alone pushed
+    // the presented rate to ~36 fps, docs/PERFORMANCE.md); the ease-in-out keeps the stepped
+    // turn's largest per-frame step at ~11 degrees for a quarter turn.
     await anim(this.rot, [{ transform: `rotate(${from}deg)` }, { transform: `rotate(${this.angle}deg)` }], {
       duration: 420,
       easing: 'cubic-bezier(.65,0,.35,1)',
-      smooth: true,
     });
   }
 
@@ -169,9 +171,14 @@ export class Stage {
    */
   fitDice(): void {
     if (this.fitRaf) return;
-    this.fitRaf = requestAnimationFrame(() => {
+    // On the animation clock (a grid frame), not a bare rAF: the class it may toggle would
+    // otherwise present an extra frame between two budgeted ones.
+    this.fitRaf = 1;
+    this.stopFit = onFrame(() => {
       this.fitRaf = 0;
+      this.stopFit = null;
       this.measureDice();
+      return false;
     });
   }
 
@@ -348,7 +355,9 @@ export class Stage {
   }
 
   dispose(): void {
-    cancelAnimationFrame(this.fitRaf);
+    this.stopFit?.();
+    this.stopFit = null;
+    this.fitRaf = 0;
     this.clearTimer();
     this.dice.dispose();
   }

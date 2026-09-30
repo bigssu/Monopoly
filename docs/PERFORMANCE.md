@@ -39,3 +39,14 @@
 - **4단계** — 파티클(색종이/동전 비/동전 호)을 DOM 노드 + WAAPI(파티클마다 GPU 레이어, 동전 호 1회에 +8,
   색종이 +76)에서 **효과당 임시 `<canvas>` 1개**로 교체(`src/ui/fx/particles.ts`). 30 Hz 클럭에서 그리며,
   캔버스는 효과의 경계 상자 크기(전체 화면 색종이는 1× 해상도), 마지막 파티클이 끝나면 제거. 캔버스 갱신은 문서 Paint를 만들지 않음.
+- **5단계** — 레이어/프레임 정리:
+  - `html/body/#app/.game/.result/.fx-layer`의 `position: fixed` 제거(→ 100% 높이 + absolute). 겹친 전체화면 fixed 상자가
+    각각 뷰포트 크기 레이어 + 그 위 전체를 담는 "Overlap" 레이어(DPR 2에서 장당 24 MB)를 만들고 있었음. 대기 화면 6 → 5 레이어, 49 → 24 MB.
+  - 진입 애니메이션(screen-in, logo-in, words-in, menu-in, seat-in, step-in, dlg-pop, toast-in …)의 `fill: both` → `backwards`
+    (끝난 뒤에도 효과가 남아 레이어가 유지되던 문제). Title 레이어 23 → 19, 97 → 60 MB.
+  - Title 광선(`.title-rays`, 150vmin 정사각형) 90 s 회전 제거: 34 MB짜리 합성 레이어였음.
+  - 스테이지 회전도 30 Hz 격자 위로(`smooth: true` 제거), `fitDice`를 bare rAF → 공용 클럭,
+    끝난 애니메이션을 기다리던 코드가 시작한 CSS 전환도 같은 프레임에서 양자화(`requestCssSweep`),
+    클럭이 슬롯의 첫 vsync를 놓치면 다음 슬롯까지 대기(격자 밖 프레임 방지).
+  - 진단: 격자 밖(off-grid) DrawFrame의 대부분은 DOM 변경이 아니라 **래스터 지연**(메인 프레임 커밋이 다음 vsync에 활성화)임을
+    트레이스(`ActivateSyncTree`)로 확인 → Paint/래스터 감소가 곧 fps 상한 준수의 열쇠.

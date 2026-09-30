@@ -155,6 +155,9 @@ export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyfram
   return a.finished.then(
     () => {
       running.delete(a);
+      // Code awaiting this animation updates the DOM right now (the "update animations" step
+      // of this grid frame): quantize any CSS animation/transition it starts in this frame.
+      requestCssSweep();
     },
     () => {
       running.delete(a);
@@ -295,10 +298,14 @@ function clockLoop(now: number): void {
   const slot = slotOf(now);
   // Compositor-side stepped animations change value at the first vsync after each grid line.
   // Run JS updates in that same vsync: after a fresh start, wait for a slot's first vsync.
+  // A frame that is not the first vsync of its slot (the main thread missed that vsync, or the
+  // loop just started) waits for the next slot's first vsync: running there would present an
+  // extra frame between two grid frames. After a whole missed slot it runs anyway (no stall).
   let due: boolean;
+  const firstVsync = now - gridOffset - slot * p < vsync;
   if (fps >= 60 || skipping) due = true;
   else if (slot === lastSlot) due = false;
-  else due = !fresh || now - gridOffset - slot * p < vsync;
+  else due = firstVsync || (!fresh && slot - lastSlot >= 2);
   fresh = false;
   if (due) {
     lastSlot = slot;
@@ -337,6 +344,16 @@ function postTick(): void {
 }
 
 /**
+ * Sweep for new CSS animations/transitions in this frame's animation-frame callbacks (after the
+ * DOM changes made by promise continuations of finished animations, before the frame paints).
+ */
+function requestCssSweep(): void {
+  if (!cssQuantizer || fps >= 60 || typeof requestAnimationFrame !== 'function') return;
+  ticked = true;
+  if (!postRaf) postRaf = requestAnimationFrame(postTick);
+}
+
+/**
  * Register a JS animation step on the shared clock (called once per budgeted frame, on the same
  * grid as the quantized animations). The single rAF loop runs only while at least one step is
  * registered. Returns an unregister function.
@@ -352,6 +369,11 @@ export function onFrame(fn: FrameTick): () => void {
       fresh = true;
     }
   };
+}
+
+/** Frame-grid parameters (perf diagnostics: scripts/perf.mjs classifies frames as on/off grid). */
+export function frameGrid(): { offset: number; period: number; vsync: number } {
+  return { offset: gridOffset, period: period(), vsync };
 }
 
 /** Number of registered JS animation steps (tests / perf checks). */

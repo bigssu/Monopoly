@@ -25,9 +25,12 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* html/body/#app are NOT position: fixed: stacked full-screen fixed boxes each become a
+   viewport-sized GPU layer (+ a full-screen "overlap" layer for everything painted above them,
+   24 MB each at DPR 2 — docs/PERFORMANCE.md). A 100% tall, overflow-hidden root is equivalent. */
 html, body {
-  position: fixed;
-  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -57,7 +60,7 @@ body {
 /* Faint felt weave on top of the gradient. */
 body::before {
   content: '';
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: .5;
@@ -86,7 +89,7 @@ h1, h2, h3, h4, .display, .num {
 /* ------------------------------------------------------------------ app root / screens */
 
 #app {
-  position: fixed;
+  position: absolute;
   inset: 0;
   overflow: hidden;
   isolation: isolate;
@@ -97,7 +100,7 @@ h1, h2, h3, h4, .display, .num {
   inset: 0;
   overflow: hidden;
   font-size: var(--shell-fs);
-  animation: screen-in var(--t-med) var(--ease-out) both;
+  animation: screen-in var(--t-med) var(--ease-out) backwards;
 }
 
 /* Snapshot of the previous screen, cross-faded out by src/ui/shell/nav.ts. */
@@ -241,7 +244,7 @@ h1, h2, h3, h4, .display, .num {
   /* No backdrop-filter: a full-screen blur re-filters everything behind the dialog on every
      frame of its fade (and of anything animating underneath). A slightly denser scrim instead. */
   background: rgba(8, 12, 20, .64);
-  animation: dlg-fade var(--t-med) var(--ease-out) both;
+  animation: dlg-fade var(--t-med) var(--ease-out) backwards;
 }
 .dlg-backdrop.is-closing { animation: dlg-fade-out var(--t-fast) linear both; }
 .dlg-backdrop.is-top { place-items: start center; padding-top: max(5vh, var(--safe-t)); }
@@ -258,7 +261,7 @@ h1, h2, h3, h4, .display, .num {
   color: var(--ink);
   background: linear-gradient(180deg, #FFFDF8, var(--bg-board));
   box-shadow: var(--sh-3), inset 0 0 0 1px rgba(255, 255, 255, .8);
-  animation: dlg-pop var(--t-slow) var(--ease-spring) both;
+  animation: dlg-pop var(--t-slow) var(--ease-spring) backwards;
 }
 .dlg-backdrop.is-closing .dlg { animation: dlg-pop-out var(--t-fast) var(--ease-in-out) both; }
 .dlg-title { font-size: 1.6em; color: var(--ink); }
@@ -291,7 +294,7 @@ h1, h2, h3, h4, .display, .num {
   font-size: 1.1em;
   background: rgba(15, 22, 33, .92);
   box-shadow: var(--sh-2), inset 0 0 0 1px rgba(255, 255, 255, .1);
-  animation: toast-in var(--t-slow) var(--ease-spring) both;
+  animation: toast-in var(--t-slow) var(--ease-spring) backwards;
 }
 .toast.is-out { animation: toast-out var(--t-med) var(--ease-in-out) both; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(.9); } }

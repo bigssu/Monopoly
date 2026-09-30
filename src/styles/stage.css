@@ -653,7 +653,7 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 .st-notice {
   font-size: max(12px, calc(var(--u) * 0.66));
   padding: calc(var(--u) * 0.2) calc(var(--u) * 0.7) calc(var(--u) * 0.2) calc(var(--u) * 0.35);
-  animation: lr-notice-in 260ms var(--ease-out) both;
+  animation: lr-notice-in 260ms var(--ease-out) backwards;
   transition: opacity 240ms ease, transform 240ms ease;
 }
 .st-notice .st-toast-ico { width: 1.5em; height: 1.5em; min-width: 18px; min-height: 18px; }
