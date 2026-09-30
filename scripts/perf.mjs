@@ -554,4 +554,6 @@ if (out.unique) log(`\nunique presented frames/s (screencast hash): ON ${out.uni
 const failed = rows.filter((r) => !r.pass).length;
 log(`\n${rows.length - failed}/${rows.length} gates passed`);
 if (CFG.json) writeFileSync(resolve(ROOT, CFG.json), JSON.stringify(out, null, 1) + '\n');
-process.exitCode = failed ? 1 : 0;
+// Exit explicitly: the (detached) preview server's child handle would keep the loop alive; the
+// 'exit' handler kills its process group.
+process.exit(failed ? 1 : 0);
