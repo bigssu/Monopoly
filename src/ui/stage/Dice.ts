@@ -1,10 +1,11 @@
 /**
- * Two CSS-3D dice. `roll(a, b)` tumbles them (~900 ms) onto the given faces;
+ * Two dice (an orthographically projected cube drawn with 2D transforms, see `cubeFaces`). `roll(a, b)` tumbles them (~900 ms) onto the given faces;
  * `shake(on)` jitters them while the player holds the roll button.
  */
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, instant } from '@/ui/fx/time';
+import { anim, D, instant, isSkipping, onFrame } from '@/ui/fx/time';
+import { cubicBezier } from '@/ui/fx/quantize';
 import { h, svg } from '@/ui/game/util';
 
 const PIPS: Record<number, Array<[number, number]>> = {
@@ -59,45 +60,147 @@ const FINAL: Record<number, [number, number]> = {
   2: [90, 0],
 };
 
+// --- Orthographic cube projection -------------------------------------------------------------
+// The cube is drawn with 2D `matrix()` transforms on its six faces (hidden when facing away)
+// instead of CSS preserve-3d: a 3D-rendering context composites every face into its own GPU
+// layer (14 layers for two dice, docs/PERFORMANCE.md) while 2D transforms are plain paint.
+// While rolling, the orientation is stepped on the shared 30 Hz animation clock.
+
+type M3 = [number, number, number, number, number, number, number, number, number];
+const RAD = Math.PI / 180;
+/** CSS rotateX / rotateY as row-major 3×3 matrices. */
+function rotX(deg: number): M3 {
+  const c = Math.cos(deg * RAD);
+  const s = Math.sin(deg * RAD);
+  return [1, 0, 0, 0, c, -s, 0, s, c];
+}
+function rotY(deg: number): M3 {
+  const c = Math.cos(deg * RAD);
+  const s = Math.sin(deg * RAD);
+  return [c, 0, s, 0, 1, 0, -s, 0, c];
+}
+function mul(a: M3, b: M3): M3 {
+  const o = new Array(9).fill(0) as M3;
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let k = 0; k < 3; k++) o[r * 3 + c] = o[r * 3 + c]! + a[r * 3 + k]! * b[k * 3 + c]!;
+  return o;
+}
+/** Each face's own orientation on the cube (same as the former CSS face transforms). */
+const FACE_ROT: Record<number, M3> = {
+  1: rotY(0),
+  6: rotY(180),
+  3: rotY(90),
+  4: rotY(-90),
+  5: rotX(90),
+  2: rotX(-90),
+};
+const r4 = (x: number): number => Math.round(x * 1e4) / 1e4;
+
+/** 2D transform + visibility + shading of every face for the cube orientation (rx, ry). */
+export function cubeFaces(rx: number, ry: number): { n: number; visible: boolean; transform: string; shade: number }[] {
+  const cube = mul(rotX(rx), rotY(ry));
+  return [1, 2, 3, 4, 5, 6].map((n) => {
+    const a = mul(cube, FACE_ROT[n]!);
+    const nz = a[8];
+    // Face centre = A · (0, 0, size/2); expressed in units of the die size (--ds).
+    const tx = r4(a[2] / 2);
+    const ty = r4(a[5] / 2);
+    return {
+      n,
+      visible: nz > 0.02,
+      transform: `translate(calc(var(--ds) * ${tx}), calc(var(--ds) * ${ty})) matrix(${r4(a[0])}, ${r4(a[3])}, ${r4(a[1])}, ${r4(a[4])}, 0, 0)`,
+      shade: r4(Math.max(0, Math.min(1, 1 - nz)) * 0.14),
+    };
+  });
+}
+
+const ROLL_EASE = cubicBezier(0.18, 0.7, 0.3, 1);
+
 class Die {
   readonly el: HTMLElement;
   private cube: HTMLElement;
+  private faces: HTMLElement[] = [];
   private rx = 0;
   private ry = 0;
+  private stopTween: (() => void) | null = null;
   value = 1;
 
   constructor() {
     this.cube = h('div', { class: 'cube' });
-    for (const n of [1, 2, 3, 4, 5, 6]) this.cube.append(h('div', { class: `face f${n}`, html: faceSvg(n) }));
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      const f = h('div', { class: `face f${n}`, html: faceSvg(n) });
+      this.faces.push(f);
+      this.cube.append(f);
+    }
     this.el = h('div', { class: 'die' }, this.cube);
     this.set(1);
   }
 
+  /** Draw the cube at rotation (x, y) in degrees. */
+  private pose(x: number, y: number): void {
+    for (const f of cubeFaces(x, y)) {
+      const el = this.faces[f.n - 1]!;
+      el.style.visibility = f.visible ? '' : 'hidden';
+      if (!f.visible) continue;
+      el.style.transform = f.transform;
+      el.style.setProperty('--shade', String(f.shade));
+    }
+  }
+
   set(n: number): void {
+    this.stop();
     this.value = n;
     [this.rx, this.ry] = FINAL[n]!;
-    this.cube.style.transform = `rotateX(${this.rx - 18}deg) rotateY(${this.ry + 24}deg)`;
+    this.pose(this.rx - 18, this.ry + 24);
+  }
+
+  stop(): void {
+    this.stopTween?.();
+    this.stopTween = null;
   }
 
   async roll(n: number, delay: number, dir: number): Promise<void> {
+    this.stop();
     const [fx, fy] = FINAL[n]!;
     const spinsX = 360 * (2 + Math.floor(Math.random() * 2)) * dir;
     const spinsY = 360 * (1 + Math.floor(Math.random() * 2)) * -dir;
-    const from = `rotateX(${this.rx - 18}deg) rotateY(${this.ry + 24}deg)`;
-    const to = `rotateX(${fx - 18}deg) rotateY(${fy + 24}deg)`;
-    const mid = `rotateX(${fx - 18 + spinsX}deg) rotateY(${fy + 24 + spinsY}deg)`;
+    const x0 = this.rx - 18;
+    const y0 = this.ry + 24;
+    const x1 = fx - 18 + spinsX;
+    const y1 = fy + 24 + spinsY;
     this.value = n;
     this.rx = fx;
     this.ry = fy;
-    this.cube.style.transform = to;
-    if (instant()) return;
+    if (instant()) {
+      this.pose(fx - 18, fy + 24);
+      return;
+    }
+    const duration = D(900);
+    let elapsed = -D(delay);
+    let last = -1;
+    const spin = new Promise<void>((resolve) => {
+      const done = (): void => {
+        this.stopTween = null;
+        resolve();
+      };
+      const stopTick = onFrame((now) => {
+        if (last >= 0) elapsed += (now - last) * (isSkipping() ? 5 : 1);
+        last = now;
+        const t = Math.min(1, Math.max(0, elapsed / duration));
+        const e = ROLL_EASE(t);
+        this.pose(x0 + (x1 - x0) * e, y0 + (y1 - y0) * e);
+        if (t < 1) return true;
+        this.pose(fx - 18, fy + 24);
+        done();
+        return false;
+      });
+      this.stopTween = () => {
+        stopTick();
+        this.pose(fx - 18, fy + 24);
+        done();
+      };
+    });
     await Promise.all([
-      anim(this.cube, [{ transform: from }, { transform: mid }], {
-        duration: 900,
-        delay,
-        easing: 'cubic-bezier(.18,.7,.3,1)',
-        fill: 'backwards',
-      }),
+      spin,
       anim(
         this.el,
         [
@@ -169,5 +272,6 @@ export class Dice {
 
   dispose(): void {
     window.clearInterval(this.shakeTimer);
+    for (const d of this.dice) d.stop();
   }
 }
