@@ -18,7 +18,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, D, endSkip, gridTimeout, instant, onFrame, skip } from '@/ui/fx/time';
+import { animSpeed, D, endSkip, frame, instant, onFrame, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -44,7 +44,7 @@ export class GameController {
   private busy = false;
   private disposed = false;
   private paused = false;
-  /** Cancels the pending CPU move (a grid-aligned timeout, see fx/time `gridTimeout`). */
+  /** Cancels the pending CPU move (a plain timeout; its animation starts on the next grid frame). */
   private cancelCpu: () => void = () => {};
   /** Pending deferred prompt (see advance). */
   private cancelPrompt: (() => void) | null = null;
@@ -105,7 +105,7 @@ export class GameController {
   }
 
   /** Validate, reduce, persist, animate, continue. Resolves when the animations are done. */
-  async dispatch(action: Action): Promise<boolean> {
+  async dispatch(action: Action, opts: { deferPlay?: boolean } = {}): Promise<boolean> {
     if (this.busy || this.disposed) return false;
     if (!isLegal(this.state, action)) {
       sfx.play('error');
@@ -130,6 +130,9 @@ export class GameController {
     } catch (e) {
       console.warn('[game] save failed', e);
     }
+    // CPU turns: the decision, `reduce` and the save ran in a plain task; the animation starts on
+    // the next 30 Hz frame, so that frame carries only the first event's DOM work.
+    if (opts.deferPlay && !instant()) await frame();
     await this.play(prev, result.events, result.state);
     this.busy = false;
     if (!this.disposed) this.advance();
@@ -196,7 +199,9 @@ export class GameController {
       const base = s.phase.kind === 'preRoll' ? 350 + Math.random() * 200 : 450 + Math.random() * 300;
       const delay = instant() || animSpeed() === 0 ? 0 : D(base);
       const snapshot = s;
-      this.cancelCpu = gridTimeout(() => {
+      // A plain timeout, not a grid one: the CPU policy and `reduce` stay out of the animation
+      // frame (dispatch's deferPlay puts the first DOM change on the next grid frame instead).
+      const id = window.setTimeout(() => {
         if (this.disposed || this.paused || this.state !== snapshot) return;
         let a: Action;
         try {
@@ -205,8 +210,9 @@ export class GameController {
           console.error('[game] CPU failed; using default', e);
           a = defaultAction(snapshot)!;
         }
-        void this.dispatch(a);
+        void this.dispatch(a, { deferPlay: true });
       }, delay);
+      this.cancelCpu = () => window.clearTimeout(id);
     }
   }
 
