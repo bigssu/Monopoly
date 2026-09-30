@@ -12,7 +12,7 @@ import { rotateStart } from '@/ui/shell/setupModel';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { createFx } from '@/ui/fx/vfx';
-import { anim, gridTimeout } from '@/ui/fx/time';
+import { anim, gridTimeout, instant } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 
@@ -154,8 +154,9 @@ registerScreen('result', (root, { state }) => {
     duration: 520,
     easing: 'cubic-bezier(.34,1.56,.64,1)',
   });
-  // After the screen's entry (its layout settles first).
-  const cancelConfetti = gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
+  // After the screen's entry (its layout settles first); decided now, like every animation of the
+  // mount (speed 0 / reduced motion at mount = no confetti, even if the speed changes 60 ms later).
+  const cancelConfetti = instant() ? () => {} : gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
 
   return () => {
     cancelConfetti();

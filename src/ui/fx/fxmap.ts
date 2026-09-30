@@ -142,8 +142,12 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   },
   TokenMoved: (ev) => {
     if (ev.mode === 'jump') return [step('cometJump', { from: ev.from, to: ev.to, player: ev.playerId }, { wait: 'block' })];
-    const long = ev.path.length >= 6;
-    return ev.path.map((sp, n) => step('hopDust', { space: sp, long, dir: dirDeg(n ? ev.path[n - 1]! : ev.from, sp) }, { hop: n }));
+    // Dust on the landing hop only: dust on every hop kept the canvas alive (one upload per frame)
+    // for the whole walk for a barely visible accent (4x frame budget, docs/VFX.md §14).
+    const n = ev.path.length - 1;
+    if (n < 0) return [];
+    const sp = ev.path[n]!;
+    return [step('hopDust', { space: sp, long: ev.path.length >= 6, dir: dirDeg(n ? ev.path[n - 1]! : ev.from, sp) }, { hop: n })];
   },
   PassedStart: (ev) => [step('passStart', { player: ev.playerId, landed: ev.landed })],
   MoneyChanged: (ev) => {

@@ -59,7 +59,7 @@ const EXPECTED: Record<GameEventType, PresetName[]> = {
   TurnStarted: ['ringPulse'],
   TurnEnded: [],
   DiceRolled: ['diceLand', 'doublesFlash'],
-  TokenMoved: ['hopDust', 'hopDust', 'hopDust'],
+  TokenMoved: ['hopDust'],
   PassedStart: ['passStart'],
   MoneyChanged: ['billRain'],
   PotChanged: ['ringPulse'],
@@ -145,7 +145,8 @@ describe('fxmap: GameEvent → preset (VFX.md §7)', () => {
     expect(planFx({ ...SAMPLES.DiceRolled, isDouble: false, consecutiveDoubles: 0 }, ctx()).map((s) => s.preset)).toEqual(['diceLand']);
     expect(planFx({ ...SAMPLES.TokenMoved, mode: 'jump', path: [8], to: 8 }, ctx()).map((s) => s.preset)).toEqual(['cometJump']);
     const walk = planFx({ ...SAMPLES.TokenMoved, path: [1, 2, 3, 4, 5, 6, 7], to: 7 }, ctx());
-    expect(walk.every((s) => s.preset === 'hopDust' && s.hop !== undefined && (s.params as { long?: boolean }).long)).toBe(true);
+    expect(walk).toHaveLength(1);
+    expect(walk[0]).toMatchObject({ preset: 'hopDust', hop: 6, params: { space: 7, long: true } });
     expect(planFx({ ...SAMPLES.MoneyChanged, delta: -150, reason: 'tax', spaceIndex: 23 }, ctx())[0]).toMatchObject({ preset: 'coinIn', params: { to: { space: 23 } } });
     expect(planFx({ ...SAMPLES.MoneyChanged, delta: -100, reason: 'bail' }, ctx())[0]).toMatchObject({ preset: 'coinIn', params: { to: { space: 8 } } });
     for (const reason of ['salary', 'toll', 'purchase', 'build', 'takeover', 'bankruptcy', 'auction'] as const)

@@ -84,10 +84,16 @@ export class GameView {
       // still no layer, frame callback or timer while idle) — docs/VFX.md §13.5.
       retainBacking: true,
       // Dev A/B knobs for devices (VFX.md §10.4): ?dev=1&fxmp=0.45 (backing MP budget), &fxsw=0 (GPU canvas).
-      maxBackingPixels: Number((isDevHook() && new URLSearchParams(location.search).get('fxmp')) || 0.9) * 1e6,
+      // 0.5 MP (engine default 0.9): the software canvas is copied to the compositor on every frame,
+      // so the backing size is the main per-frame cost of an effect at 4x (docs/VFX.md §14). Small
+      // effects keep their 1.5x backing; only table-wide ones (toll, takeover, finale) get softer.
+      maxBackingPixels: Number((isDevHook() && new URLSearchParams(location.search).get('fxmp')) || 0.5) * 1e6,
       softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
       dev: isDevHook(),
     });
+    // Dev A/B (VFX.md §10.4): ?dev=1&fxq=low|off — particles ×0.5 / no canvas effects (sound + static highlight).
+    const q = isDevHook() ? new URLSearchParams(location.search).get('fxq') : null;
+    if (q === 'low' || q === 'off') this.vfx.setQuality(q);
     this.menuSlot = h('div', { class: 'menu-slot' });
     this.rotateOverlay = h(
       'div',
