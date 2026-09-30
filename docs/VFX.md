@@ -515,3 +515,62 @@ scripts/fx/contact-sheet.mjs  아틀라스 + 프레임 재생 컨택트 시트 P
 - `src/ui/fx/animate.ts`·`Stage.ts` 등은 다른 에이전트가 수정 중이므로 S4는 해당 작업 병합 후 진행.
 - 추가가 필요한 작은 API: `board.spaceSize(i)`(칸 픽셀 크기), `PlayerPanel.clientRect()`(현재 `clientCenter()`만), `time.ts`에 `reducedMotion()` 노출(현재 `instant()`에 합쳐져 있어 정적 표식 분기 불가), `shake()`의 다중 요소 지원, dev 훅 `fx`.
 - 리스크 상위 3: (1) 실기기 Canvas2D 성능 미측정(SwiftShader 벤치만), (2) 4× 프레임 지연 게이트가 이미 미달 → FX가 겹치지 않도록 시작 지연 유지, (3) 스프라이트 미술 품질(프로토타입은 기하 도형 초안).
+
+---
+
+## 12. 스프라이트 아틀라스 빌드 (실제 구현)
+
+§4–§5의 설계가 `scripts/fx/*` + `src/content/fx/*`로 구현되어 있다(스프라이트 30종 / **125프레임**: 색 10종 29프레임 + 마스크 20종 96프레임).
+
+### 실행
+
+```
+npm run fx:atlas                      # 베이크 + 매니페스트 + 컨택트 시트 (Chromium 필요, 약 2 s)
+node scripts/fx/bake.mjs --no-sheet   # 컨택트 시트 생략
+node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--parts: 1000 px 단위 검토용 조각 저장)
+```
+
+환경 변수: `PLAYWRIGHT_MODULE`, `CHROMIUM_PATH`(기본 `/opt/node22/lib/node_modules/playwright/index.mjs`, `/opt/pw-browsers/chromium`), `FX_DPR`(기본 2), `FX_QUALITY`(WebP, 기본 0.9). 산출물은 저장소에 커밋하므로 일반 빌드/CI는 Playwright가 필요 없다.
+
+### 파이프라인
+
+1. `src/content/fx/sprites-color.ts` / `sprites-mask.ts`의 정의(`SpriteDef`: `name, cls, w, h, n, fps, loop, k?, svg(i, n)`)를 esbuild로 번들해 Node에서 실행 → 프레임별 SVG 문자열(순수 함수, 시드 PRNG `mulberry32` → 결정적).
+2. 헤드리스 Chromium에서 `ceil(w·DPR·k) × ceil(h·DPR·k)`로 래스터(DPR 2, `k`는 부드러운 스프라이트의 추가 축소) → 알파 ≥ 4 바운딩 박스로 트림. 박스 가장자리에 닿는 프레임은 경고(`edgeOk: true`로 의도된 경우 제외).
+3. Node에서 `maxrects-packer`(패딩 2 px, 회전 없음, 비-POT, 최대 2048²)로 클래스별 패킹 → Chromium 캔버스에 합성 → `canvas.toBlob('image/webp', 0.9)`. 네이티브 의존성 없음.
+4. 출력: `public/fx/atlas-color.webp`, `public/fx/atlas-mask.webp`, `public/fx/atlas.json`, `src/content/fx/manifest.ts`(생성물, 수정 금지), `docs/assets/fx-contact-sheet.png`.
+
+### `atlas.json`
+
+```
+{ v:1, dpr:2, ref:30,
+  atlases:{ color:{file,w,h,bytes}, mask:{…} },
+  anims:{ "coin_spin":{ atlas, n, frames:["coin_spin/0",…], fps, loop, w, h, k, scale } },
+  frames:{ "coin_spin/0":{ a, x,y,w,h, ox,oy, sw,sh } } }
+```
+
+- `x,y,w,h` = 아틀라스 안 트림 사각형, `ox,oy` = 원본(`sw×sh` 래스터) 안에서 트림 사각형의 왼쪽 위, `scale = dpr·k`(공칭 px당 래스터 px).
+- 그리기: 공칭 박스 왼쪽 위를 `(X, Y)`, 표시 배율 `s`(공칭 1 = 1 CSS px)라 하면 `drawImage(atlas, x,y,w,h, X + ox/scale·s, Y + oy/scale·s, w/scale·s, h/scale·s)`. 앵커(중심) = 공칭 박스 중심.
+- `manifest.ts`: `FX_ANIM_NAMES`(문자열 리터럴 유니온 `FxAnimName`), `FX_ANIMS: Record<FxAnimName, FxAnimMeta>`, `FX_FILES`, `FX_BAKE`, `FX_FRAME_TOTAL`, `fxFrameKey(anim, i)`. 타입은 `src/content/fx/types.ts`.
+
+### 스프라이트 추가 방법
+
+1. `sprites-color.ts`(고정색) 또는 `sprites-mask.ts`(흰색+알파)에 `svg(i, n)` 함수를 쓰고 배열 `COLOR_SPRITES`/`MASK_SPRITES`에 `SpriteDef`를 추가(`viewBox="0 0 w h"` 필수, 텍스트·숫자·통화 기호 금지 — 베이커와 vitest가 `<text>`를 거부).
+2. `npm run fx:atlas` → 컨택트 시트에서 24/48/96 px 가독성과 어두운/밝은 배경을 확인.
+3. `npm test`(`src/content/fx/__tests__/manifest.test.ts`)와 `npm run typecheck` 통과 후 산출물(`public/fx/*`, `manifest.ts`, 시트)을 함께 커밋.
+
+### 틴트·블렌드 규약
+
+- 색 아틀라스: 그대로 `drawImage`(source-over). 팔레트는 기존 아이콘과 동일(금 `#FFC94A/#E9A92A`, 그림자 `#2B3245`), 외곽선 없이 아래로 2 단위 어두운 사본을 깔고 위에 밝은 층을 얹는 2톤.
+- 마스크 아틀라스: **순백 + 알파만**(음영은 알파로 표현, 회색 금지). 런타임 틴트는 오프스크린에 그린 뒤 `source-in` 채우기(=곱셈)로 캐시, 빛 효과는 틴트 결과를 `globalCompositeOperation='lighter'`로 가산. 밝은 배경 위의 일반 블렌드도 가능(컨택트 시트의 밝은 열이 그 예).
+- 컨페티 5종은 1프레임(뒤집힘은 `scaleX = cos`), `ray_burst`·`glow`는 1프레임(회전/스케일은 코드), `flag_wave`는 소유자 색 틴트.
+
+### 크기 (DPR 2, WebP q0.9)
+
+| 파일 | 크기(px) | 바이트 |
+|---|---|---|
+| `atlas-color.webp` (29프레임) | 484×484 | 65.7 KB |
+| `atlas-mask.webp` (96프레임) | 1156×1156 | 205.5 KB |
+| `atlas.json` | — | 16.0 KB |
+| **합계** | | **≈287 KB** (목표 ≤300, 예산 ≤500) |
+
+프로토타입(1.5× 베이크, 182 KB) 대비 DPR 2 선명도를 위해 커졌으나 예산 이내. 프레임 추가 시 마스크 아틀라스는 2048² 한도까지 여유가 있다. §5의 파일명(`bake-atlas.mjs`, `fx-color.webp`, `fx-atlas.json`)은 위 실제 이름(`bake.mjs`, `atlas-color.webp`, `atlas.json`)으로 대체됐다.
