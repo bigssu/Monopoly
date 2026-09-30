@@ -5,7 +5,7 @@
  * Frames API: script time, time to rendering, style/layout start) or idle (a compositor / raster /
  * environment stall). No tracing, so the numbers are not inflated by the tracer.
  *
- *   npx vite build && node scripts/perf-frames.mjs [--seconds 60] [--throttle 4] [--dpr 2] [--runs 1]
+ *   npx vite build && node scripts/perf-frames.mjs [--seconds 60] [--throttle 4] [--dpr 2] [--runs 1] [--query fxq=off]
  *
  * Needs the dev hook (`?dev=1`): the game marks every event (`lr:<EventType>`) and every prompt
  * build (`lr:prompt-build`, with its element count) with the User Timing API.
@@ -56,7 +56,7 @@ for (let run = 1; run <= RUNS; run++) {
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
   if (THROTTLE > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
-  await page.goto(base + '/?dev=1');
+  await page.goto(base + '/?dev=1' + (opt('query', '') ? '&' + opt('query', '') : ''));
   await page.waitForFunction(() => window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 30000 });
   await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
   await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });

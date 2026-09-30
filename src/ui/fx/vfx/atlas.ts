@@ -65,6 +65,11 @@ export interface FxAtlas {
   ): void;
   /** Approximate radius (px at scale 1) of a sprite's nominal box — for dirty rects / bounds. */
   radius(anim: FxAnimName): number;
+  /**
+   * The drawn (trimmed) rect of a frame in the sprite's local nominal px relative to the pivot
+   * (anchor ax, ay): writes [x0, y0, x1, y1] into `out`; false when the frame does not exist.
+   */
+  frameBox(animIndex: number, frame: number, ax: number, ay: number, out: Float64Array): boolean;
   /** Pre-build tinted frames (idle warm-up, VFX.md §3.6). */
   warm(anims: readonly FxAnimName[], colors: readonly string[]): void;
 }
@@ -218,6 +223,18 @@ export function createAtlas(json: FxAtlasJson, images: Record<FxAtlasId, Img>): 
         o.tint ?? '',
       );
       ctx.restore();
+    },
+    frameBox(ai, frame, ax, ay, out) {
+      const fi = table[ai]?.[frame];
+      if (!fi) return false;
+      const fr = fi.f;
+      const x0 = fr.ox / fi.rs - fi.bw * ax;
+      const y0 = fr.oy / fi.rs - fi.bh * ay;
+      out[0] = x0;
+      out[1] = y0;
+      out[2] = x0 + fr.w / fi.rs;
+      out[3] = y0 + fr.h / fi.rs;
+      return true;
     },
     radius(anim) {
       const m = FX_ANIMS[anim];

@@ -17,6 +17,15 @@ import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
 import { h, iconEl, isDevHook, prepareGameIcons } from './util';
 
+/** Dev A/B knobs (`?dev=1&fxs=0.75&fxe=2`): crisp backing-scale cap, draw every n-th FX tick. */
+function devTune(): { sMax?: number; drawEvery?: number } {
+  const q = new URLSearchParams(location.search);
+  const o: { sMax?: number; drawEvery?: number } = {};
+  if (q.get('fxs')) o.sMax = Number(q.get('fxs'));
+  if (q.get('fxe')) o.drawEvery = Number(q.get('fxe'));
+  return o;
+}
+
 export class GameView {
   readonly root: HTMLElement;
   /** Shakeable wrapper around board + panels. */
@@ -87,7 +96,8 @@ export class GameView {
       // 0.5 MP (engine default 0.9): the software canvas is copied to the compositor on every frame,
       // so the backing size is the main per-frame cost of an effect at 4x (docs/VFX.md §14). Small
       // effects keep their 1.5x backing; only table-wide ones (toll, takeover, finale) get softer.
-      maxBackingPixels: Number((isDevHook() && new URLSearchParams(location.search).get('fxmp')) || 0.5) * 1e6,
+      maxCanvases: Number((isDevHook() && new URLSearchParams(location.search).get('fxk')) || 3),
+      ...(isDevHook() ? { tune: devTune() } : {}),
       softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
       dev: isDevHook(),
     });

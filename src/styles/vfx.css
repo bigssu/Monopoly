@@ -1,7 +1,7 @@
 /*
- * VFX engine (src/ui/fx/vfx, docs/VFX.md §3). Imported by the wiring phase (docs/VFX-WIRING.md).
- * The FX canvas lives inside `.fx-layer` (z 40, pointer-events none, overflow hidden). It is
- * positioned with a transform, sized to the effects' region, and hidden (backing store freed) when idle.
+ * VFX engine (src/ui/fx/vfx, docs/VFX.md §3, §15). The pooled FX canvases live inside `.fx-layer`
+ * (z 40, pointer-events none, overflow hidden). Each has a fixed CSS box (= its backing size) and is
+ * placed / scaled onto the layer with a transform; parked with `visibility: hidden` (set inline).
  */
 .fx-canvas {
   position: absolute;
@@ -10,8 +10,8 @@
   display: block;
   pointer-events: none;
   transform-origin: 0 0;
+  contain: strict;
 }
-.fx-canvas[hidden] { display: none; }
 
 /* Spotlight (landmark close-up, VFX.md §7.2b.10): a static veil over the stage (Stage.spotlight) with a
    clear hole around the close-up card; no animation, so no extra GPU layer. */

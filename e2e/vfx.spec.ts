@@ -117,7 +117,7 @@ async function expectIdle(page: Page): Promise<void> {
   expect(!!st.fx?.ticking).toBe(false);
   expect(!st.fx?.canvas || st.fx.canvas.hidden).toBe(true);
   expect(st.ticks).toBe(0);
-  expect(st.canvases).toBeLessThanOrEqual(1);
+  expect(st.canvases).toBeLessThanOrEqual(16);
 }
 
 /** Compose a filmstrip PNG (thumbnails cropped to the effects' region) in a scratch page. */

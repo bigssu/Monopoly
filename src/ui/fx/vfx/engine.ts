@@ -1,10 +1,12 @@
 /**
- * VFX engine (VFX.md §3): one overlay canvas inside `.fx-layer`, driven by the shared 30 Hz clock.
+ * VFX engine (VFX.md §3, §15): overlay canvases inside `.fx-layer`, driven by the shared 30 Hz clock.
  *
- * Lifecycle (zero idle cost): idle → `play()` → the canvas is shown and sized to the union of the
- * running effects' regions (≤ 0.9 MP backing, scale 0.75–1.5 capped by DPR) and ONE `onFrame` step
- * is registered → effects run → when nothing is left, a short grace (8 ticks) → canvas hidden,
- * backing store freed (width = height = 0) and the step unregisters (no rAF, no timers).
+ * Lifecycle (zero idle cost): idle → `play()` → ONE `onFrame` step is registered → every frame the
+ * live particles are clustered and each cluster is drawn into a small pooled canvas placed with a
+ * transform (present.ts: fixed S/M/L backing sizes, ≤ `maxCanvases` shown, crisp scale ≤ 1.5 × DPR
+ * cap) → when nothing is left, a short grace (8 ticks) → canvases hidden (`visibility`), backing
+ * stores freed unless retained, and the step unregisters (no rAF, no timers). Nothing is drawn (or
+ * uploaded to the compositor) on a tick where FX time did not advance (hit-stop).
  *
  * `play()` returns a thenable that resolves at the effect's *block* frame (the sequencer goes on
  * while the tail plays); `.cue(name)` resolves at a cue frame (e.g. 'swap' to defer a DOM render),
@@ -13,14 +15,14 @@
  */
 import type { PlayerId } from '@/engine';
 import { PLAYER_COLORS } from '@/content/palette';
-import { FX_ANIM_NAMES, FX_ANIMS } from '@/content/fx/manifest';
 import type { HapticKind } from '@/ui/audio/haptics';
 import type { SfxName } from '@/ui/audio/sfx';
 import { loadAtlas, type FxAtlas } from './atlas';
 import { gameClock, type FxClock } from './clock';
-import { createCoords, type CoordSource, type RectLike } from './coords';
+import { createCoords, type CoordSource } from './coords';
 import { FRAME_MS, newSample, sampleParticle } from './particles';
 import { PF } from './pool';
+import { Presenter, type PresentStats } from './present';
 import { buildPreset, type PresetEnv, type PresetName, type PresetParams } from './presets';
 import { Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
 import { ACCENT_Q, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
@@ -48,8 +50,12 @@ export interface FxOptions extends CoordSource {
   seed?: number;
   /** Register `window.__fx` (dev only). */
   dev?: boolean;
-  /** Backing-store budget in pixels (default 0.9 MP). */
+  /** @deprecated (single-canvas budget); the pooled canvases have fixed sizes (present.ts). Ignored. */
   maxBackingPixels?: number;
+  /** Most FX canvases shown at once (each one is a GPU layer while shown). Default 3. */
+  maxCanvases?: number;
+  /** Dev A/B knobs (VFX.md §15): crisp-scale cap, draw every n-th tick. */
+  tune?: { sMax?: number; drawEvery?: number };
   /**
    * Keep the (hidden) canvas backing store between effects and reuse it when the next region fits:
    * saves the first-draw allocation (≈ 2.5 ms, 10 ms at 4× for 0.9 MP) at the cost of ≤ 3.6 MB CPU
@@ -87,7 +93,15 @@ export interface FxStats {
   spawned: number;
   dropped: number;
   effects: string[];
+  /**
+   * Union of the shown canvases (layer px); `hidden` when none is shown. backingW/H = the largest
+   * shown canvas's backing, scale = its backing scale.
+   */
   canvas: { hidden: boolean; x: number; y: number; w: number; h: number; backingW: number; backingH: number; scale: number } | null;
+  /** The pooled canvases (present.ts). */
+  slots: PresentStats['slots'];
+  /** Backing px uploaded to the compositor (drawn canvases) and canvas frames drawn since `resetStats()`; show/hide toggles (Paints). */
+  upload: { px: number; frames: number; toggles: number };
   ticking: boolean;
   frame: number;
   /** JS time per engine tick (update + draw), ms; p95 over the last 256 ticks. */
@@ -122,6 +136,8 @@ export interface FxHandle {
 }
 
 const GRACE_TICKS = 8;
+/** A particle younger than this (FX frames) keeps the 30 Hz presentation (VFX.md §15). */
+const TAIL_AGE = 8;
 /**
  * FX time rate while skipping. The DOM side of a skip is ×5 (time.ts); effects run ×10 so even the
  * 3.7 s finale is gone ≤ 500 ms after a tap (gate F10) — a skipped effect only needs to get out of the way.
@@ -139,13 +155,6 @@ export function backingScale(w: number, h: number, dpr: number, budget = DEFAULT
   return s;
 }
 
-function union(a: RectLike | null, b: RectLike): RectLike {
-  if (!a) return { ...b };
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
-}
-
 const noopPlay = (name = '', tier: Tier = 0): FxPlay => {
   const p = Promise.resolve();
   return { name, tier, then: p.then.bind(p), cue: () => Promise.resolve(), done: p, block: p, cancel() {} };
@@ -154,7 +163,6 @@ const noopPlay = (name = '', tier: Tier = 0): FxPlay => {
 export function createFx(o: FxOptions): FxHandle {
   const clock = o.clock ?? gameClock;
   const colorOf = o.getPlayerColor ?? ((id: PlayerId) => PLAYER_COLORS[id % PLAYER_COLORS.length]!.hex);
-  const maxBacking = o.maxBackingPixels ?? DEFAULT_MAX_BACKING;
   const runner = new Runner(
     {
       ...(o.sfx ? { sfx: o.sfx } : {}),
@@ -172,10 +180,22 @@ export function createFx(o: FxOptions): FxHandle {
   let atlasP: Promise<FxAtlas | null> | null = null;
   let quality: FxQuality = 'high';
 
-  let canvas: HTMLCanvasElement | null = null;
-  let ctx: CanvasRenderingContext2D | null = null;
-  let region: RectLike | null = null;
-  let scale = 1;
+  /** Pooled small canvases (present.ts), created on the first effect (never in reduced motion). */
+  let pres: Presenter | null = null;
+  /** Layer size (CSS px) read when an effect starts. */
+  let layerW = 0;
+  let layerH = 0;
+  /** Runner frame last drawn: nothing moves during a hit-stop, so nothing is drawn (or uploaded). */
+  let drawnFrame = -1;
+  let forceDraw = false;
+  let sinceDraw = 0;
+  /** No timeline has ops left to run and every particle is older than TAIL_AGE frames. */
+  function tailOnly(): boolean {
+    for (const e of runner.effects) if (e.idx < e.tl.ops.length) return false;
+    const { flags, age } = pool;
+    for (let i = 0; i < cap; i++) if (flags[i]! & PF.Alive && age[i]! < TAIL_AGE) return false;
+    return true;
+  }
   let stopTick: (() => void) | null = null;
   let last = -1;
   let acc = 0;
@@ -210,10 +230,6 @@ export function createFx(o: FxOptions): FxHandle {
     }
   }
 
-  let dirty = { x0: 0, y0: 0, x1: 0, y1: 0, any: false };
-  let fullClear = true;
-  /** The hidden canvas still holds its backing store (retainBacking). */
-  let retained = false;
   const tick = { last: 0, max: 0, sum: 0, n: 0, maxAt: 0, maxFrames: 0 };
   const ring = new Float32Array(256);
   const p95 = (): number => {
@@ -223,7 +239,6 @@ export function createFx(o: FxOptions): FxHandle {
     return a[Math.min(n - 1, Math.floor(n * 0.95))]!;
   };
   const sample = newSample();
-  const radius = FX_ANIM_NAMES.map((n) => Math.hypot(FX_ANIMS[n].w, FX_ANIMS[n].h) / 2);
 
   const env = (): PresetEnv => ({ c: createCoords(o), color: colorOf });
 
@@ -246,146 +261,143 @@ export function createFx(o: FxOptions): FxHandle {
   }
 
   function ensureCanvas(): boolean {
-    if (canvas && ctx) return true;
+    if (pres) return pres.ok;
     if (typeof document === 'undefined') return false;
-    canvas = document.createElement('canvas');
-    canvas.className = 'fx-canvas';
-    canvas.hidden = true;
-    canvas.setAttribute('aria-hidden', 'true');
-    ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: o.softwareCanvas ?? true });
-    if (!ctx) {
-      canvas = null;
-      return false;
-    }
-    o.layer.append(canvas);
-    return true;
+    pres = new Presenter({ layer: o.layer, software: o.softwareCanvas ?? true, maxShown: o.maxCanvases ?? 3, retain: !!o.retainBacking });
+    return pres.ok;
   }
 
-  /** Grow the canvas region to include `r` (clamped to the layer). */
-  /** Grow the canvas region to include `r` (clamped to the layer). */
-  function growRegion(r: RectLike, layerW: number, layerH: number): void {
-    const pad = 8;
-    const x0 = Math.max(0, Math.floor(r.x - pad));
-    const y0 = Math.max(0, Math.floor(r.y - pad));
-    const x1 = Math.min(layerW, Math.ceil(r.x + r.width + pad));
-    const y1 = Math.min(layerH, Math.ceil(r.y + r.height + pad));
-    if (x1 <= x0 || y1 <= y0) return;
-    const want = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
-    const c = canvas!;
-    // A retained (hidden, still allocated) backing store is reused when the new region fits in it.
-    if (retained && region) {
-      retained = false;
-      const fits = want.x >= region.x && want.y >= region.y && want.x + want.width <= region.x + region.width && want.y + want.height <= region.y + region.height;
-      // …and not much larger than needed: the canvas's CSS box is the GPU layer (layer-memory budget).
-      if (fits && want.width * want.height >= region.width * region.height * 0.7) {
-        c.hidden = false;
-        return;
-      }
-      region = null;
-    }
-    const next = union(region, want);
-    if (region && next.x === region.x && next.y === region.y && next.width === region.width && next.height === region.height && !c.hidden) return;
-    region = next;
-    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    scale = backingScale(region.width, region.height, dpr, maxBacking, quality === 'low' ? 1 : 1.5);
-    c.width = Math.max(1, Math.round(region.width * scale));
-    c.height = Math.max(1, Math.round(region.height * scale));
-    c.style.width = `${region.width}px`;
-    c.style.height = `${region.height}px`;
-    c.style.transform = `translate(${region.x}px, ${region.y}px)`;
-    c.hidden = false;
-    // Setting width/height already cleared the bitmap (and the old dirty box is in old coordinates):
-    // no clear needed. The first draw into the fresh backing store pays its allocation
-    // (≈ 10 ms at 4× for 0.9 MP; see docs/VFX.md §13 and the `retainBacking` option).
-    fullClear = false;
-    dirty.any = false;
-  }
-
-  /**
-   * An effect ended while others still run: shrink the canvas to the remaining effects' regions when
-   * that saves a lot (a chain of overlapping effects would otherwise keep the union of all of them —
-   * a full-screen layer — until the very last particle).
-   */
-  function refit(): void {
-    if (!canvas || !region) return;
-    let next: RectLike | null = null;
-    for (const e of runner.effects) next = union(next, e.tl.bounds);
-    if (!next) return;
-    const L = createCoords(o);
-    const x0 = Math.max(0, next.x - 8);
-    const y0 = Math.max(0, next.y - 8);
-    const w = Math.min(L.width, next.x + next.width + 8) - x0;
-    const h = Math.min(L.height, next.y + next.height + 8) - y0;
-    if (w <= 0 || h <= 0 || w * h > region.width * region.height * 0.6) return;
-    region = null;
-    growRegion({ x: x0 + 8, y: y0 + 8, width: w - 16, height: h - 16 }, L.width, L.height);
-  }
-
-  /** Idle: stop the frame step, hide the canvas and (unless `retainBacking`) free its backing store. */
+  /** Idle: stop the frame step, hide the canvases and (unless `retainBacking`) free their backing stores. */
   function teardown(free = !o.retainBacking): void {
     stopTick?.();
     stopTick = null;
     last = -1;
     acc = 0;
     localSkip = false;
-    if (canvas) canvas.hidden = true;
-    if (free || !region) {
-      region = null;
-      retained = false;
-      dirty.any = false;
-      if (canvas) {
-        canvas.width = 0;
-        canvas.height = 0;
-      }
-    } else retained = true;
+    drawnFrame = -1;
+    sinceDraw = 0;
+    pres?.hideAll(free);
   }
 
+  // Per-frame scratch (sampled particles), sized to the pool: no allocation in the frame loop.
+  const cap = pool.cap;
+  const PX = new Float64Array(cap);
+  const PY = new Float64Array(cap);
+  const BX0 = new Float64Array(cap);
+  const BY0 = new Float64Array(cap);
+  const BX1 = new Float64Array(cap);
+  const BY1 = new Float64Array(cap);
+  const fbox = new Float64Array(4);
+  const PA = new Float64Array(cap);
+  const PB = new Float64Array(cap);
+  const PC = new Float64Array(cap);
+  const PD = new Float64Array(cap);
+  const PAL = new Float64Array(cap);
+  const PF_ = new Int32Array(cap);
+  const PI = new Int32Array(cap);
+  const bucket = new Int32Array(cap);
+  const bucketStart = new Int32Array(9);
+
   function draw(): void {
-    if (!ctx || !canvas || !region || !atlas) return;
-    const c = ctx;
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    if (fullClear) {
-      c.clearRect(0, 0, canvas.width, canvas.height);
-      fullClear = false;
-    } else if (dirty.any) {
-      c.clearRect(dirty.x0 - 2, dirty.y0 - 2, dirty.x1 - dirty.x0 + 4, dirty.y1 - dirty.y0 + 4);
+    if (!pres || !atlas) return;
+    const W = layerW;
+    const H = layerH;
+    // 1. Sample every visible particle once; cull the ones fully outside the layer.
+    let n = 0;
+    for (let i = 0; i < cap; i++) {
+      if (!(pool.flags[i]! & PF.Alive)) continue;
+      if (!sampleParticle(pool, i, sample)) continue;
+      // The drawn (trimmed) quad under the particle's transform → its layer-px box (tight: early
+      // ring / burst frames and soft glows are much smaller than their nominal box).
+      if (!atlas.frameBox(pool.anim[i]!, sample.frame, pool.anchorX[i]!, pool.anchorY[i]!, fbox)) continue;
+      const cs = Math.cos(sample.rot);
+      const sn = Math.sin(sample.rot);
+      const a = cs * sample.sx;
+      const b = sn * sample.sx;
+      const c = -sn * sample.sy;
+      const d = cs * sample.sy;
+      const x = sample.x;
+      const y = sample.y;
+      const ux0 = a * fbox[0]!;
+      const ux1 = a * fbox[2]!;
+      const vx0 = c * fbox[1]!;
+      const vx1 = c * fbox[3]!;
+      const uy0 = b * fbox[0]!;
+      const uy1 = b * fbox[2]!;
+      const vy0 = d * fbox[1]!;
+      const vy1 = d * fbox[3]!;
+      const x0 = x + Math.min(ux0, ux1) + Math.min(vx0, vx1) - 1;
+      const x1 = x + Math.max(ux0, ux1) + Math.max(vx0, vx1) + 1;
+      const y0 = y + Math.min(uy0, uy1) + Math.min(vy0, vy1) - 1;
+      const y1 = y + Math.max(uy0, uy1) + Math.max(vy0, vy1) + 1;
+      if (x1 < 0 || y1 < 0 || x0 > W || y0 > H) continue;
+      PX[n] = x;
+      PY[n] = y;
+      BX0[n] = x0;
+      BY0[n] = y0;
+      BX1[n] = x1;
+      BY1[n] = y1;
+      PA[n] = a;
+      PB[n] = b;
+      PC[n] = c;
+      PD[n] = d;
+      PAL[n] = sample.alpha;
+      PF_[n] = sample.frame;
+      PI[n] = i;
+      n++;
     }
-    dirty = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, any: false };
-    const s = scale;
-    const ox = region.x;
-    const oy = region.y;
+    // 2. Cluster → canvases (clipped to the layer: nothing off-screen gets backing pixels).
+    const C = pres.clusterer;
+    C.run(n, BX0, BY0, BX1, BY1, W, H, pres.o.maxShown);
+    for (let k = 0; k < C.count; k++) {
+      C.x0[k] = Math.max(0, C.x0[k]!);
+      C.y0[k] = Math.max(0, C.y0[k]!);
+      C.x1[k] = Math.min(W, C.x1[k]!);
+      C.y1[k] = Math.min(H, C.y1[k]!);
+    }
+    pres.assign(sMax());
+    pres.begin();
+    // 3. Draw order: layer 0..3 × (normal, additive) — a counting sort into 8 buckets.
+    bucketStart.fill(0);
+    for (let p = 0; p < n; p++) {
+      const i = PI[p]!;
+      bucketStart[pool.layer[i]! * 2 + pool.blend[i]! + 1]!++;
+    }
+    for (let b = 1; b < 9; b++) bucketStart[b]! += bucketStart[b - 1]!;
+    for (let p = 0; p < n; p++) {
+      const i = PI[p]!;
+      bucket[bucketStart[pool.layer[i]! * 2 + pool.blend[i]!]!++] = p;
+    }
     const tints = pool.tints;
-    let blendNow = -1;
-    for (let layer = 0; layer < 4; layer++) {
-      for (let blend = 0; blend < 2; blend++) {
-        for (let i = 0; i < pool.cap; i++) {
-          if (!(pool.flags[i]! & PF.Alive) || pool.layer[i] !== layer || pool.blend[i] !== blend) continue;
-          if (!sampleParticle(pool, i, sample)) continue;
-          if (blendNow !== blend) {
-            c.globalCompositeOperation = blend ? 'lighter' : 'source-over';
-            blendNow = blend;
-          }
-          c.globalAlpha = sample.alpha;
-          const cs = Math.cos(sample.rot);
-          const sn = Math.sin(sample.rot);
-          const X = (sample.x - ox) * s;
-          const Y = (sample.y - oy) * s;
-          const sx = sample.sx * s;
-          const sy = sample.sy * s;
-          const ai = pool.anim[i]!;
-          atlas.drawRaw(c, ai, sample.frame, cs * sx, sn * sx, -sn * sy, cs * sy, X, Y, pool.anchorX[i]!, pool.anchorY[i]!, tints[pool.tint[i]!]!);
-          // Dirty box (anchor-offset safe: radius × 2 around the pivot).
-          const r = radius[ai]! * Math.max(Math.abs(sx), Math.abs(sy)) * 2;
-          if (X - r < dirty.x0) dirty.x0 = X - r;
-          if (Y - r < dirty.y0) dirty.y0 = Y - r;
-          if (X + r > dirty.x1) dirty.x1 = X + r;
-          if (Y + r > dirty.y1) dirty.y1 = Y + r;
-          dirty.any = true;
-        }
+    for (let q = 0; q < n; q++) {
+      const p = bucket[q]!;
+      const sl = pres.slot(C.label[p]!);
+      if (!sl) continue;
+      const i = PI[p]!;
+      const c = sl.ctx;
+      const blend = pool.blend[i]!;
+      if (sl.blend !== blend) {
+        c.globalCompositeOperation = blend ? 'lighter' : 'source-over';
+        sl.blend = blend;
       }
+      c.globalAlpha = PAL[p]!;
+      const s = sl.s;
+      const X = (PX[p]! - sl.x) * s;
+      const Y = (PY[p]! - sl.y) * s;
+      atlas.drawRaw(c, pool.anim[i]!, PF_[p]!, PA[p]! * s, PB[p]! * s, PC[p]! * s, PD[p]! * s, X, Y, pool.anchorX[i]!, pool.anchorY[i]!, tints[pool.tint[i]!]!);
+      pres.mark(sl, BX0[p]!, BY0[p]!, BX1[p]!, BY1[p]!);
     }
-    c.globalAlpha = 1;
-    c.globalCompositeOperation = 'source-over';
+    for (const sl of pres.slots) {
+      if (sl.blend < 0) continue;
+      sl.ctx.globalAlpha = 1;
+      sl.ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  /** Crisp backing scale: 1.5 capped by the DPR (1 on quality 'low'). */
+  function sMax(): number {
+    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+    return Math.min(o.tune?.sMax ?? 9, quality === 'low' ? 1 : 1.5, Math.max(dpr, 0.5));
   }
 
   function step(now: number): boolean {
@@ -402,13 +414,20 @@ export function createFx(o: FxOptions): FxHandle {
     }
     last = now;
     if (frames > 0) {
-      const before = runner.effects.length;
       runner.advance(frames);
-      if (runner.effects.length < before && runner.effects.length > 0) refit();
     }
     if (frames > 0) pumpBig(frames);
     if (settleWaiters.length) pumpSettled();
-    if (frames > 0 || fullClear) draw();
+    // Presentation rate: every FX frame (30 Hz) while a timeline still runs its beats or a particle
+    // is young (impacts, pops, fast bursts); every 2nd frame (15 Hz) for tails (fading, drifting).
+    if (runner.frame !== drawnFrame) sinceDraw++;
+    const every = o.tune?.drawEvery ?? (tailOnly() ? 2 : 1);
+    if ((runner.frame !== drawnFrame && sinceDraw >= every) || forceDraw) {
+      drawnFrame = runner.frame;
+      sinceDraw = 0;
+      forceDraw = false;
+      draw();
+    }
     const dt = performance.now() - t0;
     tick.last = dt;
     if (dt > tick.max) {
@@ -431,10 +450,11 @@ export function createFx(o: FxOptions): FxHandle {
     return true;
   }
 
-  function arm(tl: Timeline): void {
+  function arm(): void {
     if (!ensureCanvas()) return;
     const c = createCoords(o);
-    growRegion(tl.bounds, c.width, c.height);
+    layerW = c.width;
+    layerH = c.height;
     grace = 0;
     if (!stopTick) {
       last = -1;
@@ -472,7 +492,7 @@ export function createFx(o: FxOptions): FxHandle {
         quality: (quality === 'low' ? 0.5 : 1) * (accent ? ACCENT_Q / 0.5 : 1),
         quiet: accent,
       });
-      arm(tl);
+      arm();
       return effect;
     })();
     const blockP = ready.then((e) => (e ? e.block : undefined));
@@ -487,6 +507,7 @@ export function createFx(o: FxOptions): FxHandle {
       cancel() {
         cancelled = true;
         if (effect) {
+          forceDraw = true;
           pool.clear(effect.id);
           const i = runner.effects.indexOf(effect);
           if (i >= 0) runner.effects.splice(i, 1);
@@ -542,6 +563,7 @@ export function createFx(o: FxOptions): FxHandle {
       return !!(await ensureAtlas());
     },
     stats() {
+      const pst = pres?.stats() ?? null;
       return {
         enabled: atlasState !== 'failed',
         atlas: atlasState,
@@ -550,9 +572,15 @@ export function createFx(o: FxOptions): FxHandle {
         spawned: pool.spawned,
         dropped: pool.dropped,
         effects: runner.effects.map((e) => e.tl.name),
-        canvas: canvas
-          ? { hidden: canvas.hidden === true, x: region?.x ?? 0, y: region?.y ?? 0, w: region?.width ?? 0, h: region?.height ?? 0, backingW: canvas.width, backingH: canvas.height, scale }
+        canvas: pst
+          ? (() => {
+              const big = pres!.slots.filter((x) => x.shown).sort((a, b) => b.canvas.width * b.canvas.height - a.canvas.width * a.canvas.height)[0];
+              const u = pst.union;
+              return { hidden: pst.shown === 0, x: u?.x ?? 0, y: u?.y ?? 0, w: u?.width ?? 0, h: u?.height ?? 0, backingW: big?.canvas.width ?? 0, backingH: big?.canvas.height ?? 0, scale: big?.s ?? 0 };
+            })()
           : null,
+        slots: pst?.slots ?? [],
+        upload: { px: pst?.uploadPx ?? 0, frames: pst?.drawn ?? 0, toggles: pst?.toggles ?? 0 },
         ticking: !!stopTick,
         frame: runner.frame,
         tick: { last: tick.last, max: tick.max, avg: tick.n ? tick.sum / tick.n : 0, p95: p95(), n: tick.n, maxAt: tick.maxAt, maxFrames: tick.maxFrames },
@@ -561,13 +589,13 @@ export function createFx(o: FxOptions): FxHandle {
     },
     resetStats() {
       pool.resetStats();
+      pres?.resetStats();
       tick.max = tick.sum = tick.n = 0;
     },
     dispose() {
       handle.stopAll();
-      canvas?.remove();
-      canvas = null;
-      ctx = null;
+      pres?.dispose();
+      pres = null;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     },
   };
