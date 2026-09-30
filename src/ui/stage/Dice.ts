@@ -453,6 +453,14 @@ export class Dice {
     });
   }
 
+  /** Client centres of the two dice (fx `diceLand`); one layout read, only at the landing. */
+  clientCenters(): { x: number; y: number }[] {
+    return this.dice.map((d) => {
+      const r = d.el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+  }
+
   dispose(): void {
     window.clearInterval(this.shakeTimer);
     this.stopTumble?.();

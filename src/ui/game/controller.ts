@@ -40,7 +40,7 @@ export interface ControllerOpts {
 
 export class GameController {
   state: GameState;
-  private view: GameView;
+  readonly view: GameView;
   private busy = false;
   private disposed = false;
   private paused = false;
@@ -63,6 +63,8 @@ export class GameController {
     this.view.table.addEventListener('pointerdown', () => {
       if (this.busy) {
         skip();
+        // Pending fx cues (state swaps) fire now; running effects finish ×5.
+        this.view.vfx.skip();
         this.view.stage.hurry();
       }
     });

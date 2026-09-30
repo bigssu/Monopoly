@@ -179,17 +179,20 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   if (v.level >= 1 && oc) {
     parts.push(`<rect x="${m + 12}" y="${m + 8}" width="${w - 2 * m - 24}" height="${barH - 14}" rx="${(barH - 14) / 2}" fill="#fff" opacity=".94"/>`);
   }
+  // Level icons in one group (`sp-lvl`): the fx pop / "under construction" dim target (Board.popIcon).
   if (v.level >= 1 && v.level <= 3) {
     const ids = ['villa', 'building', 'hotel'].slice(0, v.level);
     const sz = 92;
     const step = 84;
     const x0 = w / 2 - ((ids.length - 1) * step) / 2 - sz / 2;
     const c = oc?.hex ?? '#E8564F';
+    parts.push('<g class="sp-lvl">');
     ids.forEach((id, i) => parts.push(`<g color="${c}">${iconAt(id, x0 + i * step, -4, sz, 'sp-bld', c)}</g>`));
+    parts.push('</g>');
   } else if (v.level === 4) {
     parts.push(`<circle class="sp-glow" cx="${w / 2}" cy="${46}" r="84" fill="url(#lr-glow)"/>`);
     const c = oc?.hex ?? '#F2B633';
-    parts.push(`<g color="${c}">${iconAt('landmark', w / 2 - 60, -16, 120, 'sp-bld sp-landmark', c)}</g>`);
+    parts.push(`<g class="sp-lvl"><g color="${c}">${iconAt('landmark', w / 2 - 60, -16, 120, 'sp-bld sp-landmark', c)}</g></g>`);
   }
   if (oc) {
     parts.push(
@@ -581,6 +584,9 @@ export class Board {
         const g = GEOM[i]!;
         grp.innerHTML = hit ? hitMarkup(i) : g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
         this.flushAtlasDefs();
+        // An fx pop requested in this same frame (the 'swap' cue fires just before the re-render).
+        const pop = this.pops.get(i);
+        if (pop && performance.now() - pop.at < 120) this.runPop(i, pop.o);
       }
       // One-away pulse ring: a separate HTML mark above the space, recreated only on change.
       const ring = this.rings.get(i);
@@ -727,6 +733,74 @@ export class Board {
     this.groups.forEach((g, j) => g.classList.toggle('is-focus', j === i));
     this.focusEl?.remove();
     this.focusEl = i === null ? null : this.outline(i, 'bm-focus', 9);
+  }
+
+  // -------------------------------------------------------------------------
+  // FX hooks (docs/VFX-WIRING.md §3): rects for the canvas engine, icon pop / dim / zoom punch.
+  // All on `anim()` (30 Hz grid, instant when animations are off).
+  // -------------------------------------------------------------------------
+
+  /** Client rect of space i (for fx): one board rect read + geometry. */
+  spaceRect(i: number): { x: number; y: number; width: number; height: number } {
+    const r = this.el.getBoundingClientRect();
+    const g = GEOM[i]!;
+    const k = r.width / VB;
+    return { x: r.left + g.x * k, y: r.top + g.y * k, width: g.w * k, height: g.h * k };
+  }
+
+  private pops = new Map<number, { o: { from: number; c1: number; frames: number }; at: number }>();
+
+  private levelIconEl(i: number): SVGGElement | null {
+    return (this.groups[i]?.querySelector('.sp-lvl') as SVGGElement | null) ?? null;
+  }
+
+  /** Tier pop of a space's level icon: scale `from` → 1 along easeOutBack(c1), `frames` 30 Hz frames. */
+  popIcon(i: number, o: { from: number; c1: number; frames: number }): void {
+    // The swap cue fires right before the sequencer re-renders the space (new icon): remember the
+    // pop so render() re-runs it on the new element.
+    this.pops.set(i, { o, at: performance.now() });
+    this.runPop(i, o);
+  }
+
+  private runPop(i: number, o: { from: number; c1: number; frames: number }): void {
+    const el = this.levelIconEl(i);
+    if (!el) return;
+    const n = Math.max(2, o.frames);
+    const kf: Keyframe[] = [];
+    for (let k = 0; k <= n; k++) {
+      const x = k / n - 1;
+      const e = 1 + (o.c1 + 1) * x ** 3 + o.c1 * x ** 2;
+      kf.push({ transform: `scale(${(o.from + (1 - o.from) * e).toFixed(3)})` });
+    }
+    void anim(el, kf, { duration: (n * 1000) / 30, easing: 'linear' });
+  }
+
+  /** Zoom punch of a whole space 1 → k → 1 (400 ms), drawn above its neighbours. */
+  zoomPunch(i: number, k: number): void {
+    const grp = this.groups[i];
+    if (!grp || instant()) return;
+    const g = GEOM[i]!;
+    // A CSS transform replaces the group's transform attribute: compose the placement with the scale.
+    const tf = (s: number): string =>
+      g.corner
+        ? `translate(${g.x}px, ${g.y}px) translate(${g.lw / 2}px, ${g.lh / 2}px) scale(${s}) translate(${-g.lw / 2}px, ${-g.lh / 2}px)`
+        : `translate(${g.cx}px, ${g.cy}px) rotate(${g.rot}deg) scale(${s}) translate(${-g.lw / 2}px, ${-g.lh / 2}px)`;
+    // Paint order = z-order in SVG: move the group last (the order of the groups carries no meaning).
+    if (grp.nextSibling) this.svgEl.appendChild(grp);
+    void anim(grp, [{ transform: tf(1) }, { transform: tf(k), offset: 5 / 12 }, { transform: tf(1) }], { duration: 400, easing: 'ease-out' });
+  }
+
+  /** "Under construction" dim of a space's level icon (class on the space group: survives re-renders). */
+  dimIcon(i: number, on: boolean): void {
+    this.groups[i]?.classList.toggle('is-building', on);
+  }
+
+  /** Reduced-motion static highlight: an outline mark for `ms`, no animation. */
+  highlight(i: number, color: string, ms = 800): void {
+    if (!GEOM[i]) return;
+    const el = this.outline(i, 'bm-hl', 10);
+    el.style.setProperty('--fx-hl', color);
+    gridTimeout(() => el.remove(), ms);
   }
 
   /** Screen centre (client px) of a space — for fx. */

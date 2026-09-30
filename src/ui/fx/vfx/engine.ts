@@ -22,7 +22,8 @@ import { createCoords, type CoordSource, type RectLike } from './coords';
 import { FRAME_MS, newSample, sampleParticle } from './particles';
 import { PF } from './pool';
 import { buildPreset, type PresetEnv, type PresetName, type PresetParams } from './presets';
-import { Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Timeline } from './timeline';
+import { Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
+import { ACCENT_Q, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
 
 export type FxQuality = 'high' | 'low' | 'off';
 
@@ -56,9 +57,19 @@ export interface FxOptions extends CoordSource {
    * Default false (VFX.md §3.2: free the backing store). `stopAll()` / `dispose()` always free it.
    */
   retainBacking?: boolean;
+  /**
+   * Escalation policy (docs/VFX.md §6.2, `director.ts`): decides whether a new effect plays at full
+   * strength or as an accent (particles ×0.4, no shake / hit-stop / flash). Default: always full.
+   */
+  policy?(next: FxInfo, running: readonly RunningFx[]): FxMode;
+  /** Only one I3+ effect at a time: a big effect waits (≤ BIG_WAIT_FRAMES) for the previous one's timeline. */
+  serializeBig?: boolean;
 }
 
 export interface FxPlay extends PromiseLike<void> {
+  /** Preset / timeline name ('' when nothing plays). */
+  readonly name: string;
+  readonly tier: Tier;
   /** Resolves at the named cue frame (immediately if the timeline has no such cue, or in reduced motion). */
   cue(name: string): Promise<void>;
   /** Resolves when the effect's last particle is gone. */
@@ -100,6 +111,8 @@ export interface FxHandle {
   resetStats(): void;
   /** Remove the canvas and listeners. */
   dispose(): void;
+  /** Effects running now (name, tier, frame, still running its timeline) — for the director / tests. */
+  running(): RunningFx[];
 }
 
 const GRACE_TICKS = 8;
@@ -122,9 +135,9 @@ function union(a: RectLike | null, b: RectLike): RectLike {
   return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
 }
 
-const noopPlay = (): FxPlay => {
+const noopPlay = (name = '', tier: Tier = 0): FxPlay => {
   const p = Promise.resolve();
-  return { then: p.then.bind(p), cue: () => Promise.resolve(), done: p, block: p, cancel() {} };
+  return { name, tier, then: p.then.bind(p), cue: () => Promise.resolve(), done: p, block: p, cancel() {} };
 };
 
 export function createFx(o: FxOptions): FxHandle {
@@ -157,6 +170,23 @@ export function createFx(o: FxOptions): FxHandle {
   let acc = 0;
   let grace = 0;
   let localSkip = false;
+
+  /** Big effects waiting for the previous big one (serializeBig). */
+  const bigQueue: Array<{ left: number; go: () => void }> = [];
+  const runningFx = (): RunningFx[] =>
+    runner.effects
+      .filter((e) => !e.finished)
+      .map((e) => ({ name: e.tl.name, tier: e.tl.tier, f: e.f, active: e.idx < e.tl.ops.length, ...(e.tl.highlight ? { highlight: e.tl.highlight } : {}) }));
+  function pumpBig(frames: number): void {
+    if (!bigQueue.length) return;
+    const busy = bigBusy(runningFx());
+    for (const w of bigQueue) w.left -= frames;
+    // Release the oldest waiter once the big one ended its timeline (or waited long enough).
+    while (bigQueue.length && (!busy || bigQueue[0]!.left <= 0)) {
+      bigQueue.shift()!.go();
+      if (!busy) break;
+    }
+  }
 
   let dirty = { x0: 0, y0: 0, x1: 0, y1: 0, any: false };
   let fullClear = true;
@@ -330,6 +360,7 @@ export function createFx(o: FxOptions): FxHandle {
     }
     last = now;
     if (frames > 0) runner.advance(frames);
+    if (frames > 0) pumpBig(frames);
     if (frames > 0 || fullClear) draw();
     const dt = performance.now() - t0;
     tick.last = dt;
@@ -341,7 +372,7 @@ export function createFx(o: FxOptions): FxHandle {
     tick.sum += dt;
     ring[tick.n % ring.length] = dt;
     tick.n++;
-    if (runner.idle) {
+    if (runner.idle && !bigQueue.length) {
       localSkip = false;
       if (++grace > GRACE_TICKS) {
         stopTick = null;
@@ -380,13 +411,27 @@ export function createFx(o: FxOptions): FxHandle {
         runReduced(tl, reducedHooks());
         return null;
       }
-      effect = runner.start(tl, { u: createCoords(o).u, ...(seed !== undefined ? { seed } : {}), quality: quality === 'low' ? 0.5 : 1 });
+      // One big moment at a time (§6.2-4): wait for the previous I3+ effect's timeline.
+      if (o.serializeBig && tl.tier >= 3 && stopTick && bigBusy(runningFx())) {
+        await new Promise<void>((go) => bigQueue.push({ left: BIG_WAIT_FRAMES, go }));
+        if (cancelled) return null;
+      }
+      const mode = o.policy ? o.policy({ name: tl.name, tier: tl.tier, ...(tl.highlight ? { highlight: tl.highlight } : {}) }, runningFx()) : 'full';
+      const accent = mode === 'accent';
+      effect = runner.start(tl, {
+        u: createCoords(o).u,
+        ...(seed !== undefined ? { seed } : {}),
+        quality: (quality === 'low' ? 0.5 : 1) * (accent ? ACCENT_Q / 0.5 : 1),
+        quiet: accent,
+      });
       arm(tl);
       return effect;
     })();
     const blockP = ready.then((e) => (e ? e.block : undefined));
     const doneP = ready.then((e) => (e ? e.done : undefined));
     return {
+      name: tl.name,
+      tier: tl.tier,
       then: (a, b) => blockP.then(a, b),
       block: blockP,
       done: doneP,
@@ -410,11 +455,11 @@ export function createFx(o: FxOptions): FxHandle {
 
   const handle: FxHandle = {
     play(name, params, opt) {
-      if (clock.instant()) return noopPlay();
+      if (clock.instant()) return noopPlay(name);
       const tl = buildPreset(name, params, env());
       if (clock.reducedMotion() || quality === 'off') {
         runReduced(tl, reducedHooks());
-        return noopPlay();
+        return noopPlay(tl.name, tl.tier);
       }
       return start(tl, opt?.seed);
     },
@@ -422,7 +467,7 @@ export function createFx(o: FxOptions): FxHandle {
       if (clock.instant()) return noopPlay();
       if (clock.reducedMotion() || quality === 'off') {
         runReduced(tl, reducedHooks());
-        return noopPlay();
+        return noopPlay(tl.name, tl.tier);
       }
       return start(tl, opt?.seed);
     },
@@ -432,8 +477,10 @@ export function createFx(o: FxOptions): FxHandle {
     },
     stopAll() {
       runner.stopAll();
+      for (const w of bigQueue.splice(0)) w.go();
       teardown(true);
     },
+    running: runningFx,
     setQuality(q) {
       quality = q;
       if (q === 'off') handle.stopAll();

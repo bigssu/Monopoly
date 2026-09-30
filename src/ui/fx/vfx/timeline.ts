@@ -271,6 +271,8 @@ export interface StartOptions {
   seed?: number;
   /** Count multiplier from the quality setting (1 high, 0.5 low). */
   quality?: number;
+  /** Accent (§6.2 demotion): no shake / hit-stop / flash, like an effect started while skipping. */
+  quiet?: boolean;
 }
 
 /** Log of executed side effects (tests / determinism checks). */
@@ -309,7 +311,7 @@ export class Runner {
   start(tl: Timeline, o: StartOptions): Effect {
     const id = this.nextId++;
     const rng = mulberry32(o.seed ?? mixSeed(this.baseSeed, id));
-    const quiet = this.skipping;
+    const quiet = this.skipping || !!o.quiet;
     const q = (o.quality ?? 1) * (quiet ? 0.5 : 1);
     const e = new Effect(id, tl, this, rng, o.u, q, quiet);
     this.effects.push(e);
@@ -390,6 +392,7 @@ export class Runner {
         this.freeze = Math.max(this.freeze, a.frames);
         return;
       case 'flash': {
+        if (e.quiet && !this.skipping) return;
         // Flash budget (VFX.md §3.7/§8.1): ≤ 3 flash frames per 1 s window, alpha ≤ 0.25.
         const since = this.frame - 30;
         this.flashFrames = this.flashFrames.filter((f) => f > since);

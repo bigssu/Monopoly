@@ -14,6 +14,9 @@ import { Dice } from './Dice';
 
 export type Tone = 'info' | 'good' | 'bad' | 'gold';
 
+/** Level → building icon (0 = empty lot: shown as the villa). */
+const BUILDING_ICONS = ['villa', 'villa', 'building', 'hotel', 'landmark'] as const;
+
 export class Stage {
   readonly el: HTMLElement;
   readonly dice: Dice;
@@ -361,12 +364,66 @@ export class Stage {
     void anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).then(() => el.remove());
   }
 
+  // -------------------------------------------------------------------------
+  // FX hooks (docs/VFX.md §7.2b.10): close-up card, anchor points
+  // -------------------------------------------------------------------------
+
+  private cu: HTMLElement | null = null;
+
+  /**
+   * Close-up card for a landmark (camera-zoom stand-in): the level icon large in the owner's
+   * frame, no text, inside the rotating stage (faces the acting seat). 'in' shows the previous
+   * level, 'pop' swaps to the new one with a pop, 'out' fades it away.
+   */
+  closeUp(color: string, level: number, phase: 'in' | 'pop' | 'out'): void {
+    const icon = (lv: number): HTMLElement => iconEl(BUILDING_ICONS[Math.max(0, Math.min(4, lv))]!, 'ico fx-cu-ico', color);
+    if (phase === 'in') {
+      this.cu?.remove();
+      const el = h('div', { class: 'fx-closeup', 'aria-hidden': 'true' }, icon(level - 1));
+      el.style.setProperty('--pc', color);
+      el.style.color = color;
+      this.cu = el;
+      this.rot.append(el);
+      void anim(el, [{ opacity: 0, transform: 'translateY(8%) scale(.7)' }, { opacity: 1, transform: 'none' }], {
+        duration: 133,
+        easing: 'cubic-bezier(.34,1.56,.64,1)',
+      });
+    } else if (phase === 'pop') {
+      const el = this.cu;
+      if (!el) return;
+      el.replaceChildren(icon(level));
+      void anim(el.firstElementChild!, [{ transform: 'scale(.5)' }, { transform: 'scale(1.12)', offset: 0.55 }, { transform: 'scale(1)' }], {
+        duration: 333,
+        easing: 'cubic-bezier(.3,1.4,.5,1)',
+      });
+    } else {
+      const el = this.cu;
+      if (!el) return;
+      this.cu = null;
+      void anim(el, [{ opacity: 1 }, { opacity: 0, transform: 'scale(.92)' }], { duration: 267 }).then(() => el.remove());
+    }
+  }
+
+  /** Remove the close-up card now (skip, resize, screen exit). */
+  dropCloseUp(): void {
+    this.cu?.remove();
+    this.cu = null;
+  }
+
+  /** Client centre of the card / prompt on the stage (else the stage centre): free-upgrade comet, card glints. */
+  cardClientCenter(): { x: number; y: number } {
+    const card = this.toastLayer.querySelector('.ev-card') ?? (this.promptSlot.firstElementChild ? this.promptSlot : null) ?? this.el;
+    const r = card.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
   /** Dismiss a pending card reveal early (skip). */
   hurry(): void {
     this.cardDone?.();
   }
 
   dispose(): void {
+    this.dropCloseUp();
     this.fitRo?.disconnect();
     this.fitRo = null;
     this.stopFit?.();

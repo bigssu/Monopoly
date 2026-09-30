@@ -15,7 +15,7 @@ import {
   type Player,
 } from '@/engine';
 import { fmtMoney, loc, t } from '@/i18n';
-import { anim, D, instant, onFrame } from '@/ui/fx/time';
+import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
 import { groupColor, h, iconEl, setPlayerVars, signedMoney, svgNode } from '@/ui/game/util';
 
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
@@ -207,6 +207,30 @@ export class PlayerPanel {
     ).then(() => el.remove());
   }
 
+  /** A number pop / caption rising from the panel (fx `floatText`: the canvas never draws text). */
+  floatText(text: string, up = true): void {
+    if (instant() || !text) return;
+    const el = h('span', { class: `pp-float ${up ? 'is-up' : 'is-down'}`, text });
+    this.floats.append(el);
+    void anim(
+      el,
+      [
+        { transform: 'translate(-50%, 20%) scale(.6)', opacity: 0 },
+        { transform: 'translate(-50%, -40%) scale(1.1)', opacity: 1, offset: 0.2 },
+        { transform: 'translate(-50%, -85%) scale(1)', opacity: 1, offset: 0.65 },
+        { transform: 'translate(-50%, -150%) scale(1)', opacity: 0 },
+      ],
+      { duration: 1300, easing: 'cubic-bezier(.22,1,.36,1)' },
+    ).then(() => el.remove());
+  }
+
+  /** Reduced-motion static highlight (class toggle, no animation). */
+  highlight(color: string, ms = 800): void {
+    this.cardEl.style.setProperty('--fx-hl', color);
+    this.cardEl.classList.add('fx-hl');
+    gridTimeout(() => this.cardEl.classList.remove('fx-hl'), ms);
+  }
+
   /** A short "you got paid" bump of the whole panel. */
   async bump(): Promise<void> {
     await anim(
@@ -236,6 +260,11 @@ export class PlayerPanel {
       ],
       { duration: 900, easing: 'ease-out' },
     );
+  }
+
+  /** Client rect (fx engine `getPanelRect`). */
+  clientRect(): DOMRect {
+    return this.el.getBoundingClientRect();
   }
 
   /** Centre in client px (for coin arcs). */

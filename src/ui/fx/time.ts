@@ -25,6 +25,20 @@ let speed = 1;
 let skipping = false;
 const SKIP_RATE = 5;
 
+/**
+ * Dev/test only: a hand-driven clock (`setManualClock(true)` + `stepClock(n)`), so an e2e test
+ * can screenshot the real game every N frames (in-game VFX filmstrips). While on, no rAF runs:
+ * `onFrame` steps, sleeps, grid timeouts and `anim()` Web Animations (paused, advanced by
+ * `currentTime`) all move only on `stepClock`. Stylesheet animations keep real time.
+ */
+let manual: { now: number } | null = null;
+const manualAnims = new Set<Animation>();
+
+/** Clock time (ms): `performance.now()`, or the manual clock's. */
+function clockNow(): number {
+  return manual ? manual.now : performance.now();
+}
+
 const reducedQuery =
   typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 
@@ -36,9 +50,22 @@ export function animSpeed(): number {
   return speed;
 }
 
+let reducedSetting = false;
+/** App setting "reduce animations" (prefs). */
+export function setReducedMotion(on: boolean): void {
+  reducedSetting = on;
+}
+/**
+ * prefers-reduced-motion or the app setting: no canvas FX (static highlight + sound, docs/VFX.md
+ * §8.3). Separate from `instant()`, which also covers speed 0 (tests: nothing at all).
+ */
+export function reducedMotion(): boolean {
+  return reducedSetting || !!reducedQuery?.matches;
+}
+
 /** True when animations should be skipped entirely. */
 export function instant(): boolean {
-  return speed === 0 || !!reducedQuery?.matches;
+  return speed === 0 || reducedMotion();
 }
 
 function rate(): number {
@@ -77,6 +104,14 @@ function arm(s: Sleeper, left: number): void {
   clearTimeout(s.id);
   s.stopTick?.();
   s.stopTick = null;
+  if (manual) {
+    s.stopTick = onFrame((now) => {
+      if (now < s.end - 0.5) return true;
+      wake(s);
+      return false;
+    });
+    return;
+  }
   if (fps >= 60 || skipping) {
     s.id = setTimeout(() => wake(s), left);
     return;
@@ -96,7 +131,7 @@ export function sleep(ms: number): Promise<void> {
   const d = D(ms);
   if (d <= 0) return Promise.resolve();
   return new Promise((resolve) => {
-    const s: Sleeper = { id: 0 as unknown as ReturnType<typeof setTimeout>, end: performance.now() + d, resolve, stopTick: null };
+    const s: Sleeper = { id: 0 as unknown as ReturnType<typeof setTimeout>, end: clockNow() + d, resolve, stopTick: null };
     sleepers.add(s);
     arm(s, d);
   });
@@ -108,6 +143,16 @@ export function sleep(ms: number): Promise<void> {
  */
 export function gridTimeout(fn: () => void, ms: number): () => void {
   let stop: (() => void) | null = null;
+  if (manual) {
+    const end = manual.now + ms;
+    stop = onFrame((now) => {
+      if (now < end - 0.5) return true;
+      stop = null;
+      fn();
+      return false;
+    });
+    return () => stop?.();
+  }
   const id = setTimeout(() => {
     if (fps >= 60) {
       fn();
@@ -149,16 +194,23 @@ export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyfram
     const q = stepped ? null : quantizedEasing(easing, duration, fps, supportsLinearEasing);
     a = el.animate(stepped ?? keyframes, { ...timing, duration, easing: stepped ? 'linear' : (q ?? easing) });
     originals.set(a, { keyframes, easing, duration: opts.duration / speed, waapi: true });
-    if (stepped || q) alignToGrid(a);
+    if ((stepped || q) && !manual) alignToGrid(a);
   }
   if (skipping) a.playbackRate = SKIP_RATE;
+  if (manual) {
+    a.pause();
+    a.currentTime = 0;
+    manualAnims.add(a);
+  }
   running.add(a);
   return a.finished.then(
     () => {
       running.delete(a);
+      manualAnims.delete(a);
     },
     () => {
       running.delete(a);
+      manualAnims.delete(a);
     },
   );
 }
@@ -168,7 +220,7 @@ export function skip(): void {
   if (skipping) return;
   skipping = true;
   for (const a of running) a.playbackRate = SKIP_RATE;
-  const now = performance.now();
+  const now = clockNow();
   for (const s of [...sleepers]) {
     const left = Math.max(0, (s.end - now) / SKIP_RATE);
     s.end = now + left;
@@ -272,7 +324,7 @@ let fresh = true;
 let inLoop = false;
 
 function schedule(): void {
-  if (clockRaf || inLoop || typeof requestAnimationFrame !== 'function') return;
+  if (manual || clockRaf || inLoop || typeof requestAnimationFrame !== 'function') return;
   clockRaf = requestAnimationFrame(clockLoop);
 }
 
@@ -337,6 +389,58 @@ export function onFrame(fn: FrameTick): () => void {
       fresh = true;
     }
   };
+}
+
+/** Dev/test: switch the hand-driven clock on / off (see `manual`). */
+export function setManualClock(on: boolean): void {
+  if (on === !!manual) return;
+  if (on) {
+    manual = { now: performance.now() };
+    if (clockRaf) cancelAnimationFrame(clockRaf);
+    clockRaf = 0;
+    // Pending real-time sleepers move onto the manual clock.
+    const t = performance.now();
+    for (const s of [...sleepers]) arm(s, Math.max(0, s.end - t));
+    return;
+  }
+  manual = null;
+  for (const a of [...manualAnims]) a.play();
+  manualAnims.clear();
+  for (const s of [...sleepers]) arm(s, 0);
+  fresh = true;
+  schedule();
+}
+
+/** Dev/test: advance the manual clock by `n` frame periods (runs every due step and animation). */
+export function stepClock(n = 1): void {
+  if (!manual) return;
+  const p = period();
+  for (let k = 0; k < n; k++) {
+    manual.now += p;
+    for (const a of [...manualAnims]) {
+      const end = a.effect?.getComputedTiming().endTime;
+      const next = (Number(a.currentTime) || 0) + p * a.playbackRate;
+      if (typeof end === 'number' && next >= end) {
+        manualAnims.delete(a);
+        a.finish();
+      } else a.currentTime = next;
+    }
+    inLoop = true;
+    try {
+      for (const fn of [...ticks]) {
+        let keep: boolean | void;
+        try {
+          keep = fn(manual.now);
+        } catch (e) {
+          keep = false;
+          console.error('[clock]', e);
+        }
+        if (keep === false) ticks.delete(fn);
+      }
+    } finally {
+      inLoop = false;
+    }
+  }
 }
 
 /** Frame-grid parameters (perf diagnostics: scripts/perf.mjs classifies frames as on/off grid). */

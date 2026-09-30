@@ -8,9 +8,16 @@ import { Board } from '@/ui/board/Board';
 import { Stage } from '@/ui/stage/Stage';
 import { spaceInfo } from '@/ui/stage/prompts';
 import { PlayerPanel } from '@/ui/panels/PlayerPanel';
+import { createFx, type FxHandle, type HighlightTarget } from '@/ui/fx/vfx';
+import { fxPolicy, PitchLadder } from '@/ui/fx/vfx/director';
+import { shakeAll } from '@/ui/fx/shake';
 import { Particles } from '@/ui/fx/particles';
+import { anim } from '@/ui/fx/time';
+import { sfx, type SfxName } from '@/ui/audio/sfx';
+import { haptic } from '@/ui/audio/haptics';
+import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
-import { h, iconEl, prepareGameIcons } from './util';
+import { h, iconEl, isDevHook, prepareGameIcons } from './util';
 
 export class GameView {
   readonly root: HTMLElement;
@@ -19,8 +26,15 @@ export class GameView {
   readonly board: Board;
   readonly stage: Stage;
   readonly panels = new Map<PlayerId, PlayerPanel>();
+  /** `.fx-layer` (z 40, pointer-events none): the VFX canvas + spotlight veil. */
   readonly fx: HTMLElement;
+  /** Canvas sprite/particle engine (docs/VFX.md, wiring: docs/VFX-WIRING.md). */
+  readonly vfx: FxHandle;
+  /** Old canvas particles (removed once animate.ts is migrated to presets). */
   readonly particles: Particles;
+  private spot: HTMLElement;
+  private spotOn = false;
+  private ladder = new PitchLadder();
   readonly menuSlot: HTMLElement;
   readonly seats: Seat[];
   layout: GameLayout | null = null;
@@ -45,7 +59,43 @@ export class GameView {
       this.table.append(panel.el);
     }
     this.fx = h('div', { class: 'fx-layer' });
+    this.spot = h('div', { class: 'fx-spot', 'aria-hidden': 'true' });
+    this.spot.hidden = true;
+    // Under the canvas (the canvas is appended on the first play()).
+    this.fx.append(this.spot);
     this.particles = new Particles(this.fx);
+    this.vfx = createFx({
+      layer: this.fx,
+      getLayerRect: () => this.fx.getBoundingClientRect(),
+      getBoardRect: () => this.board.el.getBoundingClientRect(),
+      getSpaceRect: (i) => this.board.spaceRect(i),
+      getPanelRect: (id) => this.panels.get(id)?.clientRect() ?? null,
+      getSeat: (id) => this.state.players[id]?.seat ?? 'S',
+      getStageRect: () => this.stage.el.getBoundingClientRect(),
+      getPlayerColor: (id) => this.colorOf(id),
+      sfx: (name, o) => this.playSfx(name, o),
+      haptic: (k) => haptic(k),
+      shake: (px, ms) => void shakeAll([this.table, this.fx], px, ms),
+      highlight: (target, ms) => this.staticHighlight(target, ms),
+      dom: {
+        pop: (i, o) => this.board.popIcon(i, o),
+        zoomPunch: (i, k) => this.board.zoomPunch(i, k),
+        dim: (i, on) => this.board.dimIcon(i, on),
+        closeUp: (i, pid, level, phase) => {
+          if (phase === 'in') this.aimSpot(i);
+          this.stage.closeUp(this.colorOf(pid), level, phase);
+        },
+        spotlight: (on) => this.spotlight(on),
+        floatText: (pid, text) => this.panels.get(pid)?.floatText(text),
+        panelBump: (pid) => void this.panels.get(pid)?.bump(),
+      },
+      policy: fxPolicy,
+      serializeBig: true,
+      // Keep the hidden canvas's backing store between effects (no first-draw allocation spike;
+      // still no layer, frame callback or timer while idle) — docs/VFX.md §13.5.
+      retainBacking: true,
+      dev: isDevHook(),
+    });
     this.menuSlot = h('div', { class: 'menu-slot' });
     this.rotateOverlay = h(
       'div',
@@ -61,6 +111,8 @@ export class GameView {
   }
 
   private applyLayout(W: number, H: number): void {
+    // Effects hold client positions: drop them on resize / rotation (they last ~1-2 s).
+    this.stopFx();
     const L = computeLayout(W, H, new Set(this.seats));
     const was = this.layout?.portrait ?? false;
     this.layout = L;
@@ -101,7 +153,69 @@ export class GameView {
     return this.panels.get(pid);
   }
 
+  colorOf(pid: PlayerId): string {
+    const p = this.state.players[pid];
+    return p ? playerColor(p.colorId).hex : '#F2B633';
+  }
+
+  /** Sound with the cash pitch ladder (docs/VFX.md §6.2-2): every cash-in / cash-out goes through here. */
+  playSfx(name: SfxName, o: { pitch?: number; gain?: number } = {}): void {
+    const pitch = this.ladder.apply(name, o.pitch, performance.now());
+    sfx.play(name, { ...o, ...(pitch !== undefined ? { pitch: Math.min(1.9, pitch) } : {}) });
+  }
+
+  /** Drop every running effect and its DOM helpers (resize, skip-to-end, screen exit). */
+  stopFx(): void {
+    this.vfx.stopAll();
+    this.stage.dropCloseUp();
+    this.spotlight(false, true);
+  }
+
+  /** Centre the spotlight's clear hole on a space (and the stage centre, where the close-up card is). */
+  private aimSpot(i: number): void {
+    const L = this.fx.getBoundingClientRect();
+    const r = this.board.spaceRect(i);
+    const b = this.board.el.getBoundingClientRect();
+    const s = this.spot.style;
+    s.setProperty('--sx', `${r.x + r.width / 2 - L.left}px`);
+    s.setProperty('--sy', `${r.y + r.height / 2 - L.top}px`);
+    s.setProperty('--sr', `${Math.max(r.width, r.height) * 0.9}px`);
+    s.setProperty('--cx', `${b.left + b.width / 2 - L.left}px`);
+    s.setProperty('--cy', `${b.top + b.height / 2 - L.top}px`);
+    s.setProperty('--cr', `${(b.width / 32) * 3.9}px`);
+  }
+
+  /** Landmark spotlight: the table dims to 25 % around the space and the close-up card (fade 200 / 267 ms). */
+  spotlight(on: boolean, now = false): void {
+    if (on === this.spotOn && !now) return;
+    this.spotOn = on;
+    const el = this.spot;
+    if (on) {
+      el.hidden = false;
+      void anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
+    } else if (now) {
+      el.getAnimations().forEach((a) => a.cancel());
+      el.hidden = true;
+    } else {
+      void anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 267, fill: 'forwards' }).then(() => {
+        if (this.spotOn) return;
+        el.getAnimations().forEach((a) => a.cancel());
+        el.hidden = true;
+      });
+    }
+  }
+
+  /** Reduced motion (docs/VFX.md §8.3): a static colour frame on the space / panel, no animation. */
+  staticHighlight(target: HighlightTarget, ms: number): void {
+    const gold = '#F2B633';
+    if ('space' in target) this.board.highlight(target.space, gold, ms);
+    else if ('spaces' in target) for (const i of target.spaces) this.board.highlight(i, gold, ms);
+    else if ('panel' in target) this.panels.get(target.panel)?.highlight(this.colorOf(target.panel), ms);
+  }
+
   dispose(): void {
+    this.vfx.dispose();
+    this.stage.dropCloseUp();
     this.stopWatch();
     this.board.dispose();
     this.stage.dispose();

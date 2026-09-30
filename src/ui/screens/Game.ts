@@ -28,6 +28,8 @@ registerScreen('game', (root, props) => {
   }
   const view = new GameView(state);
   view.mount(root);
+  // FX atlas in idle time after the game is up (not part of boot; a play() before it loads waits for it).
+  gridTimeout(() => void view.vfx.preload(), 600);
 
   let leaving = false;
   const ctrl = new GameController({

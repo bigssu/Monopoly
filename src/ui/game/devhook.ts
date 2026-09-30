@@ -9,7 +9,8 @@
 import { chooseAction, defaultPlayers, defaultSettings, deepClone, legalActions, type Action, type GameState, type Settings } from '@/engine';
 import { setLang, type Lang } from '@/i18n';
 import { showScreen } from '@/ui/router';
-import { setAnimSpeed } from '@/ui/fx/time';
+import { activeFrameTicks, setAnimSpeed, setManualClock, stepClock } from '@/ui/fx/time';
+import type { FxStats, PresetName, PresetParams } from '@/ui/fx/vfx';
 import type { GameController } from './controller';
 import { isDevHook } from './util';
 
@@ -38,6 +39,16 @@ export interface LotAndRollHook {
   suggest(): Action | null;
   legal(): Action[];
   setLang(lang: Lang): void;
+  /** VFX engine stats of the running game (null off the game screen). */
+  fx(): FxStats | null;
+  /** Play a VFX preset on the live board; resolves at its block frame. */
+  playFx<N extends PresetName>(name: N, params: PresetParams<N>): Promise<void>;
+  /** Registered 30 Hz clock callbacks (0 = idle). */
+  activeTicks(): number;
+  /** Hand-driven animation clock (deterministic in-game filmstrips): on / off. */
+  manualClock(on: boolean): void;
+  /** Advance the manual clock `n` frames (microtasks and timers flushed after each). */
+  stepFrames(n: number): Promise<void>;
 }
 
 declare global {
@@ -79,5 +90,15 @@ export function installDevHook(): void {
       return s && s.phase.kind !== 'gameOver' ? legalActions(s) : [];
     },
     setLang,
+    fx: () => current?.view.vfx.stats() ?? null,
+    playFx: (name, params) => Promise.resolve(current?.view.vfx.play(name, params)),
+    activeTicks: () => activeFrameTicks(),
+    manualClock: (on) => setManualClock(on),
+    stepFrames: async (n) => {
+      for (let k = 0; k < n; k++) {
+        stepClock(1);
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    },
   };
 }
