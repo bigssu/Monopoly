@@ -741,8 +741,8 @@ export class Board {
   // -------------------------------------------------------------------------
 
   /** Client rect of space i (for fx): one board rect read + geometry. */
-  spaceRect(i: number): { x: number; y: number; width: number; height: number } {
-    const r = this.el.getBoundingClientRect();
+  spaceRect(i: number, boardRect?: { left: number; top: number; width: number }): { x: number; y: number; width: number; height: number } {
+    const r = boardRect ?? this.el.getBoundingClientRect();
     const g = GEOM[i]!;
     const k = r.width / VB;
     return { x: r.left + g.x * k, y: r.top + g.y * k, width: g.w * k, height: g.h * k };

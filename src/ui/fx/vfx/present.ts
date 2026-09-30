@@ -268,12 +268,15 @@ export interface Slot {
   clearAll: boolean;
   /** Frames shown without a cluster. */
   idle: number;
+  /** Shown but moved off the layer (idle engine): no Paint to park / unpark, nothing to composite. */
+  parked: boolean;
 }
 
 export interface PresentStats {
   shown: number;
   /** Union of the shown canvases' rects (layer px). */
   union: RectLike | null;
+  /** `shown` = visible on the layer (a parked canvas is not). */
   slots: Array<{ cls: string; x: number; y: number; w: number; h: number; s: number; shown: boolean }>;
   /** Backing px uploaded (canvases painted) since the last reset, and canvas frames painted. */
   uploadPx: number;
@@ -303,6 +306,8 @@ const REUSE_AREA = 8;
 const EMPTY_HIDE_FRAMES = 150;
 /** …or this many when another canvas is shown too. */
 const EXTRA_HIDE_FRAMES = 45;
+/** Off-layer x (CSS px) of a parked canvas (clipped by the `.fx-layer`, not composited). */
+const PARK_X = -100000;
 /** CSS box of a canvas = backing px / BOX_K (see the constructor). */
 const BOX_K = 2;
 /** Smallest canvas shown for a new cluster (backing px). */
@@ -338,7 +343,7 @@ export class Presenter {
       c.width = 0;
       c.height = 0;
       o.layer.append(c);
-      this.slots.push({ cls, el: c, shown: false, sized: false, x: 0, y: 0, s: 1, cluster: -1, used: false, clearAll: true, idle: 0 });
+      this.slots.push({ cls, el: c, shown: false, sized: false, x: 0, y: 0, s: 1, cluster: -1, used: false, clearAll: true, idle: 0, parked: false });
     }
   }
 
@@ -355,10 +360,12 @@ export class Presenter {
       sl.el.style.visibility = 'hidden';
       sl.cluster = -1;
       sl.used = false;
+      sl.parked = false;
     }
   }
 
   private place(sl: Slot, x: number, y: number, s: number): void {
+    sl.parked = x === PARK_X;
     if (sl.x === x && sl.y === y && sl.s === s) return;
     sl.x = x;
     sl.y = y;
@@ -533,7 +540,22 @@ export class Presenter {
     }
   }
 
-  /** Idle: hide every canvas; free the backing stores (unless retained — big ones are always freed). Call `writeStates` after. */
+  /**
+   * Idle without a Paint: shown canvases move off the layer (transform only — a visibility toggle
+   * is a main-thread Paint plus a re-raster of the area under the canvas; a moved composited canvas
+   * is neither). Their content was already cleared by the last (empty) frame. The next effect moves
+   * one back. Call `writeStates` after.
+   */
+  park(): void {
+    for (const sl of this.slots) {
+      if (!sl.shown) continue;
+      this.place(sl, PARK_X, 0, sl.s);
+      sl.cluster = -1;
+      sl.used = false;
+    }
+  }
+
+  /** Stop: hide every canvas; free the backing stores (unless retained — big ones are always freed). Call `writeStates` after. */
   hideAll(free: boolean): void {
     for (const sl of this.slots) {
       this.show(sl, false);
@@ -558,13 +580,13 @@ export class Presenter {
     let shown = 0;
     const slots = this.slots.map((sl) => {
       const r = this.rect(sl);
-      if (sl.shown) {
+      if (sl.shown && !sl.parked) {
         shown++;
         union = union
           ? { x: Math.min(union.x, r.x), y: Math.min(union.y, r.y), width: Math.max(union.x + union.width, r.x + r.w) - Math.min(union.x, r.x), height: Math.max(union.y + union.height, r.y + r.h) - Math.min(union.y, r.y) }
           : { x: r.x, y: r.y, width: r.w, height: r.h };
       }
-      return { cls: this.classes[sl.cls]!.name, x: r.x, y: r.y, w: r.w, h: r.h, s: sl.s, shown: sl.shown };
+      return { cls: this.classes[sl.cls]!.name, x: r.x, y: r.y, w: r.w, h: r.h, s: sl.s, shown: sl.shown && !sl.parked };
     });
     return { shown, union, slots, uploadPx: this.uploadPx, drawn: this.drawn, toggles: this.toggles };
   }

@@ -72,12 +72,15 @@ export class GameView {
     this.fx = h('div', { class: 'fx-layer' });
     this.vfx = createFx({
       layer: this.fx,
-      getLayerRect: () => this.fx.getBoundingClientRect(),
-      getBoardRect: () => this.board.el.getBoundingClientRect(),
-      getSpaceRect: (i) => this.board.spaceRect(i),
-      getPanelRect: (id) => this.panels.get(id)?.clientRect() ?? null,
+      // Client rects are cached until the next relayout (applyLayout): reading them right after the
+      // sequencer's render forced a synchronous style + layout (20-33 ms at 4x) inside the 30 Hz tick
+      // at every turn change / buy (docs/VFX.md §15.3). The layout only moves on a viewport change.
+      getLayerRect: () => this.rect('layer', () => this.fx.getBoundingClientRect()),
+      getBoardRect: () => this.rect('board', () => this.board.el.getBoundingClientRect()),
+      getSpaceRect: (i) => this.board.spaceRect(i, this.rect('board', () => this.board.el.getBoundingClientRect())),
+      getPanelRect: (id) => (this.panels.has(id) ? this.rect(`p${id}`, () => this.panels.get(id)!.clientRect()) : null),
       getSeat: (id) => this.state.players[id]?.seat ?? 'S',
-      getStageRect: () => this.stage.el.getBoundingClientRect(),
+      getStageRect: () => this.rect('stage', () => this.stage.el.getBoundingClientRect()),
       getPlayerColor: (id) => this.colorOf(id),
       sfx: (name, o) => this.playSfx(name, o),
       haptic: (k) => haptic(k),
@@ -133,9 +136,21 @@ export class GameView {
     this.stopWatch = watchViewport((W, H) => this.applyLayout(W, H));
   }
 
+  /** Layout rects for the FX coordinates, valid until the next `applyLayout`. */
+  private rects = new Map<string, DOMRect>();
+  private rect(key: string, read: () => DOMRect): DOMRect {
+    let r = this.rects.get(key);
+    if (!r) {
+      r = read();
+      this.rects.set(key, r);
+    }
+    return r;
+  }
+
   private applyLayout(W: number, H: number): void {
     // Effects hold client positions: drop them on resize / rotation (they last ~1-2 s).
     this.stopFx();
+    this.rects.clear();
     const L = computeLayout(W, H, new Set(this.seats));
     const was = this.layout?.portrait ?? false;
     this.layout = L;

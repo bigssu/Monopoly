@@ -160,12 +160,8 @@ export interface FxHandle {
   settled(minTier?: Tier): Promise<void>;
 }
 
-/**
- * Ticks to stay armed after the last particle (canvases stay shown, empty, nothing painted): the next
- * effect of the same turn (dice → hop → buy …) then needs no show/hide = no Paint (each show/hide
- * is one main-thread Paint; the 3 s cost ~0.3 ms per tick of an empty step).
- */
-const GRACE_TICKS = 90;
+/** Ticks to stay armed after the last particle (then the canvases are parked, present.ts). */
+const GRACE_TICKS = 8;
 /** A particle younger than this (FX frames) keeps the 30 Hz presentation (VFX.md §15). */
 const TAIL_AGE = 8;
 /**
@@ -417,7 +413,10 @@ export function createFx(o: FxOptions): FxHandle {
     pres = next;
   }
 
-  /** Idle: stop the frame step, hide the canvases and (unless `retainBacking`) free their backing stores. */
+  /**
+   * Idle: stop the frame step; with `retainBacking` park the canvases (off the layer, no Paint),
+   * else hide them and free their backing stores.
+   */
   function teardown(free = !o.retainBacking): void {
     stopTick?.();
     stopTick = null;
@@ -428,7 +427,8 @@ export function createFx(o: FxOptions): FxHandle {
     sinceDraw = 0;
     lastNow = -1;
     if (pres) {
-      pres.hideAll(free);
+      if (free) pres.hideAll(true);
+      else pres.park();
       submit(pres, 0);
     }
   }
@@ -625,10 +625,10 @@ export function createFx(o: FxOptions): FxHandle {
     }
     if (frames > 0) pumpBig(frames);
     if (settleWaiters.length) pumpSettled();
-    // Presentation rate: every FX frame (30 Hz) while a timeline still runs its beats or a particle
-    // is young (impacts, pops, fast bursts); every 2nd frame (15 Hz) for tails (fading, drifting).
+    // Presentation rate: every FX frame (30 Hz); on quality 'low', tails (no timeline beats left, no
+    // young particle: fading / drifting) every 2nd frame (15 Hz).
     if (runner.frame !== drawnFrame) sinceDraw++;
-    const every = o.tune?.drawEvery ?? (tierNow() === 'low' || tailOnly() ? 2 : 1);
+    const every = o.tune?.drawEvery ?? (tierNow() === 'low' && tailOnly() ? 2 : 1);
     const empty = pool.liveCount === 0 && lastDrawn === 0;
     if ((runner.frame !== drawnFrame && sinceDraw >= every && !empty) || forceDraw) {
       drawnFrame = runner.frame;
