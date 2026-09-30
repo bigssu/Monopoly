@@ -144,13 +144,23 @@ export function createAtlas(json: FxAtlasJson, images: Record<FxAtlasId, Img>): 
   const indexOf = new Map(names.map((n, i) => [n, i]));
   const cache = new TintCache(makeCanvas);
 
+  /**
+   * Tinted copy of a mask frame. Large frames (> 64 KB at the baked DPR 2: rings, bursts, fireworks,
+   * rays — all soft shapes) are cached at half resolution, which still gives ≥ 1 px per nominal px
+   * (≈ the displayed density: u/30 × backing scale) and quarters their memory, so the 8 MB LRU holds
+   * the typical game palette (4 owners + gold + white) without thrashing.
+   */
+  const tintK = (fi: FrameInfo): number => (fi.f.w * fi.f.h * 4 > 64 * 1024 ? 0.5 : 1);
   const tinted = (fi: FrameInfo, color: string): CanvasImageSource => {
     const { f } = fi;
-    return cache.get(`${fi.key}|${color}`, f.w, f.h, (c) => {
-      c.drawImage(fi.img as CanvasImageSource, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    const k = tintK(fi);
+    const w = Math.max(1, Math.ceil(f.w * k));
+    const h = Math.max(1, Math.ceil(f.h * k));
+    return cache.get(`${fi.key}|${color}`, w, h, (c) => {
+      c.drawImage(fi.img as CanvasImageSource, f.x, f.y, f.w, f.h, 0, 0, w, h);
       c.globalCompositeOperation = 'source-in';
       c.fillStyle = color;
-      c.fillRect(0, 0, f.w, f.h);
+      c.fillRect(0, 0, w, h);
     }) as CanvasImageSource;
   };
 
@@ -163,7 +173,10 @@ export function createAtlas(json: FxAtlasJson, images: Record<FxAtlasId, Img>): 
     const dy = fr.oy / fi.rs - fi.bh * ay;
     const dw = fr.w / fi.rs;
     const dh = fr.h / fi.rs;
-    if (tint && fr.a === 'mask') ctx.drawImage(tinted(fi, tint), 0, 0, fr.w, fr.h, dx, dy, dw, dh);
+    if (tint && fr.a === 'mask') {
+      const k = tintK(fi);
+      ctx.drawImage(tinted(fi, tint), 0, 0, Math.max(1, Math.ceil(fr.w * k)), Math.max(1, Math.ceil(fr.h * k)), dx, dy, dw, dh);
+    }
     else ctx.drawImage(fi.img as CanvasImageSource, fr.x, fr.y, fr.w, fr.h, dx, dy, dw, dh);
   };
 

@@ -1274,7 +1274,7 @@ export function cardReveal(p: CardRevealParams, env: PresetEnv): Timeline {
   const r = (p.r ?? 2.6) * u;
   glow(b, at, 0, col, { s: 3.2, a: 0.55, fadeIn: 3, life: 16, fadeOut: 8 });
   b.area(at, (p.r ?? 2.6) + 1.2);
-  b.at(0, sfx('card'));
+  // No sfx: Stage.showCard() already plays 'card'.
   b.at(
     6,
     burst(6, (k, nn, e) => {
@@ -1551,7 +1551,8 @@ export function doublesFlash(p: DoublesParams, env: PresetEnv): Timeline {
   ring(b, at, 0, GOLD, 1.3);
   starBurst(b, at, 0, GOLD, 1.1);
   sparkles(b, at, 10, 0, { r: 1.7, color: [GOLD, SPARK_WHITE], stagger: 0.75 });
-  b.at(0, sfx('doubles'), haptic('light'));
+  // No sfx: Dice.ts already plays 'doubles' on the landing frame.
+  b.at(0, haptic('light'));
   return b.build('doublesFlash', 2, PRIORITY.misc, { stage: true });
 }
 
@@ -1608,6 +1609,118 @@ export function tap(p: TapParams, env: PresetEnv): Timeline {
   return b.build('tap', 0, PRIORITY.misc);
 }
 
+export interface PulseParams {
+  at: Anchor;
+  /** Ring / sparkle colour (default gold); `player` sets the owner colour. */
+  color?: string;
+  player?: PlayerId;
+  /** Sparkles around the ring (0–12). */
+  sparkles?: number;
+  /** Second ring 6 f later. */
+  double?: boolean;
+  scale?: number;
+}
+
+/**
+ * Generic accent (I0/I1): a ring (+ optional second ring) and a few sparkles at a space / panel /
+ * stage — TurnStarted halo, RoundStarted, IslandStay ripple, TakeoverBlocked (sky), DebtSettled
+ * (green), PropertyTransferred (receiver colour), AuctionStarted, CardKept, Travel/Escape accents.
+ */
+export function ringPulse(p: PulseParams, env: PresetEnv): Timeline {
+  const b = new B(env);
+  const at = b.pt(p.at);
+  const col = p.color ?? (p.player !== undefined ? env.color(p.player) : GOLD);
+  const s = p.scale ?? 1;
+  ring(b, at, 0, col, s);
+  if (p.double) ring(b, at, 6, col, s * 1.2);
+  const n = Math.min(12, p.sparkles ?? 4);
+  if (n) sparkles(b, at, n, 1, { r: 0.8 * s, color: [col, GOLD], stagger: 0.75 });
+  const total = 1 + (p.double ? 1 : 0) + n;
+  return b.build('ringPulse', total <= 8 ? 0 : 1, PRIORITY.misc, 'space' in p.at ? { space: p.at.space } : 'panel' in p.at ? { panel: p.at.panel } : undefined);
+}
+
+export interface PuffParams {
+  at: Anchor;
+  /** Dust colour (default grey: loss / no effect). */
+  color?: string;
+  /** Rising smoke puffs (0–3). */
+  smoke?: number;
+  /** Brick chips (demolition, 0–10). */
+  bricks?: number;
+  scale?: number;
+}
+
+/** Generic puff (I0/I1): dust (+ smoke, + brick chips) — CannotAfford, Demolished, CardUsed/NoEffect, festival removed. */
+export function puff(p: PuffParams, env: PresetEnv): Timeline {
+  const b = new B(env);
+  const at = b.pt(p.at);
+  const u = b.u;
+  const s = p.scale ?? 1;
+  dust(b, at, 0, 0.8 * s, p.color ?? '#B9C0CC', 2, 0.4);
+  if (p.smoke) smoke(b, at, 1, Math.min(3, p.smoke), 3, SMOKE);
+  const nb = Math.min(10, p.bricks ?? 0);
+  if (nb)
+    b.at(
+      0,
+      burst(nb, (k, _n, e) => {
+        const a = e.rng.range(0, Math.PI * 2);
+        const sp = e.rng.range(5, 9) * u;
+        return { anim: 'brick_chip', frame: k % 3, x: at.x, y: at.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 3 * u, ay: 24 * u, life: 16, s: 0.7, vrot: e.rng.jitter(540), fadeOut: 4, layer: 3 };
+      }),
+    );
+  b.area(at, 3);
+  const total = 2 + (p.smoke ?? 0) + nb;
+  return b.build('puff', total <= 8 ? 0 : 1, PRIORITY.misc, 'space' in p.at ? { space: p.at.space } : undefined);
+}
+
+export interface CometJumpParams {
+  from: number;
+  to: number;
+  player: PlayerId;
+}
+
+/** Token jump (island / card move / travel): a comet from space to space, landing ring + dust (I1). */
+export function cometJump(p: CometJumpParams, env: PresetEnv): Timeline {
+  const b = new B(env);
+  const a = env.c.space(p.from);
+  const z = env.c.space(p.to);
+  const col = env.color(p.player);
+  comet(b, a, z, 0, 13, col, 1, 0.3);
+  ring(b, z, 13, col, 1);
+  dust(b, z, 13, 0.8, DUST, 2, 0.4);
+  sparkles(b, z, 6, 13, { r: 0.8, color: [col, GOLD] });
+  b.at(13, block());
+  return b.build('cometJump', 1, PRIORITY.misc, { space: p.to });
+}
+
+export interface BillRainParams {
+  player: PlayerId;
+  /** Number of bills (≤ 10). */
+  n?: number;
+}
+
+/** Money won from a card / pot: bills flutter down in front of the player's panel + sparkles (I1). */
+export function billRain(p: BillRainParams, env: PresetEnv): Timeline {
+  const b = new B(env);
+  const u = b.u;
+  const pa = env.c.panel(p.player);
+  const seat = pa.seat;
+  const n = Math.min(10, p.n ?? 6);
+  const g = seatLocal(seat, 0, 1);
+  b.area(pa, 3).area(local(b, pa, seat, 0, -2.4), 2);
+  b.at(
+    0,
+    burst(n, (k, _n, e) => {
+      const q = local(b, pa, seat, e.rng.jitter(2.2), -e.rng.range(1.6, 2.6));
+      return { anim: 'bill_flutter', frame: k, x: q.x, y: q.y, vx: g.x * 1.5 * u, vy: g.y * 1.5 * u, ax: g.x * 3 * u, ay: g.y * 3 * u, delay: k, life: 22, s: 0.6, rot: SEAT_ANGLE[seat], swing: [16, 1.3], fadeIn: 3, fadeOut: 5, layer: 3 };
+    }),
+  );
+  sparkles(b, pa, 4, 8, { r: 1.2, color: GOLD });
+  b.at(0, sfx('cash-in'), haptic('light'));
+  b.at(8, dom((d) => d.panelBump?.(p.player)));
+  return b.build('billRain', 1, PRIORITY.misc, { panel: p.player });
+}
+
 /** Preset registry (name → builder). */
 export const PRESETS = {
   plotClaim,
@@ -1631,6 +1744,10 @@ export const PRESETS = {
   diceLand,
   hopDust,
   tap,
+  ringPulse,
+  puff,
+  cometJump,
+  billRain,
 } as const;
 
 export type PresetName = keyof typeof PRESETS;

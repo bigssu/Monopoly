@@ -864,3 +864,126 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 | **합계** | | **≈287 KB** (목표 ≤300, 예산 ≤500) |
 
 프로토타입(1.5× 베이크, 182 KB) 대비 DPR 2 선명도를 위해 커졌으나 예산 이내. 프레임 추가 시 마스크 아틀라스는 2048² 한도까지 여유가 있다. §5의 파일명(`bake-atlas.mjs`, `fx-color.webp`, `fx-atlas.json`)은 위 실제 이름(`bake.mjs`, `atlas-color.webp`, `atlas.json`)으로 대체됐다.
+
+---
+
+## 13. 엔진 코어 구현 결과
+
+> 범위: `src/ui/fx/vfx/**`(엔진·프리셋·데모·테스트), `src/styles/vfx.css`, `vfx-demo.html`(개발용, 빌드 입력 아님),
+> `scripts/fx/vfx-strips.mjs`(필름스트립), `scripts/fx/vfx-perf.mjs`(엔진 비용). **기존 파일은 수정하지 않았다** — 게임 화면 연동은
+> `docs/VFX-WIRING.md`의 체크리스트(각 기존 파일의 정확한 변경 + 코드 조각, 모든 `GameEvent` → 프리셋 매핑 표, perf `fx` 페이즈 F1–F10).
+
+### 13.1 구조
+
+| 파일 | 내용 |
+|---|---|
+| `rng.ts` | mulberry32 시드 PRNG(엔진 `rng`와 독립), `mixSeed` |
+| `ease.ts` | `linear/inQuad/outQuad/inOutQuad/inCubic/outCubic/outSine`, `outBack(t, c1)`, `backOvershoot(c1)=4c1³/(27(c1+1)²)`, `c1ForOvershoot`, §7.2b.0 표(`POP_C1` 8/10/12/15 % → 1.5/1.70158/1.9/2.17, `PIP_C1`, `TIER_POP`) |
+| `pool.ts` | SoA 타입 배열 풀 **300 슬롯**(할당 0), `request(n, prio)` = 여유 없으면 `max(ceil(n/4), 여유)`로 감량(하위 우선순위 회수 가능분까지), `alloc`은 **가장 오래된 최저 우선순위**(요청보다 낮은 것만) 회수, `PRIORITY` 표(§3.7), 통계(peak/dropped/reclaimed) |
+| `particles.ts` | 파티클 종류: 스프라이트 애니(루프/고정 fps/`fit`=수명 동안 1회), 정적 스프라이트(컨페티 `scaleX=cos` 뒤집기), 가산 글로우(`blend:'add'`). 운동: 탄도(속도·중력·프레임당 항력) 또는 2차 베지어 경로(+이징, 진행 방향 정렬). 스케일 곡선 s0→s1→s2(구간 이징, `OutBack` c1), 스쿼시(2f 유지 → popBack 5f), 페이드 인/아웃, 회전·감쇠 스윙, **망치 스윙**(들어올림 3f → 내려침 2f, 접촉 프레임 = +20°), 지연 |
+| `atlas.ts` | `import.meta.env.BASE_URL` 기준 `fx/atlas.json` + WebP 2장 → `createImageBitmap`(없으면 `<img>`), 트림 오프셋·앵커·베이크 DPR 복원, `drawFrame()`(범용)·`drawRaw()`(핫패스: 합성된 행렬), **틴트 캐시** `(frame|color)` 오프스크린 캔버스 + `source-in`, LRU 8 MB(64 KB 초과 프레임은 ½ 해상도 캐시 — 13.4), 실패 시 `null`(엔진 비활성, 예외 없음) |
+| `coords.ts` | 주입 콜백(`getLayerRect/getBoardRect/getSpaceRect/getPanelRect/getSeat/getStageRect`) → 레이어 px, `u = 보드/32`, 패널 앵커 = 보드 쪽 가장자리(R3), `SEAT_ANGLE`(= `ui/game/util` 값, 테스트로 고정)·`SEAT_DIR`·`seatLocal()` |
+| `timeline.ts` | DSL `t(frame, action)` — `spawn/burst/shake/flash/hitStop/sfx/haptic/cue/dom/block`. `Runner`: 30 fps FX 프레임 실행, 히트스톱 = FX 시간 정지(타임라인·파티클 모두), 등급 상한(I0 8 · I1 40 · I2 100 · I3 200 · I4 300) 강제, 플래시 예산(1 s 창 ≤3프레임, α ≤0.25, 큰 소프트 `glow` — 전면 사각형 없음), 스킵(대기 cue 즉시 발화·히트스톱 제거·스킵 중 시작한 효과는 파티클 ×0.5·쉐이크/정지 없음), `runReduced()`(첫 sfx·첫 햅틱 + `rm` 표시 op + 정적 하이라이트 1회) |
+| `presets.ts` | §7.5/§7.2b 프리셋 21종 + 범용 4종(`ringPulse/puff/cometJump/billRain`) — 13.2 |
+| `clock.ts` | `FxClock` 어댑터: `gameClock`(= `time.ts`의 `onFrame/animSpeed/isSkipping`, reduced-motion은 media query — 연동 시 `time.ts` 내보내기로 교체), `ManualClock`(테스트·필름스트립) |
+| `engine.ts` | `createFx()` → `FxHandle.play(name, params)`(thenable: 블록 프레임에 resolve, `.cue(name)`, `.done`, `.cancel()`), `run(timeline)`, `skip()`, `stopAll()`, `setQuality('high'|'low'|'off')`, `preload()`, `stats()`, `resetStats()`, `dispose()`, dev `window.__fx`. 캔버스 수명 §3.2, 리전·백킹 §3.3, 더티 영역 클리어, 레이어(0–3)×블렌드 순 그리기, `visibilitychange:hidden` → `stopAll()` |
+| `demo.ts` + `/vfx-demo.html` | 가짜 보드(GEOM 32칸) + 4좌석 패널 + `.fx-layer` + 시나리오 버튼 51개, DOM 훅(칸 팝/딤/줌펀치, 클로즈업 카드, 스포트라이트, 금액 플로트, 패널 범프, 쉐이크)을 **같은 클럭**으로 구현 → 수동 스텝에서도 캡처됨. `window.__vfxDemo`(`run/manual/step/reduced/skip/stats/rects/reset`) |
+
+**클럭**: 엔진은 `onFrame` 스텝 1개만 등록한다(효과가 있을 때만). 틱마다 `경과 × animSpeed × (스킵 ? 5 : 1)`을 누적해 FX 프레임을
+정수로 진행(최대 8/틱, 스킵 20/틱)하고, 그리기는 틱당 1회. 파티클 적분은 고정 1/30 s 스텝(스킵 시 한 틱에 5스텝 — §3.5의 "서브스텝 없음"
+대신 5회 반복: 300개×5 = 0.1 ms 수준이라 단순·결정적인 쪽을 택함). 유휴 판정(효과 0 · 파티클 0) 후 8틱 유예 → `onFrame` 해제,
+캔버스 `hidden`, 백킹 `width=height=0`(또는 `retainBacking` — 13.4).
+
+**설계 대비 달라진 점**
+- 프리셋 타임라인 단위는 ms가 아니라 **30 fps 프레임**(§7.2b 정본과 동일). `FxHandle`은 §3.8 스케치의 `block/done/cancel` + `cue()`.
+- 캔버스 좌표는 클라이언트가 아니라 **`.fx-layer` 로컬 px**(콜백 rect에서 레이어 rect를 뺌).
+- 방향성 스프라이트(망치·경광등·왕관·태그·깃발·별 핍)는 행위자 좌석 각도로 회전, 왕관·태그 낙하와 색종이·코인 샤워의 중력도
+  행위자 좌석 기준 "아래"(R2/R5). 나머지는 방사 대칭.
+- 흰색 반짝은 크림색 보드(#EEE3CD) 위에서 안 보여 `SPARK_WHITE #FFF4C8` + 일반 블렌드로, 가산(`lighter`)은 광선·글로우·글린트·
+  샤인·혜성에만 사용.
+
+### 13.2 프리셋과 스폰 총량 (단위 테스트로 고정, `__tests__/presets.test.ts`)
+
+| 프리셋 | 등급 | 블록 / cue (FX 프레임) | 스폰 총량 (명세) |
+|---|---|---|---|
+| `plotClaim` 가격 <200 / 200–499 / 500–799 / ≥800·허브 | I1/I1/I2/I2 | 블록 f10 · `frame` f10 | 14 / 24 / 34 / 44 (14/24/34/44) |
+| `buildSeq` L1 / L2 / L3 | I1/I1/I2 | f10·`swap` f6 / f10·f9 / f16·f13 | 17 / 33 / 56 (17/33/55 + 플래시 1) |
+| `buildSeq` L4 = `landmarkReveal` | I3 | f24 · `swap` f17 · `stamp` f22 · `settle` f36 · `end` f58, 정지 3f | 172 (171 + 플래시 1) |
+| `landmarkReveal {group}` (명소+독점 복합) | I3 | 위 + `badge` f30 | 159 (≤200; 색종이 48·샤워 12·불꽃 4) |
+| `freeUpgrade` k=1/2/3/4 | I1/I1/I2/I3 | f10/f10/f14 · `swap` f8 (k=4: comet → f17) | 21 / 30 / 45 / 152 (≈19/29/43/152; k=1은 티어 링·굴뚝 포함) |
+| `takeoverStamp` | I3 | f21 · `stamp` f16 · `frame` f18, 정지 3f | 50 (≈53) |
+| `groupChain` n=3 / n=4 | I3 | f24 · `badge` f14 · `stamp` f18, 정지 2f | 78 (77 + 플래시 1) / 90 |
+| `groupFinale` | I3 | f12 · `badge` f2 | 55 |
+| `tollPay` <300 / 300–999 / 1000–2499 / ≥2500·잔액<10 % | I1/I2/I2/I3 | f10/f15/f18/f19 · `arrive` f20 | 13 / 22 / 32 / 54 (13/24/40/70; 축제·허브 2배는 한 티어 위 + 깃발·반짝 / 혜성 6, 면제 10) |
+| `passStart` / `landed` | I2/I3 | f12 | 27 / 42 (~28/~46) |
+| `cardReveal`, `oneAway`, `doublesFlash`(3연속: 경광등), `islandSiren`(3연속 더블: 경광등 선행), `festivalBurst`, `bankruptcy`, `victory`(6종), `diceLand`, `hopDust`, `tap`, `coinIn`, `frameSwap`, `ringPulse`, `puff`, `cometJump`, `billRain` | 표 참조 | — | 모두 등급 상한 이내 |
+
+테스트는 **49개 프리셋 조합** 전부에 대해 "요청량 ≤ 등급 상한, 모두 스폰, 피크 ≤ 300, 유한 종료"를 확인하고, 추가로 cue 순서
+(`swap ≤ block`, L4 swap 17·stamp 22·block 24, 인수 frame 18·stamp 16·block 21, 그룹 badge 14·block 24, 구매 frame=block=10),
+플래시 프레임(L4 2, L3 1), 타격 수 = 레벨(L4 = 3 + 임팩트 쿵), 행위자 색 사용, 시드 결정성, 세 개의 큰 효과 동시 재생 시 풀 ≤300을 검사한다.
+
+### 13.3 테스트
+
+`src/ui/fx/vfx/__tests__/` **5파일 88개**(전체 `npm test` 250개 통과): 풀/예산기(300 상한, n/4 감량, 최저·최고령 회수, 동일
+우선순위 비회수), 적분(반암시적 오일러 닫힌 해와 일치, 베지어 종점, 지연·`fit` 프레임·페이드), 망치 접촉 프레임, RNG 결정성·분포,
+이징(오버슈트 8/10/12/15 %를 수치 최대값으로 검증, `c1ForOvershoot` 역함수), 타임라인 정렬·블록·cue·히트스톱(FX 시간 정지)·스킵
+(cue 즉시·정지 제거·신규 ×0.5·쉐이크 없음)·등급 상한·플래시 예산·시드 결정성·`stopAll`, reduced-motion(캔버스·클럭 미사용, 첫 sfx·
+햅틱, 하이라이트 800 ms, cue 즉시 resolve), 속도 0(아무것도 안 함), 아틀라스 실패(예외 없이 비활성), 좌표(레이어 오프셋, `u`,
+패널 앵커가 보드 쪽, 좌석 회전이 `ui/game/util`의 `SEAT_ANGLE`과 일치), 백킹 스케일(0.75–1.5, DPR 상한, ≤0.9 MP).
+
+### 13.4 필름스트립 (`docs/assets/vfx-strips/*.png`)
+
+`node scripts/fx/vfx-strips.mjs [시나리오:틱 …]` — Vite 개발 서버 + 데모 페이지 + 수동 클럭, **2틱(=2 FX 프레임, 67 ms)마다 1장**,
+라벨 `t`(틱) `f`(FX 프레임 — 히트스톱 동안 같은 f가 반복) `n`(라이브 파티클). 1600×1000, DPR 2, 캔버스 리전으로 클립.
+
+`build1 · build2 · build3 · build4(명소, 남 좌석) · build4N(명소, 북 좌석 — 회전 확인) · tollM · tollXL · takeover · group(체인+피날레) ·
+groupFinale · plot650 · free3 · passStartLanded · victoryHubs`
+
+보고 나서 고친 것:
+1. **색종이 리전 과대**: 도달 거리 식이 항력을 무시해 명소 리전이 스테이지 절반을 덮음 → `v·dt/(1−drag)` + 중력 표류로 계산(명소 리전
+   416×357, 0.33 MP).
+2. **플래시가 흰 원반**: 소프트 글로우 알파 ×4 → 칸 전체가 하얗게 → ×1.6(임팩트는 먼지 커튼 + 약한 번쩍임으로 읽힘).
+3. **`ring_shock` 0번 프레임(채운 점)**이 큰 배율·가산에서 흰 공처럼 보임 → 링은 1–5번 프레임만 수명에 맞춰 재생.
+4. **명소 보상 구간 과밀**: 코인 샤워·색종이가 칸 위에 뭉쳐 f40까지 아이콘이 안 보임 → 샤워 확산 ±60°·속도↑, 색종이 크기 0.6–0.9·
+   속도 10–16u/s.
+5. **승리 대포 색종이가 패널 근처에만**: 항력 0.9 → 0.95, 속도 22–34u/s, 수명 54–72f → 보드 안쪽까지 날아갔다가 승자 쪽으로 떨어짐.
+   허브 승리 혜성 ×1.4·중앙 불꽃 ×2.2.
+6. **통행료 XL 두 파상이 한 줄로 겹침** → 2차 파상은 반대쪽 호, 코인 0.75×. 경광등 0.7→0.85×.
+7. **(성능) 틴트 캐시 스래싱**: 큰 프레임(링 192², 불꽃 12프레임)을 색마다 원해상도로 캐시 → 8 MB LRU가 가득 차 효과 중간에 재생성
+   (틱 최대 15–20 ms) → 64 KB 초과 프레임은 ½ 해상도로 캐시(표시 밀도 ≈ u/30 × 백킹 ≈ 1.3 px/공칭 px ≥ 캐시 1 px/공칭 px, 부드러운
+   도형이라 차이 없음) → 전체 시나리오 후 캐시 6.7 MB, 축출 0.
+8. **(성능) 첫 틱 스파이크**: 리사이즈 직후 전체 `clearRect` 제거(폭 설정이 이미 비움). 남은 스파이크는 새 백킹 스토어의 **첫 그리기 시
+   할당**(0.9 MP에서 4× 10 ms, 1× 2.5 ms — 빈 페이지에서도 동일하게 재현) → `retainBacking` 옵션(13.5).
+
+### 13.5 성능 측정 (`node scripts/fx/vfx-perf.mjs [--retain]`)
+
+조건: 데모 페이지, 실제 30 Hz 클럭(`time.ts`), Chromium 141 헤드리스(소프트웨어 합성), 1600×1000, DPR 2, **CPU 4× 스로틀**,
+시나리오당 1× 워밍업 1회 + 4× 3회(중앙값; 최대는 3회 중 최대). "틱" = 엔진 스텝 1회의 JS(업데이트 + 캔버스 그리기, 소프트웨어 캔버스라
+래스터 포함). 원자료 `docs/assets/vfx-perf-free.json`, `docs/assets/vfx-perf-retain.json`.
+
+| 시나리오 | 라이브 피크 | 리전 → 백킹 | 틱 평균 / p95 / 최대 (ms, 4×) — 기본(백킹 해제) | 〃 — `retainBacking` |
+|---|---|---|---|---|
+| 명소 완성 L4 (`build4`) | 121 | 416×357 → 624×536 @1.5 (0.33 MP) | 1.26 / 2.6 / 11.8 | 1.15 / 2.6 / 5.1 |
+| 명소+독점 복합 | 103 | 416×498 → 624×747 @1.5 (0.47 MP) | 1.22 / 2.4 / 9.5 | 1.11 / 2.2 / 7.2 |
+| 승리(허브) | 117 | 1573×898 → 1256×717 @0.8 (0.90 MP) | 1.38 / 3.3 / 15.3 | 1.24 / 2.8 / 10.1 |
+| 인수 | 28 | 332×995 → 498×1493 @1.5 (0.74 MP) | 0.83 / 1.4 / 13.6 | 0.58 / 1.5 / 2.3 |
+| 통행료 XL | 45 | 386×1000 → 579×1500 @1.5 (0.87 MP) | 0.89 / 2.0 / 13.4 | 0.58 / 1.3 / 4.5 |
+| 독점 체인 | 70 | 561×304 → 842×456 @1.5 (0.38 MP) | 1.11 / 2.0 / 10.8 | 0.89 / 1.8 / 2.4 |
+| 스트레스(복합 명소 + 승리 + 통행료 XL 동시) | **251** | 1573×1000 → 1190×756 @0.76 (0.90 MP) | 1.80 / 4.6 / 21.7 | 1.84 / 4.1 / 17.5 |
+
+- **목표(가장 무거운 프리셋 ≤ 4 ms/프레임 @4×)**: 평균 1.1–1.4 ms, p95 2.2–3.3 ms로 **충족**. 기본 모드의 최대값(9–15 ms)은 거의
+  전부 **효과 시작 틱의 백킹 할당**(`maxAt f1`로 확인)이며, `retainBacking`에서는 명소 5.1 ms·인수 2.3 ms로 사라진다. 승리의 10 ms는
+  f28–34의 대형 불꽃(×2.2)·광선 가산 그리기. 1×에서는 모든 시나리오 평균 0.3–0.9 ms.
+- **라이브 파티클**: 단일 프리셋 피크 ≤121(명소), 세 효과 동시 251 — 풀 300·예산기 내(드롭 0).
+- **캔버스**: 백킹 ≤0.90 MP(스케일 0.76–1.5), 캔버스 1장, 레이어 +1(효과 중에만; 유휴 시 `hidden` → 레이어 0).
+- **유휴 복귀**: 모든 시나리오 후 `ticking=false`, 캔버스 `hidden`, 기본 모드 백킹 0×0(retain 모드는 hidden 유지만), `onFrame` 0.
+- 틴트 캐시: 전 시나리오 후 6.7 MB(상한 8 MB, 축출 없음). 아틀라스 디코드 ≈4.5 MB는 별도(§9).
+- 권장: 연동 시 **`retainBacking: true`**(게임 화면 동안 숨긴 캔버스가 ≤3.6 MB CPU 메모리를 유지 — GPU 레이어 아님, rAF·타이머 0 유지).
+  `stopAll()`(리사이즈·화면 이탈·탭 숨김)과 `dispose()`는 항상 해제한다. 게이트 F1–F10의 최종 판정은 연동 후 `perf.mjs fx` 페이즈에서.
+
+### 13.6 남은 일 (연동 단계)
+
+`docs/VFX-WIRING.md`: CSS import, `time.ts reducedMotion()` 노출, `Board.spaceRect/popIcon/zoomPunch/dimIcon/highlight`,
+`PlayerPanel.clientRect`, `view.ts` 엔진 생성·수명, `shakeAll([table, fxLayer])`, `Stage` `.fx-closeup`·좌표 헬퍼, `animate.ts`의
+전 이벤트 매핑과 **`swap`/`frame` cue까지 `render()` 지연**, `Built.free` 분기, 파생 `GroupCompleted`, 스킵 핸들러 `vfx.skip()`,
+dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·제거, e2e. 실기기 A/B(§10.4)는 그 이후.

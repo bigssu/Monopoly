@@ -89,6 +89,12 @@ describe('presets: spawn totals within tier caps (VFX.md §6.1, §7.2b)', () => 
     ['tap', { x: 500, y: 500, player: 0 }, 5],
     ['coinIn', { from: { panel: 3 }, to: { space: 11 }, n: 6 }, 7],
     ['frameSwap', { space: 15, from: 3, to: 1 }, 11],
+    ['ringPulse', { at: { space: 8 }, color: '#6EC6F0', double: true, sparkles: 0 }, 2],
+    ['ringPulse', { at: { panel: 2 }, player: 2, sparkles: 6 }, 7],
+    ['puff', { at: { space: 12 }, smoke: 3, bricks: 8 }, 13],
+    ['puff', { at: { panel: 1 } }, 2],
+    ['cometJump', { from: 3, to: 8, player: 0 }, 10],
+    ['billRain', { player: 3, n: 6 }, 10],
   ];
   for (const [name, params, expected] of cases) {
     it(`${name} ${JSON.stringify(params)}`, () => {

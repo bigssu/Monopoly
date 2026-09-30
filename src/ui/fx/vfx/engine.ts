@@ -49,6 +49,13 @@ export interface FxOptions extends CoordSource {
   dev?: boolean;
   /** Backing-store budget in pixels (default 0.9 MP). */
   maxBackingPixels?: number;
+  /**
+   * Keep the (hidden) canvas backing store between effects and reuse it when the next region fits:
+   * saves the first-draw allocation (≈ 2.5 ms, 10 ms at 4× for 0.9 MP) at the cost of ≤ 3.6 MB CPU
+   * memory while idle. Still no frame callback, no timer and no layer (display: none) when idle.
+   * Default false (VFX.md §3.2: free the backing store). `stopAll()` / `dispose()` always free it.
+   */
+  retainBacking?: boolean;
 }
 
 export interface FxPlay extends PromiseLike<void> {
@@ -72,8 +79,8 @@ export interface FxStats {
   canvas: { hidden: boolean; x: number; y: number; w: number; h: number; backingW: number; backingH: number; scale: number } | null;
   ticking: boolean;
   frame: number;
-  /** JS time per engine tick (update + draw), ms. */
-  tick: { last: number; max: number; avg: number; n: number };
+  /** JS time per engine tick (update + draw), ms; p95 over the last 256 ticks. */
+  tick: { last: number; max: number; avg: number; p95: number; n: number; maxAt: number; maxFrames: number };
   tintCacheBytes: number;
 }
 
@@ -153,7 +160,16 @@ export function createFx(o: FxOptions): FxHandle {
 
   let dirty = { x0: 0, y0: 0, x1: 0, y1: 0, any: false };
   let fullClear = true;
-  const tick = { last: 0, max: 0, sum: 0, n: 0 };
+  /** The hidden canvas still holds its backing store (retainBacking). */
+  let retained = false;
+  const tick = { last: 0, max: 0, sum: 0, n: 0, maxAt: 0, maxFrames: 0 };
+  const ring = new Float32Array(256);
+  const p95 = (): number => {
+    const n = Math.min(tick.n, ring.length);
+    if (!n) return 0;
+    const a = Array.from(ring.subarray(0, n)).sort((x, y) => x - y);
+    return a[Math.min(n - 1, Math.floor(n * 0.95))]!;
+  };
   const sample = newSample();
   const radius = FX_ANIM_NAMES.map((n) => Math.hypot(FX_ANIMS[n].w, FX_ANIMS[n].h) / 2);
 
@@ -194,6 +210,7 @@ export function createFx(o: FxOptions): FxHandle {
   }
 
   /** Grow the canvas region to include `r` (clamped to the layer). */
+  /** Grow the canvas region to include `r` (clamped to the layer). */
   function growRegion(r: RectLike, layerW: number, layerH: number): void {
     const pad = 8;
     const x0 = Math.max(0, Math.floor(r.x - pad));
@@ -201,34 +218,54 @@ export function createFx(o: FxOptions): FxHandle {
     const x1 = Math.min(layerW, Math.ceil(r.x + r.width + pad));
     const y1 = Math.min(layerH, Math.ceil(r.y + r.height + pad));
     if (x1 <= x0 || y1 <= y0) return;
-    const next = union(region, { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
-    if (region && next.x === region.x && next.y === region.y && next.width === region.width && next.height === region.height && !canvas?.hidden) return;
+    const want = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+    const c = canvas!;
+    // A retained (hidden, still allocated) backing store is reused when the new region fits in it.
+    if (retained && region) {
+      retained = false;
+      const fits = want.x >= region.x && want.y >= region.y && want.x + want.width <= region.x + region.width && want.y + want.height <= region.y + region.height;
+      // …and not much larger than needed (a full-screen store would draw a tile effect at a lower backing scale).
+      if (fits && want.width * want.height >= region.width * region.height * 0.25) {
+        c.hidden = false;
+        return;
+      }
+      region = null;
+    }
+    const next = union(region, want);
+    if (region && next.x === region.x && next.y === region.y && next.width === region.width && next.height === region.height && !c.hidden) return;
     region = next;
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
     scale = backingScale(region.width, region.height, dpr, maxBacking, quality === 'low' ? 1 : 1.5);
-    const c = canvas!;
     c.width = Math.max(1, Math.round(region.width * scale));
     c.height = Math.max(1, Math.round(region.height * scale));
     c.style.width = `${region.width}px`;
     c.style.height = `${region.height}px`;
     c.style.transform = `translate(${region.x}px, ${region.y}px)`;
     c.hidden = false;
-    fullClear = true;
+    // Setting width/height already cleared the bitmap (and the old dirty box is in old coordinates):
+    // no clear needed. The first draw into the fresh backing store pays its allocation
+    // (≈ 10 ms at 4× for 0.9 MP; see docs/VFX.md §13 and the `retainBacking` option).
+    fullClear = false;
+    dirty.any = false;
   }
 
-  function teardown(): void {
+  /** Idle: stop the frame step, hide the canvas and (unless `retainBacking`) free its backing store. */
+  function teardown(free = !o.retainBacking): void {
     stopTick?.();
     stopTick = null;
-    region = null;
     last = -1;
     acc = 0;
     localSkip = false;
-    dirty.any = false;
-    if (canvas) {
-      canvas.hidden = true;
-      canvas.width = 0;
-      canvas.height = 0;
-    }
+    if (canvas) canvas.hidden = true;
+    if (free || !region) {
+      region = null;
+      retained = false;
+      dirty.any = false;
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    } else retained = true;
   }
 
   function draw(): void {
@@ -296,8 +333,13 @@ export function createFx(o: FxOptions): FxHandle {
     if (frames > 0 || fullClear) draw();
     const dt = performance.now() - t0;
     tick.last = dt;
-    tick.max = Math.max(tick.max, dt);
+    if (dt > tick.max) {
+      tick.max = dt;
+      tick.maxAt = runner.frame;
+      tick.maxFrames = frames;
+    }
     tick.sum += dt;
+    ring[tick.n % ring.length] = dt;
     tick.n++;
     if (runner.idle) {
       localSkip = false;
@@ -390,10 +432,7 @@ export function createFx(o: FxOptions): FxHandle {
     },
     stopAll() {
       runner.stopAll();
-      if (stopTick) {
-        if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        teardown();
-      }
+      teardown(true);
     },
     setQuality(q) {
       quality = q;
@@ -416,7 +455,7 @@ export function createFx(o: FxOptions): FxHandle {
           : null,
         ticking: !!stopTick,
         frame: runner.frame,
-        tick: { last: tick.last, max: tick.max, avg: tick.n ? tick.sum / tick.n : 0, n: tick.n },
+        tick: { last: tick.last, max: tick.max, avg: tick.n ? tick.sum / tick.n : 0, p95: p95(), n: tick.n, maxAt: tick.maxAt, maxFrames: tick.maxFrames },
         tintCacheBytes: atlas?.cacheBytes() ?? 0,
       };
     },

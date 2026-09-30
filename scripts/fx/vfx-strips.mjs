@@ -23,7 +23,7 @@ const opt = (k, d) => {
 const OUT = resolve(opt('--out', 'docs/assets/vfx-strips'));
 const EVERY = +opt('--every', '2');
 const COLS = +opt('--cols', '6');
-const THUMB = +opt('--thumb', '380');
+const THUMB = +opt('--thumb', '340');
 const PORT = +opt('--port', '5188');
 const DEFAULT = [
   ['build1', 30],
@@ -109,8 +109,10 @@ try {
     const log = await page.evaluate(() => window.__vfxDemo.log.slice(0, 40).join(' · '));
     const png = await composer.evaluate(
       async ({ shots, cols, thumb, clip, title }) => {
-        const tw = thumb;
-        const th = Math.round((clip.height / clip.width) * tw);
+        // Thumbnails fit a thumb × 1.15·thumb box (tall panel-to-panel clips get narrower).
+        const k = Math.min(thumb / clip.width, (thumb * 1.15) / clip.height);
+        const tw = Math.round(clip.width * k);
+        const th = Math.round(clip.height * k);
         const rows = Math.ceil(shots.length / cols);
         const c = document.createElement('canvas');
         c.width = cols * tw;

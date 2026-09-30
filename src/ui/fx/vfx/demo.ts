@@ -75,7 +75,8 @@ export interface DemoApi {
   stats(): ReturnType<FxHandle['stats']>;
   /** Board rect (client px) and full layer size, for screenshot clips. */
   rects(): { board: DOMRect; layer: DOMRect; stage: DOMRect };
-  reset(): void;
+  /** Stop everything and clear the demo board (`soft`: keep running effects / retained canvas). */
+  reset(soft?: boolean): void;
   fx: FxHandle;
   log: string[];
 }
@@ -253,6 +254,7 @@ export function mountVfxDemo(root: HTMLElement, o: { size?: number } = {}): Demo
     layer,
     clock,
     dev: true,
+    retainBacking: new URLSearchParams(location.search).has('retain'),
     getLayerRect: () => layer.getBoundingClientRect(),
     getBoardRect: () => board.getBoundingClientRect(),
     getSpaceRect: (i) => tiles[i]!.getBoundingClientRect(),
@@ -383,6 +385,10 @@ export function mountVfxDemo(root: HTMLElement, o: { size?: number } = {}): Demo
     tap: () => [play('tap', { ...at(7), player: 0 })],
     coinIn: () => [play('coinIn', { from: { panel: 3 }, to: { space: 11 }, n: 6 })],
     frameSwap: () => [play('frameSwap', { space: 15, from: 3, to: 1 })],
+    pulse: () => [play('ringPulse', { at: { space: 8 }, color: '#6EC6F0', double: true, sparkles: 4 })],
+    demolish: () => [play('puff', { at: { space: 14 }, smoke: 2, bricks: 8 })],
+    jump: () => [play('cometJump', { from: 3, to: 8, player: 0 })],
+    billRain: () => [play('billRain', { player: 3 })],
     stress: () => [
       ...S.landmarkMonopoly!(),
       play('victory', { winner: 0, kind: 'hubs', spaces: [5, 13, 21, 29] }),
@@ -420,8 +426,8 @@ export function mountVfxDemo(root: HTMLElement, o: { size?: number } = {}): Demo
     skip: () => fx.skip(),
     stats: () => fx.stats(),
     rects: () => ({ board: board.getBoundingClientRect(), layer: layer.getBoundingClientRect(), stage: inner.getBoundingClientRect() }),
-    reset() {
-      fx.stopAll();
+    reset(soft = false) {
+      if (!soft) fx.stopAll();
       fx.resetStats();
       for (let i = 0; i < BOARD.length; i++) setLevel(i, 0, null);
       for (const ic of icons) ic.style.transform = '';
