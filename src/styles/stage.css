@@ -31,6 +31,11 @@
   padding: calc(var(--u) * 0.75) calc(var(--u) * 0.5) calc(var(--u) * 0.7);
   font-size: max(12px, calc(var(--u) * 0.72));
   color: var(--ink);
+  /* Own compositing layer, always (it already was one for every turn's rotation): prompt cards,
+     banners and toasts then re-raster only this mostly transparent layer instead of the root
+     layer's tiles, each of which re-drew the board SVG under it (4x trace: root-layer raster
+     3.2 s -> 0.6 s per 25 s of CPU play, docs/PERFORMANCE.md). */
+  will-change: transform;
 }
 
 /* Turn banner */

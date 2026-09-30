@@ -18,12 +18,15 @@ import { loc, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import type { GameView } from '@/ui/game/view';
-import { money, spaceIcon } from '@/ui/game/util';
+import { isDevHook, money, spaceIcon } from '@/ui/game/util';
 import { edgeToast } from './floats';
 import { shake } from './shake';
 import { instant, sleep } from './time';
 
 type Alive = () => boolean;
+
+/** Dev (?dev=1): a User Timing mark per event, so perf traces can say what a long frame was doing. */
+const MARK = typeof window !== 'undefined' && isDevHook();
 
 export async function playEvents(
   view: GameView,
@@ -37,6 +40,7 @@ export async function playEvents(
   for (const ev of events) {
     if (!alive()) return;
     try {
+      if (MARK) performance.mark(`lr:${ev.type}`);
       await step(view, vs, ev, fast);
     } catch (e) {
       // An animation must never break the game loop.
