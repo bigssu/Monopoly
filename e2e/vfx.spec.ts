@@ -51,7 +51,11 @@ async function craft(page: Page, patch: string): Promise<void> {
     hook.loadState(s);
   }, patch);
   await page.waitForSelector('.game .board');
-  await page.waitForFunction(() => window.__lotAndRoll!.fx()?.atlas === 'ready' && !window.__lotAndRoll!.isBusy(), null, { timeout: 20_000 });
+  await page.waitForFunction(() => {
+    const hook = window.__lotAndRoll!;
+    const fx = hook.fx();
+    return !hook.isBusy() && (fx?.atlas === 'ready' || (fx?.quality.tier === 'off' && fx.atlas === 'idle'));
+  }, null, { timeout: 20_000 });
   await page.evaluate(() => window.__lotAndRoll!.whenIdle());
   await page.waitForTimeout(500);
 }
@@ -289,6 +293,7 @@ test.describe('in-game VFX', () => {
     await page.evaluate(() => window.__lotAndRoll!.whenIdle());
     expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.properties[31]!.owner)).toBe(0);
     expect(await page.locator('canvas.fx-canvas').count()).toBe(0);
+    expect(await page.evaluate(() => window.__lotAndRoll!.fx()?.atlas)).toBe('idle');
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

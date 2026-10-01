@@ -3,8 +3,9 @@ import type { Seat } from '@/engine';
 import { ManualClock } from '../clock';
 import { createCoords, rotateVec, SEAT_ANGLE, SEAT_DIR, seatLocal } from '../coords';
 import { backingScale, createFx } from '../engine';
+import { buildPreset } from '../presets';
 import { SEAT_ANGLE as UI_SEAT_ANGLE } from '@/ui/game/util';
-import { fakeSource } from './helpers';
+import { fakeEnv, fakeSource } from './helpers';
 
 describe('coords + seat rotation (VFX.md §3.4)', () => {
   it('matches the UI seat angles and seat "up" vectors', () => {
@@ -53,6 +54,14 @@ describe('coords + seat rotation (VFX.md §3.4)', () => {
 });
 
 describe('engine (no DOM)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((go) => {
+      resolve = go;
+    });
+    return { promise, resolve };
+  };
+
   it('backing scale: 0.75–1.5, DPR-capped, ≤ 0.9 MP', () => {
     expect(backingScale(400, 400, 2)).toBe(1.5);
     expect(backingScale(400, 400, 1)).toBe(1);
@@ -114,5 +123,103 @@ describe('engine (no DOM)', () => {
     expect(sfx).toHaveBeenCalledWith('warning', {});
     expect(fx.stats().atlas).toBe('failed');
     expect(fx.stats().enabled).toBe(false);
+  });
+
+  it('does not resume a pending start after stopAll or dispose', async () => {
+    const first = deferred<null>();
+    const sfx = vi.fn();
+    const haptic = vi.fn();
+    const highlight = vi.fn();
+    const firstClock = new ManualClock();
+    const firstLayer = layer();
+    const fx = createFx({ ...fakeSource(), layer: firstLayer, clock: firstClock, sfx, haptic, highlight, loadAtlas: () => first.promise });
+    const firstPlay = fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
+    fx.stopAll();
+    first.resolve(null);
+    await firstPlay.cue('frame');
+    await firstPlay;
+    await firstPlay.done;
+    expect(sfx).not.toHaveBeenCalled();
+    expect(haptic).not.toHaveBeenCalled();
+    expect(highlight).not.toHaveBeenCalled();
+    expect(firstLayer.append).not.toHaveBeenCalled();
+    expect(firstClock.active).toBe(0);
+    expect(fx.running()).toEqual([]);
+    await fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
+    expect(sfx).toHaveBeenCalledWith('warning', {});
+
+    const second = deferred<null>();
+    const disposedLoad = vi.fn(() => second.promise);
+    const disposedSfx = vi.fn();
+    const disposedHaptic = vi.fn();
+    const disposedHighlight = vi.fn();
+    const disposedClock = new ManualClock();
+    const disposedLayer = layer();
+    const disposed = createFx({ ...fakeSource(), layer: disposedLayer, clock: disposedClock, sfx: disposedSfx, haptic: disposedHaptic, highlight: disposedHighlight, loadAtlas: disposedLoad });
+    const disposedPlay = disposed.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
+    disposed.dispose();
+    await expect(disposed.preload()).resolves.toBe(false);
+    expect(disposedLoad).toHaveBeenCalledTimes(1);
+    second.resolve(null);
+    await disposedPlay.cue('frame');
+    await disposedPlay;
+    await disposedPlay.done;
+    expect(disposedSfx).not.toHaveBeenCalled();
+    expect(disposedHaptic).not.toHaveBeenCalled();
+    expect(disposedHighlight).not.toHaveBeenCalled();
+    expect(disposedLayer.append).not.toHaveBeenCalled();
+    expect(disposedClock.active).toBe(0);
+    expect(disposed.running()).toEqual([]);
+
+    const unloaded = vi.fn(async () => null);
+    const neverLoaded = createFx({ ...fakeSource(), layer: layer(), clock: new ManualClock(), loadAtlas: unloaded });
+    neverLoaded.dispose();
+    await expect(neverLoaded.preload()).resolves.toBe(false);
+    expect(unloaded).not.toHaveBeenCalled();
+  });
+
+  it('does not run reduced effects after disposal', async () => {
+    const sfx = vi.fn();
+    const haptic = vi.fn();
+    const highlight = vi.fn();
+    const clock = new ManualClock();
+    clock.reduced = true;
+    const fx = createFx({ ...fakeSource(), layer: layer(), clock, sfx, haptic, highlight });
+    fx.dispose();
+    const play = fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
+    const run = fx.run(buildPreset('takeoverStamp', { space: 22, buyer: 0, seller: 2 }, fakeEnv()));
+    await play.cue('frame');
+    await play.done;
+    await run.cue('frame');
+    await run.done;
+
+    const offSfx = vi.fn();
+    const off = createFx({ ...fakeSource(), layer: layer(), clock: new ManualClock(), sfx: offSfx });
+    off.setQuality('off');
+    off.dispose();
+    const offPlay = off.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
+    const offRun = off.run(buildPreset('takeoverStamp', { space: 22, buyer: 0, seller: 2 }, fakeEnv()));
+    await offPlay.done;
+    await offRun.done;
+    expect(sfx).not.toHaveBeenCalled();
+    expect(haptic).not.toHaveBeenCalled();
+    expect(highlight).not.toHaveBeenCalled();
+    expect(clock.active).toBe(0);
+    expect(offSfx).not.toHaveBeenCalled();
+  });
+
+  it('skips preload while effects are off or reduced, then loads when enabled', async () => {
+    const loadAtlas = vi.fn(async () => null);
+    const clock = new ManualClock();
+    const fx = createFx({ ...fakeSource(), layer: layer(), clock, loadAtlas });
+    fx.setQuality('off');
+    await expect(fx.preload()).resolves.toBe(false);
+    clock.reduced = true;
+    fx.setQuality('high');
+    await expect(fx.preload()).resolves.toBe(false);
+    expect(loadAtlas).not.toHaveBeenCalled();
+    clock.reduced = false;
+    await expect(fx.preload()).resolves.toBe(false);
+    expect(loadAtlas).toHaveBeenCalledTimes(1);
   });
 });

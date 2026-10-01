@@ -2,6 +2,7 @@
  * Save / load: versioned JSON.
  */
 import type { GameState } from './types';
+import { getBoardInfo } from './board';
 
 export const SAVE_FORMAT = 'lot-and-roll-save';
 export const SAVE_VERSION = 1;
@@ -26,8 +27,9 @@ export function serialize(state: GameState, savedAt: string | null = null): stri
   return JSON.stringify(file);
 }
 
-/** Upgrade older save files here (none yet). */
+/** Add the original board size to v1 saves that predate the board-size option. */
 function migrate(file: SaveFile): SaveFile {
+  if (file.state?.settings && file.state.settings.spacesPerSide === undefined) file.state.settings.spacesPerSide = 7;
   return file;
 }
 
@@ -50,13 +52,28 @@ export function deserialize(json: string): GameState {
     st.schema !== 1 ||
     !Array.isArray(st.players) ||
     !Array.isArray(st.properties) ||
-    st.properties.length !== 32 ||
     !st.phase ||
     typeof st.phase !== 'object' ||
     typeof st.rng !== 'number'
   ) {
     throw new SaveError('Save file state is malformed');
   }
+  const size = (st.settings?.spacesPerSide ?? 7) as 7 | 8 | 9;
+  if (size !== 7 && size !== 8 && size !== 9) throw new SaveError('Save file has an invalid board size');
+  const board = getBoardInfo(size);
+  if (st.properties.length !== board.size) throw new SaveError('Save properties do not match board size');
+  if (!st.properties.every((property, index) => (board.propertyIndices.includes(index) ? property !== null : property === null))) {
+    throw new SaveError('Save properties are not placed on property spaces');
+  }
+  if (!st.players.every((p) => Number.isInteger(p.position) && p.position >= 0 && p.position < board.size)) throw new SaveError('Save player position is invalid');
+  if (st.festival !== null && (!Number.isInteger(st.festival) || !board.cityIndices.includes(st.festival as number))) throw new SaveError('Save festival is invalid');
+  const phase = st.phase as Record<string, unknown>;
+  const indexes: number[] = [];
+  if (typeof phase.spaceIndex === 'number') indexes.push(phase.spaceIndex);
+  if (Array.isArray(phase.options)) indexes.push(...phase.options.filter((x): x is number => typeof x === 'number'));
+  if (phase.kind === 'debt' && phase.then && typeof phase.then === 'object' && typeof (phase.then as { spaceIndex?: unknown }).spaceIndex === 'number') indexes.push((phase.then as { spaceIndex: number }).spaceIndex);
+  if (phase.kind === 'debt' && phase.toll && typeof phase.toll === 'object' && typeof (phase.toll as { spaceIndex?: unknown }).spaceIndex === 'number') indexes.push((phase.toll as { spaceIndex: number }).spaceIndex);
+  if (!indexes.every((i) => Number.isInteger(i) && i >= 0 && i < board.size)) throw new SaveError('Save phase refers to an invalid space');
   return migrated.state;
 }
 

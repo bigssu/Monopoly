@@ -3,6 +3,7 @@
  */
 import { ECONOMY } from './economy';
 import type { CpuLevel, PlayerSetup, Seat, Settings } from './types';
+import { BOARD_SIDE_OPTIONS } from '../content/board';
 
 /** Default seats by player count (DESIGN §2.1). */
 export function defaultSeats(n: number): Seat[] {
@@ -41,6 +42,7 @@ export function defaultSettings(overrides: Partial<Settings> = {}): Settings {
     endOnFirstBankruptcy: true,
     buildAnywhere: false,
     promptTimer: 15,
+    spacesPerSide: 7,
     ...overrides,
   };
 }
@@ -48,3 +50,4 @@ export function defaultSettings(overrides: Partial<Settings> = {}): Settings {
 export const ROUND_LIMIT_OPTIONS: readonly (number | null)[] = [10, 15, 20, 30, null];
 export const START_CASH_OPTIONS: readonly number[] = [2000, 3000, 5000];
 export const PROMPT_TIMER_OPTIONS: readonly (0 | 15 | 30)[] = [0, 15, 30];
+export { BOARD_SIDE_OPTIONS };

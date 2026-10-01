@@ -30,4 +30,18 @@ describe('save / load', () => {
     expect(() => deserialize(JSON.stringify(broken))).toThrow(SaveError);
     expect(peekSave('nope')).toBeNull();
   });
+
+  it.each([8, 9] as const)('round-trips size %i and rejects mismatched properties', (spacesPerSide) => {
+    const s = game({ spacesPerSide });
+    expect(deserialize(serialize(s)).settings.spacesPerSide).toBe(spacesPerSide);
+    const broken = JSON.parse(serialize(s));
+    broken.state.properties.pop();
+    expect(() => deserialize(JSON.stringify(broken))).toThrow(SaveError);
+  });
+
+  it('loads a legacy v1 save as the original 7-space board', () => {
+    const legacy = JSON.parse(serialize(game()));
+    delete legacy.state.settings.spacesPerSide;
+    expect(deserialize(JSON.stringify(legacy)).settings.spacesPerSide).toBe(7);
+  });
 });

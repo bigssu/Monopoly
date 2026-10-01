@@ -7,10 +7,7 @@
  */
 import { CARDS, getCard, type CardId, type KeepableCardId } from '../content/cards';
 import {
-  BOARD,
-  CITY_INDICES,
-  ISLAND_INDEX,
-  START_INDEX,
+  getBoardInfo,
   distance,
   isCity,
   isProperty,
@@ -125,10 +122,13 @@ export function validateSettings(settings: Settings): void {
   if (settings.roundLimit !== null && (!Number.isInteger(settings.roundLimit) || settings.roundLimit < 1)) {
     throw new RangeError('roundLimit must be a positive integer or null');
   }
+  if (settings.spacesPerSide !== undefined && !([7, 8, 9] as const).includes(settings.spacesPerSide)) throw new RangeError('spacesPerSide must be 7, 8, or 9');
 }
 
 export function createGame(settings: Settings, seed: number): GameState {
   validateSettings(settings);
+  const spacesPerSide = settings.spacesPerSide ?? 7;
+  const board = getBoardInfo(spacesPerSide);
   const players: Player[] = settings.players.map((ps, i) => ({
     id: i,
     name: ps.name,
@@ -138,7 +138,7 @@ export function createGame(settings: Settings, seed: number): GameState {
     isCpu: ps.isCpu,
     cpuLevel: ps.cpuLevel,
     cash: settings.startCash,
-    position: START_INDEX,
+    position: board.startIndex,
     islandTurns: 0,
     bankrupt: false,
     cards: [],
@@ -152,7 +152,7 @@ export function createGame(settings: Settings, seed: number): GameState {
     seed,
     rng: seedToState(seed),
     players,
-    properties: BOARD.map((sp) => (isProperty(sp.index) ? { owner: null, level: 0 as Level } : null)),
+    properties: board.board.map((sp) => (isProperty(sp.index, spacesPerSide) ? { owner: null, level: 0 as Level } : null)),
     festival: null,
     pot: 0,
     round: 1,
@@ -399,8 +399,9 @@ function islandPhase(ctx: Ctx, pid: PlayerId): PromptPhase {
   };
 }
 
-export function travelOptions(position: number): number[] {
-  return BOARD.map((sp) => sp.index).filter((i) => i !== ISLAND_INDEX && i !== position);
+export function travelOptions(position: number, spacesPerSide: 7 | 8 | 9 = 7): number[] {
+  const board = getBoardInfo(spacesPerSide);
+  return board.board.map((sp) => sp.index).filter((i) => i !== board.islandIndex && i !== position);
 }
 
 function startTurn(ctx: Ctx, pid: PlayerId): void {
@@ -413,7 +414,7 @@ function startTurn(ctx: Ctx, pid: PlayerId): void {
   p.consecutiveDoubles = 0;
   emit(ctx, { type: 'TurnStarted', playerId: pid, round: s.round, turn: s.turn });
   if (p.islandTurns > 0) return setPhase(ctx, islandPhase(ctx, pid));
-  if (p.travelPending) return setPhase(ctx, { kind: 'travel', playerId: pid, options: travelOptions(p.position) });
+  if (p.travelPending) return setPhase(ctx, { kind: 'travel', playerId: pid, options: travelOptions(p.position, s.settings.spacesPerSide ?? 7) });
   return setPhase(ctx, { kind: 'preRoll', playerId: pid, rollAgain: false });
 }
 
@@ -455,9 +456,10 @@ function walk(ctx: Ctx, pid: PlayerId, steps: number, cause: 'roll' | 'card' | '
   const p = player(ctx, pid);
   const from = p.position;
   if (steps <= 0) return false;
-  const path = walkPath(from, steps);
+  const board = getBoardInfo(ctx.s.settings.spacesPerSide ?? 7);
+  const path = walkPath(from, steps, board.spacesPerSide);
   const to = path[path.length - 1]!;
-  const crosses = path.includes(START_INDEX);
+  const crosses = path.includes(board.startIndex);
   p.position = to;
   emit(ctx, {
     type: 'TokenMoved',
@@ -471,8 +473,8 @@ function walk(ctx: Ctx, pid: PlayerId, steps: number, cause: 'roll' | 'card' | '
     cause,
   });
   if (crosses) {
-    emit(ctx, { type: 'PassedStart', playerId: pid, salary: ECONOMY.salary, landed: to === START_INDEX });
-    receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', START_INDEX);
+    emit(ctx, { type: 'PassedStart', playerId: pid, salary: ECONOMY.salary, landed: to === board.startIndex });
+    receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', board.startIndex);
   }
   return crosses;
 }
@@ -480,7 +482,7 @@ function walk(ctx: Ctx, pid: PlayerId, steps: number, cause: 'roll' | 'card' | '
 function walkBack(ctx: Ctx, pid: PlayerId, steps: number): void {
   const p = player(ctx, pid);
   const from = p.position;
-  const path = walkPath(from, -steps);
+  const path = walkPath(from, -steps, ctx.s.settings.spacesPerSide ?? 7);
   const to = path[path.length - 1]!;
   p.position = to;
   emit(ctx, {
@@ -499,14 +501,15 @@ function walkBack(ctx: Ctx, pid: PlayerId, steps: number): void {
 function sendToIsland(ctx: Ctx, pid: PlayerId, cause: 'space' | 'doubles' | 'card'): void {
   const p = player(ctx, pid);
   const from = p.position;
-  if (from !== ISLAND_INDEX) {
-    p.position = ISLAND_INDEX;
+  const island = getBoardInfo(ctx.s.settings.spacesPerSide ?? 7).islandIndex;
+  if (from !== island) {
+    p.position = island;
     emit(ctx, {
       type: 'TokenMoved',
       playerId: pid,
       from,
-      to: ISLAND_INDEX,
-      path: [ISLAND_INDEX],
+      to: island,
+      path: [island],
       direction: 'forward',
       mode: 'jump',
       passedStart: false,
@@ -529,12 +532,13 @@ function land(ctx: Ctx, pid: PlayerId, opts: LandOpts = {}): void {
   const s = ctx.s;
   const p = player(ctx, pid);
   const idx = p.position;
-  const sp = space(idx);
+  const board = getBoardInfo(s.settings.spacesPerSide ?? 7);
+  const sp = space(idx, board.spacesPerSide);
   switch (sp.kind) {
     case 'start':
       if (!opts.salaryPaid) {
         emit(ctx, { type: 'PassedStart', playerId: pid, salary: ECONOMY.salary, landed: true });
-        receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', START_INDEX);
+        receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', board.startIndex);
       }
       receivePot(ctx, pid);
       return endLanding(ctx);
@@ -574,7 +578,7 @@ function landOnProperty(ctx: Ctx, pid: PlayerId, idx: number, mult: number): voi
 }
 
 function offerBuy(ctx: Ctx, pid: PlayerId, idx: number): void {
-  const price = priceOf(idx);
+  const price = priceOf(idx, ctx.s.settings.spacesPerSide ?? 7);
   if (player(ctx, pid).cash >= price) {
     return setPhase(ctx, { kind: 'buy', playerId: pid, spaceIndex: idx, price });
   }
@@ -584,7 +588,7 @@ function offerBuy(ctx: Ctx, pid: PlayerId, idx: number): void {
 }
 
 function offerBuild(ctx: Ctx, pid: PlayerId, idx: number): void {
-  if (!isCity(idx)) return endLanding(ctx);
+  if (!isCity(idx, ctx.s.settings.spacesPerSide ?? 7)) return endLanding(ctx);
   const cost = nextBuildCost(ctx.s, idx);
   if (cost === null || player(ctx, pid).cash < cost) return endLanding(ctx);
   const toLevel = (propertyAt(ctx.s, idx).level + 1) as Level;
@@ -664,7 +668,7 @@ type AuctionPhase = Extract<Phase, { kind: 'auction' }>;
 
 function startAuction(ctx: Ctx, declinedBy: PlayerId, idx: number): void {
   const s = ctx.s;
-  const price = priceOf(idx);
+  const price = priceOf(idx, s.settings.spacesPerSide ?? 7);
   const minBid = round10(price * ECONOMY.auctionStartRate);
   const increment = Math.max(10, round10(price * ECONOMY.auctionIncrementRate));
   const n = s.players.length;
@@ -734,6 +738,11 @@ function advanceAuction(ctx: Ctx, ph: AuctionPhase, lastActor: PlayerId): void {
 // Cards
 // ---------------------------------------------------------------------------
 
+/** Card content uses the legacy 32-space indexes; corners move with the side stride. */
+function canonicalTarget(index: number, spacesPerSide: 7 | 8 | 9): number {
+  return Math.floor(index / 8) * (spacesPerSide + 1) + (index % 8);
+}
+
 function noEffect(ctx: Ctx, pid: PlayerId, cardId: CardId): void {
   emit(ctx, { type: 'CardNoEffect', playerId: pid, cardId });
   return endLanding(ctx);
@@ -747,7 +756,7 @@ function drawCard(ctx: Ctx, pid: PlayerId): void {
   const eff = getCard(cardId).effect;
   switch (eff.kind) {
     case 'moveTo': {
-      const paid = walk(ctx, pid, distance(p.position, eff.target), 'card');
+      const paid = walk(ctx, pid, distance(p.position, canonicalTarget(eff.target, s.settings.spacesPerSide ?? 7), s.settings.spacesPerSide ?? 7), 'card');
       return land(ctx, pid, { salaryPaid: paid });
     }
     case 'goToIsland':
@@ -788,8 +797,8 @@ function drawCard(ctx: Ctx, pid: PlayerId): void {
       walkBack(ctx, pid, eff.steps);
       return land(ctx, pid, { salaryPaid: false });
     case 'nearestHub': {
-      const target = nearestHubAhead(p.position);
-      const paid = walk(ctx, pid, distance(p.position, target), 'card');
+      const target = nearestHubAhead(p.position, s.settings.spacesPerSide ?? 7);
+      const paid = walk(ctx, pid, distance(p.position, target, s.settings.spacesPerSide ?? 7), 'card');
       return land(ctx, pid, { salaryPaid: paid, tollMultiplier: eff.tollMultiplier });
     }
     case 'keep':
@@ -804,8 +813,8 @@ function drawCard(ctx: Ctx, pid: PlayerId): void {
       emit(ctx, { type: 'ExpressGranted', playerId: pid });
       return endLanding(ctx);
     case 'randomCity': {
-      const target = pick(ctx, CITY_INDICES);
-      const steps = distance(p.position, target);
+      const target = pick(ctx, getBoardInfo(s.settings.spacesPerSide ?? 7).cityIndices);
+      const steps = distance(p.position, target, s.settings.spacesPerSide ?? 7);
       const paid = walk(ctx, pid, steps, 'card');
       return land(ctx, pid, { salaryPaid: paid });
     }
@@ -815,7 +824,7 @@ function drawCard(ctx: Ctx, pid: PlayerId): void {
       return setPhase(ctx, { kind: 'freeUpgrade', playerId: pid, options });
     }
     case 'typhoon': {
-      const candidates = CITY_INDICES.filter((i) => {
+      const candidates = getBoardInfo(s.settings.spacesPerSide ?? 7).cityIndices.filter((i) => {
         const pr = propertyAt(s, i);
         return pr.owner !== null && pr.owner !== pid && pr.level >= 1 && pr.level < ECONOMY.maxLevel;
       });
@@ -1016,7 +1025,7 @@ function dispatch(ctx: Ctx, action: Action): void {
         case 'Roll':
           return doIslandRoll(ctx, pid);
         case 'PayBail':
-          pay(ctx, pid, 'bank', ECONOMY.bail, 'bail', ISLAND_INDEX);
+          pay(ctx, pid, 'bank', ECONOMY.bail, 'bail', getBoardInfo(s.settings.spacesPerSide ?? 7).islandIndex);
           p.islandTurns = 0;
           emit(ctx, { type: 'Escaped', playerId: pid, method: 'bail' });
           return setPhase(ctx, { kind: 'preRoll', playerId: pid, rollAgain: false });
@@ -1033,7 +1042,7 @@ function dispatch(ctx: Ctx, action: Action): void {
       p.travelPending = false;
       if (action.type === 'ChooseTravel') {
         s.extraRoll = false;
-        const paid = walk(ctx, pid, distance(p.position, action.spaceIndex), 'travel');
+        const paid = walk(ctx, pid, distance(p.position, action.spaceIndex, s.settings.spacesPerSide ?? 7), 'travel');
         return land(ctx, pid, { salaryPaid: paid });
       }
       emit(ctx, { type: 'TravelDeclined', playerId: pid });

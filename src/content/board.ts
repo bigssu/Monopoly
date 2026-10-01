@@ -21,6 +21,9 @@ export type GroupId = 'brown' | 'sky' | 'pink' | 'orange' | 'red' | 'yellow' | '
 
 /** Board side for the line rule (라인 독점). Corners have no side. */
 export type SideId = 'A' | 'B' | 'C' | 'D';
+/** Non-corner spaces per side.  Seven is the original board. */
+export type SpacesPerSide = 7 | 8 | 9;
+export const BOARD_SIDE_OPTIONS = [7, 8, 9] as const;
 
 export interface LocalizedName {
   readonly ko: string;
@@ -190,6 +193,37 @@ export const BOARD: readonly SpaceDef[] = [
 ];
 
 export const BOARD_SIZE = BOARD.length; // 32
+/** Legacy name kept for callers that explicitly need the original 32-space board. */
+export const BOARD32 = BOARD;
+
+/** Extra cities live here so larger board variants only change content in one place. */
+const EXTRA_CITIES: Readonly<Record<SideId, readonly Omit<SpaceDef, 'index'>[]>> = {
+  A: [city(0, '자카르타', 'Jakarta', 'brown', 140, 'A', 'city-manila'), city(0, '델리', 'Delhi', 'sky', 150, 'A', 'city-cairo')],
+  B: [city(0, '산티아고', 'Santiago', 'pink', 300, 'B', 'city-lima'), city(0, '시드니', 'Sydney', 'orange', 310, 'B', 'city-istanbul')],
+  C: [city(0, '파리', 'Paris', 'orange', 390, 'C', 'city-madrid'), city(0, '암스테르담', 'Amsterdam', 'red', 400, 'C', 'city-berlin')],
+  D: [city(0, '홍콩', 'Hong Kong', 'yellow', 580, 'D', 'city-singapore'), city(0, '로스앤젤레스', 'Los Angeles', 'blue', 700, 'D', 'city-newyork')],
+};
+
+const BOARD_CACHE = new Map<SpacesPerSide, readonly SpaceDef[]>([[7, BOARD]]);
+
+/** Returns a reindexed board with 7, 8, or 9 non-corner spaces on every side. */
+export function getBoard(spacesPerSide: SpacesPerSide = 7): readonly SpaceDef[] {
+  if (!BOARD_SIDE_OPTIONS.includes(spacesPerSide)) throw new RangeError('spacesPerSide must be 7, 8, or 9');
+  const cached = BOARD_CACHE.get(spacesPerSide);
+  if (cached) return cached;
+  const extra = spacesPerSide - 7;
+  const result: SpaceDef[] = [];
+  for (let side = 0; side < 4; side++) {
+    const start = side * 8;
+    result.push({ ...BOARD[start]!, index: result.length });
+    for (const sp of BOARD.slice(start + 1, start + 8)) result.push({ ...sp, index: result.length });
+    const sideId = SIDE_IDS[side]!;
+    for (const sp of EXTRA_CITIES[sideId].slice(0, extra)) result.push({ ...sp, index: result.length });
+  }
+  const frozen = Object.freeze(result.map((space) => Object.freeze(space)));
+  BOARD_CACHE.set(spacesPerSide, frozen);
+  return frozen;
+}
 
 /** Well-known indexes. */
 export const START_INDEX = 0;

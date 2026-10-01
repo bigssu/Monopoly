@@ -19,6 +19,17 @@ describe('setup draft', () => {
     const d = defaultDraft();
     expect(activeSeats(d)).toEqual(['S', 'N']);
     expect(validateDraft(d)).toBeNull();
+    expect(d.spacesPerSide).toBe(7);
+  });
+
+  it('keeps the board choice through storage and engine settings, with 7 for legacy drafts', () => {
+    for (const spacesPerSide of [7, 8, 9] as const) {
+      const d = normalizeDraft({ ...defaultDraft(), spacesPerSide });
+      expect(d.spacesPerSide).toBe(spacesPerSide);
+      expect(buildSettings(d, name, () => 0).settings.spacesPerSide).toBe(spacesPerSide);
+    }
+    expect(normalizeDraft({ seats: defaultDraft().seats }).spacesPerSide).toBe(7);
+    expect(normalizeDraft({ spacesPerSide: 10 }).spacesPerSide).toBe(7);
   });
 
   it('never turns S off and never drops below two players', () => {

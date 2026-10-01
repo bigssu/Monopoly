@@ -826,7 +826,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 
 1. `src/content/fx/sprites-color.ts` / `sprites-mask.ts`의 정의(`SpriteDef`: `name, cls, w, h, n, fps, loop, k?, svg(i, n)`)를 esbuild로 번들해 Node에서 실행 → 프레임별 SVG 문자열(순수 함수, 시드 PRNG `mulberry32` → 결정적).
 2. 헤드리스 Chromium에서 `ceil(w·DPR·k) × ceil(h·DPR·k)`로 래스터(DPR 2, `k`는 부드러운 스프라이트의 추가 축소) → 알파 ≥ 4 바운딩 박스로 트림. 박스 가장자리에 닿는 프레임은 경고(`edgeOk: true`로 의도된 경우 제외).
-3. Node에서 `maxrects-packer`(패딩 2 px, 회전 없음, 비-POT, 최대 2048²)로 클래스별 패킹 → Chromium 캔버스에 합성 → `canvas.toBlob('image/webp', 0.9)`. 네이티브 의존성 없음.
+3. Node에서 `maxrects-packer`(패딩 2 px, 회전 없음, 최대 1024²)로 클래스별 패킹 → POT 캔버스에 합성 → `canvas.toBlob('image/webp', 0.9)`. 네이티브 의존성 없음.
 4. 출력: `public/fx/atlas-color.webp`, `public/fx/atlas-mask.webp`, `public/fx/atlas.json`, `src/content/fx/manifest.ts`(생성물, 수정 금지), `docs/assets/fx-contact-sheet.png`.
 
 ### `atlas.json`
@@ -854,16 +854,16 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 - 마스크 아틀라스: **순백 + 알파만**(음영은 알파로 표현, 회색 금지). 런타임 틴트는 오프스크린에 그린 뒤 `source-in` 채우기(=곱셈)로 캐시, 빛 효과는 틴트 결과를 `globalCompositeOperation='lighter'`로 가산. 밝은 배경 위의 일반 블렌드도 가능(컨택트 시트의 밝은 열이 그 예).
 - 컨페티 5종은 1프레임(뒤집힘은 `scaleX = cos`), `ray_burst`·`glow`는 1프레임(회전/스케일은 코드), `flag_wave`는 소유자 색 틴트.
 
-### 크기 (DPR 2, WebP q0.9)
+### 크기 (2026-10-01, 컬러 DPR 2 / 마스크 밀도 0.875배, WebP q0.9)
 
 | 파일 | 크기(px) | 바이트 |
 |---|---|---|
-| `atlas-color.webp` (29프레임) | 484×484 | 65.7 KB |
-| `atlas-mask.webp` (96프레임) | 1156×1156 | 205.5 KB |
-| `atlas.json` | — | 16.0 KB |
-| **합계** | | **≈287 KB** (목표 ≤300, 예산 ≤500) |
+| `atlas-color.webp` (29프레임) | 512×512 | 67,634 B |
+| `atlas-mask.webp` (96프레임) | 1024×1024 | 178,446 B |
+| `atlas.json` | — | 16,449 B |
+| **합계** | | **262,529 B** (예산 ≤500 KiB) |
 
-프로토타입(1.5× 베이크, 182 KB) 대비 DPR 2 선명도를 위해 커졌으나 예산 이내. 프레임 추가 시 마스크 아틀라스는 2048² 한도까지 여유가 있다. §5의 파일명(`bake-atlas.mjs`, `fx-color.webp`, `fx-atlas.json`)은 위 실제 이름(`bake.mjs`, `atlas-color.webp`, `atlas.json`)으로 대체됐다.
+보급형 모바일 기준으로 이전 1156² 마스크를 1024²로 축소했다. 표시 크기·앵커·애니메이션 프레임 수는 유지하며 컬러 아트는 투명 테두리만 추가했다. 프레임 추가 시에도 1K/POT 한도를 지켜야 한다. §5의 파일명(`bake-atlas.mjs`, `fx-color.webp`, `fx-atlas.json`)은 위 실제 이름(`bake.mjs`, `atlas-color.webp`, `atlas.json`)으로 대체됐다.
 
 ---
 

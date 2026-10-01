@@ -9,7 +9,7 @@ const PUBLIC = resolve(__dirname, '../../../../public');
 const atlas = JSON.parse(readFileSync(resolve(PUBLIC, FX_FILES.json), 'utf8')) as FxAtlasJson;
 const IDS: FxAtlasId[] = ['color', 'mask'];
 const BUDGET_BYTES = 500 * 1024;
-const MAX_SIDE = 2048;
+const MAX_SIDE = 1024;
 
 /** Read width/height from a WebP header (VP8 / VP8L / VP8X). */
 function webpSize(buf: Buffer): { w: number; h: number } {
@@ -74,6 +74,10 @@ describe('fx atlas manifest', () => {
       const buf = readFileSync(file);
       const { w, h } = webpSize(buf);
       expect([info.w, info.h], id).toEqual([w, h]);
+      expect(w, id).toBeGreaterThan(0);
+      expect(h, id).toBeGreaterThan(0);
+      expect(w & (w - 1), id).toBe(0);
+      expect(h & (h - 1), id).toBe(0);
       expect(w, id).toBeLessThanOrEqual(MAX_SIDE);
       expect(h, id).toBeLessThanOrEqual(MAX_SIDE);
       expect(info.bytes, id).toBe(buf.length);

@@ -105,6 +105,40 @@ for (const vp of VIEWPORTS) {
 test.describe('start a game', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
+  test('adds an AI player and starts its turn', async ({ page }) => {
+    const errors = watchErrors(page);
+    await boot(page);
+    await page.click('[data-action="new"]');
+
+    const addAi = page.locator('[data-action="add-ai"]');
+    await expect(addAi).toBeEnabled();
+    await addAi.click();
+    await expect(page.locator('.seat-anchor.is-on')).toHaveCount(3);
+    await expect(page.locator('.seat-anchor[data-seat="E"] .seat-ctrl')).toHaveText('AI 보통');
+
+    await page.locator('.seat-anchor[data-seat="E"] .seat-player').click();
+    await page.locator('.seat-editor .se-ctrl .seg-opt').nth(1).click();
+    await page.locator('.seat-editor .se-done').click();
+    await expect(page.locator('.seat-anchor[data-seat="E"] .seat-ctrl')).toHaveText('AI 쉬움');
+
+    await page.click('.seat-anchor[data-seat="W"] .seat-join');
+    await expect(addAi).toBeDisabled();
+    await page.evaluate(() => {
+      Math.random = () => 0.4;
+    });
+    await page.click('[data-action="start"]');
+    await expect(page.locator('#app[data-screen="game"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      const state = window.__lotAndRoll!.getState()!;
+      return {
+        currentIsAi: state.players[state.current]!.isCpu,
+        east: state.players.find((player) => player.seat === 'E'),
+        turn: state.turn,
+      };
+    })).toMatchObject({ currentIsAi: false, east: { isCpu: true, cpuLevel: 'easy' }, turn: 2 });
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
   test('setup → game screen', async ({ page }) => {
     const errors = watchErrors(page);
     await boot(page);

@@ -12,12 +12,10 @@
  * `easy` is more timid and never plans takeovers or travel destinations.
  */
 import {
-  BOARD,
-  HUB_INDICES,
-  PROPERTY_INDICES,
   citiesInGroup,
   citiesOnSide,
   distance,
+  getBoardInfo,
   groupOf,
   isCity,
   isHub,
@@ -42,7 +40,7 @@ import type { Action, GameState, PlayerId } from './types';
 /** Average toll a player currently risks when landing on an opponent's property. */
 export function tollExposure(state: GameState, pid: PlayerId): number {
   const tolls: number[] = [];
-  for (const i of PROPERTY_INDICES) {
+  for (const i of getBoardInfo(state.settings.spacesPerSide ?? 7).propertyIndices) {
     const pr = state.properties[i]!;
     if (pr.owner !== null && pr.owner !== pid) tolls.push(tollOf(state, i));
   }
@@ -52,7 +50,7 @@ export function tollExposure(state: GameState, pid: PlayerId): number {
 
 function maxExposure(state: GameState, pid: PlayerId): number {
   let m = 0;
-  for (const i of PROPERTY_INDICES) {
+  for (const i of getBoardInfo(state.settings.spacesPerSide ?? 7).propertyIndices) {
     const pr = state.properties[i]!;
     if (pr.owner !== null && pr.owner !== pid) m = Math.max(m, tollOf(state, i));
   }
@@ -60,36 +58,38 @@ function maxExposure(state: GameState, pid: PlayerId): number {
 }
 
 /** Sets (group / side / hubs) the property belongs to. */
-function setsOf(idx: number): number[][] {
+function setsOf(state: GameState, idx: number): number[][] {
   const out: number[][] = [];
-  if (isHub(idx)) out.push([...HUB_INDICES]);
-  const g = groupOf(idx);
-  if (g) out.push([...citiesInGroup(g)]);
-  const sd = sideOf(idx);
-  if (sd && isCity(idx)) out.push([...citiesOnSide(sd)]);
+  const size = state.settings.spacesPerSide ?? 7;
+  if (isHub(idx, size)) out.push([...getBoardInfo(size).hubIndices]);
+  const g = groupOf(idx, size);
+  if (g) out.push([...citiesInGroup(g, size)]);
+  const sd = sideOf(idx, size);
+  if (sd && isCity(idx, size)) out.push([...citiesOnSide(sd, size)]);
   return out;
 }
 
 /** Would owning `idx` complete a set for `pid`? */
 function completesSet(state: GameState, pid: PlayerId, idx: number): boolean {
-  return setsOf(idx).some((set) => set.every((i) => i === idx || state.properties[i]!.owner === pid));
+  return setsOf(state, idx).some((set) => set.every((i) => i === idx || state.properties[i]!.owner === pid));
 }
 
 /** Would `pid` owning `idx` win the game outright? */
 function winsGame(state: GameState, pid: PlayerId, idx: number): boolean {
   const owns = (i: number) => i === idx || state.properties[i]!.owner === pid;
-  if (HUB_INDICES.every(owns)) return true;
-  for (const sd of ['A', 'B', 'C', 'D'] as const) if (citiesOnSide(sd).every(owns)) return true;
+  const size = state.settings.spacesPerSide ?? 7;
+  if (getBoardInfo(size).hubIndices.every(owns)) return true;
+  for (const sd of ['A', 'B', 'C', 'D'] as const) if (citiesOnSide(sd, size).every(owns)) return true;
   const groups = new Set(completedGroups(state, pid));
-  const g = groupOf(idx);
-  if (g && citiesInGroup(g).every(owns)) groups.add(g);
+  const g = groupOf(idx, size);
+  if (g && citiesInGroup(g, size).every(owns)) groups.add(g);
   return groups.size >= 3;
 }
 
 /** How many properties of the set around `idx` does `pid` already own (fraction). */
 function setProgress(state: GameState, pid: PlayerId, idx: number): number {
   let best = 0;
-  for (const set of setsOf(idx)) {
+  for (const set of setsOf(state, idx)) {
     const owned = set.filter((i) => i !== idx && state.properties[i]!.owner === pid).length;
     best = Math.max(best, owned / (set.length - 1 || 1));
   }
@@ -104,7 +104,7 @@ function blocksOpponent(state: GameState, pid: PlayerId, idx: number): { blocks:
     if (q.id === pid || q.bankrupt) continue;
     // Owner of idx (takeover case) or opponent who wants idx (buy case).
     if (winsGame(state, q.id, idx)) stopsWin = true;
-    for (const set of setsOf(idx)) {
+    for (const set of setsOf(state, idx)) {
       const others = set.filter((i) => i !== idx);
       const owned = others.filter((i) => state.properties[i]!.owner === q.id).length;
       if (owned >= Math.max(1, others.length - 1)) blocks = true;
@@ -132,14 +132,15 @@ function pickBest<T>(items: T[], score: (t: T) => number): T | undefined {
 
 function toll10Gain(state: GameState, idx: number): number {
   const pr = propertyAt(state, idx);
-  if (!isCity(idx) || pr.level >= ECONOMY.maxLevel) return 0;
+  if (!isCity(idx, state.settings.spacesPerSide ?? 7) || pr.level >= ECONOMY.maxLevel) return 0;
   return tollAtLevel(state, idx, pr.level + 1, pr.owner ?? 0) - tollAtLevel(state, idx, pr.level, pr.owner ?? 0);
 }
 
 function travelScore(state: GameState, pid: PlayerId, target: number): number {
   const p = state.players[pid]!;
-  const sp = space(target);
-  const crossesStart = distance(p.position, target) + p.position >= BOARD.length || target === START_INDEX;
+  const size = state.settings.spacesPerSide ?? 7;
+  const sp = space(target, size);
+  const crossesStart = distance(p.position, target, size) + p.position >= getBoardInfo(size).size || target === START_INDEX;
   let score = crossesStart ? 30 : 0;
   switch (sp.kind) {
     case 'start':
@@ -148,7 +149,7 @@ function travelScore(state: GameState, pid: PlayerId, target: number): number {
     case 'hub': {
       const pr = propertyAt(state, target);
       if (pr.owner === null) {
-        const price = priceOf(target);
+        const price = priceOf(target, size);
         if (p.cash < price) return -1;
         if (winsGame(state, pid, target)) return 1000;
         score += 100 + price / 10;
@@ -254,7 +255,7 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
     }
 
     case 'festival': {
-      const best = pickBest(ph.options, (i) => tollOf(state, i) * 10 + priceOf(i) / 100);
+      const best = pickBest(ph.options, (i) => tollOf(state, i) * 10 + priceOf(i, state.settings.spacesPerSide ?? 7) / 100);
       return best !== undefined ? { type: 'SetFestival', playerId, spaceIndex: best } : pass;
     }
 
@@ -265,7 +266,7 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
 
     case 'auction': {
       if (!can('Bid')) return pass;
-      const price = priceOf(ph.spaceIndex);
+      const price = priceOf(ph.spaceIndex, state.settings.spacesPerSide ?? 7);
       const after = p.cash - ph.minBid;
       const want =
         winsGame(state, playerId, ph.spaceIndex) ||
@@ -297,5 +298,5 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
 }
 
 function completesSetOwned(state: GameState, pid: PlayerId, idx: number): boolean {
-  return setsOf(idx).some((set) => set.every((i) => state.properties[i]!.owner === pid));
+  return setsOf(state, idx).some((set) => set.every((i) => state.properties[i]!.owner === pid));
 }

@@ -1,5 +1,5 @@
 // Generates every Android launcher / splash asset and the Play listing graphics from LOGO_SVG.
-//   node scripts/gen-android-icons.mjs [--no-android] [--no-play]
+//   node scripts/gen-android-icons.mjs [--no-android] [--no-play] [--splash-only]
 // Needs playwright + Chromium (same lookup as scripts/icon-sheet.mjs). Re-run after changing the logo,
 // then commit android/app/src/main/res/** and docs/assets/*.png.
 //
@@ -7,8 +7,8 @@
 //   android/app/src/main/res/mipmap-*dpi/ic_launcher_foreground.png   adaptive foreground (108dp canvas, logo ~62%)
 //   android/app/src/main/res/mipmap-*dpi/ic_launcher{,_round}.png      legacy launcher icons (pre-API 26)
 //   android/app/src/main/res/drawable/ic_launcher_background.xml      adaptive background (radial felt gradient)
-//   android/app/src/main/res/drawable-*dpi/splash_icon.png             Android 12+ system splash icon (288dp canvas)
-//   android/app/src/main/res/drawable{,-land-*,-port-*}/splash.png     pre-Android 12 splash (dark table + logo)
+//   android/app/src/main/res/drawable-nodpi/splash_icon.png             shared 512px splash icon (50% safe-zone canvas)
+//   android/app/src/main/res/drawable/splash.xml                        shared splash background + centered icon
 //   docs/assets/play-icon-512.png, docs/assets/feature-graphic-1024x500.png
 import fs from 'node:fs';
 import os from 'node:os';
@@ -31,7 +31,15 @@ const LOGO = loadAll().LOGO_SVG?.logo;
 if (!LOGO) throw new Error('LOGO_SVG not found in src/content/icons/logo.ts');
 
 const DENS = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
-const SCALE = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+const splashOnly = process.argv.includes('--splash-only');
+const obsoleteSplashPaths = [
+  'drawable/splash.png',
+  ...DENS.flatMap((density) => [
+    `drawable-${density}/splash_icon.png`,
+    `drawable-land-${density}/splash.png`,
+    `drawable-port-${density}/splash.png`,
+  ]),
+];
 
 // ---------- browser ----------
 const req = createRequire(import.meta.url);
@@ -40,7 +48,7 @@ for (const p of ['/opt/node22/lib/node_modules/playwright', 'playwright', 'playw
   try { pw = req(p); break; } catch {}
 }
 if (!pw) throw new Error('playwright not found');
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 
 const logoBox = (px, extra = '') =>
@@ -115,22 +123,55 @@ const legacy = (s, round) =>
     wrap(logoBox(Math.round(s * (round ? 0.66 : 0.74))),
       `body{width:${s}px;height:${s}px;background:${iconBg};border-radius:${round ? '50%' : s * 0.2 + 'px'}}`),
     s, s, { transparent: true });
-const splashIcon = (s) => shot(wrap(logoBox(Math.round(s * 0.5)), `body{width:${s}px;height:${s}px}`), s, s, { transparent: true }); // 50% of the 288dp canvas, inside the 192dp circle
-const splash = async (w, h) => stripAlpha(await shot(wrap(logoBox(Math.round(Math.min(w, h) * 0.34)), `body{width:${w}px;height:${h}px;background:${FELT}}`), w, h));
+const splashIcon = () => shot(wrap(logoBox(256), 'body{width:512px;height:512px}'), 512, 512, { transparent: true });
+
+function removeObsoleteSplashAssets() {
+  for (const relative of obsoleteSplashPaths) {
+    const file = path.resolve(res, relative);
+    if (path.relative(res, file).startsWith('..') || path.basename(file) !== (relative.endsWith('splash.png') ? 'splash.png' : 'splash_icon.png')) {
+      throw new Error(`refusing to remove unexpected splash asset: ${relative}`);
+    }
+    fs.rmSync(file, { force: true });
+  }
+}
+
+function assertSplashSafeZone(png) {
+  let off = 8, w = 0, h = 0, ct = 0; const idat = [];
+  while (off < png.length) {
+    const len = png.readUInt32BE(off), type = png.toString('ascii', off + 4, off + 8), d = png.subarray(off + 8, off + 8 + len);
+    if (type === 'IHDR') { w = d.readUInt32BE(0); h = d.readUInt32BE(4); ct = d[9]; }
+    if (type === 'IDAT') idat.push(d);
+    off += 12 + len;
+  }
+  if (w !== 512 || h !== 512 || ct !== 6) throw new Error('shared splash icon must be a 512px RGBA PNG');
+  const raw = zlib.inflateSync(Buffer.concat(idat)), stride = w * 4, cur = Buffer.alloc(stride), prev = Buffer.alloc(stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let i = 0; i < stride; i++) {
+      const a = i >= 4 ? cur[i - 4] : 0, b = prev[i], c = i >= 4 ? prev[i - 4] : 0;
+      let v = line[i];
+      if (f === 1) v += a; else if (f === 2) v += b; else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      cur[i] = v & 255;
+    }
+    for (let x = 0; x < w; x++) if (cur[x * 4 + 3] && Math.hypot(x + .5 - 256, y + .5 - 256) > 170.667) throw new Error('splash icon exceeds the Android 12 safe-zone circle');
+    cur.copy(prev);
+  }
+}
 
 // ---------- Android resources ----------
 if (!process.argv.includes('--no-android')) {
   if (!fs.existsSync(res)) throw new Error('android/ missing - run `npx cap add android` first');
-  const fg = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
-  const lg = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
-  for (const d of DENS) {
-    write(path.join(res, `mipmap-${d}`, 'ic_launcher_foreground.png'), await foreground(fg[d]));
-    write(path.join(res, `mipmap-${d}`, 'ic_launcher.png'), await legacy(lg[d], false));
-    write(path.join(res, `mipmap-${d}`, 'ic_launcher_round.png'), await legacy(lg[d], true));
-    write(path.join(res, `drawable-${d}`, 'splash_icon.png'), await splashIcon(Math.round(288 * SCALE[d])));
-  }
-  write(path.join(res, 'drawable', 'ic_launcher_background.xml'),
-    Buffer.from(`<?xml version="1.0" encoding="utf-8"?>
+  if (!splashOnly) {
+    const fg = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
+    const lg = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+    for (const d of DENS) {
+      write(path.join(res, `mipmap-${d}`, 'ic_launcher_foreground.png'), await foreground(fg[d]));
+      write(path.join(res, `mipmap-${d}`, 'ic_launcher.png'), await legacy(lg[d], false));
+      write(path.join(res, `mipmap-${d}`, 'ic_launcher_round.png'), await legacy(lg[d], true));
+    }
+    write(path.join(res, 'drawable', 'ic_launcher_background.xml'),
+      Buffer.from(`<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:type="radial"
@@ -141,17 +182,23 @@ if (!process.argv.includes('--no-android')) {
         android:endColor="${FELT}" />
 </shape>
 `));
-  const land = { mdpi: [480, 320], hdpi: [800, 480], xhdpi: [1280, 720], xxhdpi: [1600, 960], xxxhdpi: [1920, 1280] };
-  write(path.join(res, 'drawable', 'splash.png'), await splash(480, 320));
-  for (const d of DENS) {
-    const [w, h] = land[d];
-    write(path.join(res, `drawable-land-${d}`, 'splash.png'), await splash(w, h));
-    write(path.join(res, `drawable-port-${d}`, 'splash.png'), await splash(h, w));
   }
+  removeObsoleteSplashAssets();
+  const sharedSplashIcon = await splashIcon();
+  assertSplashSafeZone(sharedSplashIcon);
+  write(path.join(res, 'drawable-nodpi', 'splash_icon.png'), sharedSplashIcon);
+  write(path.join(res, 'drawable', 'splash.xml'), Buffer.from(`<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/table_bg" />
+    <item android:width="288dp" android:height="288dp" android:gravity="center">
+        <bitmap android:src="@drawable/splash_icon" android:gravity="fill" android:filter="true" />
+    </item>
+</layer-list>
+`));
 }
 
 // ---------- Play listing graphics ----------
-if (!process.argv.includes('--no-play')) {
+if (!splashOnly && !process.argv.includes('--no-play')) {
   const assets = path.join(root, 'docs', 'assets');
   // 512x512 full-bleed (Play applies its own rounded mask)
   write(path.join(assets, 'play-icon-512.png'),

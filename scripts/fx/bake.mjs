@@ -2,7 +2,7 @@
 /**
  * FX sprite atlas baker.  `npm run fx:atlas`
  *
- *   src/content/fx/sprites*.ts  ->  headless Chromium raster (DPR 2) -> alpha trim -> MaxRects pack (pad 2, no rot, <=2048)
+ *   src/content/fx/sprites*.ts  ->  headless Chromium raster (DPR 2) -> alpha trim -> MaxRects pack (pad 2, no rot, <=1024)
  *   -> canvas.toBlob WebP q0.9 (no native deps)  ->  public/fx/atlas-color.webp, atlas-mask.webp, atlas.json
  *   + src/content/fx/manifest.ts (typed animation table)  + docs/assets/fx-contact-sheet.png
  *
@@ -17,7 +17,7 @@ import { OUT_DIR, ROOT, launchChromium, loadSprites } from './common.mjs';
 const args = new Set(process.argv.slice(2));
 const QUALITY = Number(process.env.FX_QUALITY ?? 0.9);
 const PAD = 2;
-const MAX = 2048;
+const MAX = 1024;
 const ALPHA_MIN = 4; // trim threshold (0..255)
 
 const { SPRITES, BAKE_DPR } = await loadSprites();
@@ -106,8 +106,8 @@ try {
       w = Math.max(w, r.x + r.width);
       h = Math.max(h, r.y + r.height);
     }
-    const r4 = (v) => Math.ceil(v / 4) * 4;
-    atlases[cls] = { w: r4(w + PAD), h: r4(h + PAD) };
+    const pot = (v) => 2 ** Math.ceil(Math.log2(v));
+    atlases[cls] = { w: pot(w + PAD), h: pot(h + PAD) };
   }
 
   // ---- 3) composite + WebP encode inside Chromium ------------------------------------------------------

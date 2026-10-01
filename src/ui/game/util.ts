@@ -135,7 +135,7 @@ export const TINT: { ink?: string; ink3?: string } = {};
  * buildings in the player / theme colors they are shown in. `iconPx` = the largest icon size in
  * CSS px (the atlas cells are that times the device pixel ratio).
  */
-export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, iconPx: number): Promise<void> {
+export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, iconPx: number, board?: readonly SpaceDef[]): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();
   if (!TINT.ink) {
     const root = getComputedStyle(document.documentElement);
@@ -143,7 +143,8 @@ export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' |
     TINT.ink3 = root.getPropertyValue('--ink-3').trim() || undefined;
   }
   const entries: AtlasEntry[] = [];
-  for (const id of ICON_IDS) if (/^(city|hub|corner|space)-/.test(id) || id === 'coin' || id.startsWith('dice-face-')) entries.push({ id });
+  const spaceIds = board ? board.map(spaceIcon) : ICON_IDS;
+  for (const id of new Set(spaceIds)) if (/^(city|hub|corner|space)-/.test(id) || id === 'coin' || id.startsWith('dice-face-')) entries.push({ id });
   const tints = [TINT.ink, TINT.ink3, ...players.map((p) => playerColor(p.colorId).hex)].filter((c): c is string => !!c);
   for (const p of players) entries.push({ id: p.tokenId, tint: playerColor(p.colorId).hex });
   for (const b of ['villa', 'building', 'hotel', 'landmark']) for (const c of tints) entries.push({ id: b, tint: c });

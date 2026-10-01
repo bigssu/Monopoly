@@ -19,7 +19,7 @@
  * now), prefers-reduced-motion is instant for DOM motion while the presets still play their
  * sound + a static highlight (VFX.md §8.3).
  */
-import { BOARD, deepClone, groupOf, type GameEvent, type GameState, type Level, type PlayerId } from '@/engine';
+import { deepClone, getBoardInfo, groupOf, type GameEvent, type GameState, type Level, type PlayerId } from '@/engine';
 import { GROUP_NAMES } from '@/content/board';
 import { getCard } from '@/content/cards';
 import { playerColor } from '@/content/palette';
@@ -32,6 +32,7 @@ import { animSpeed, instant, sleep } from './time';
 import type { FxPlay } from './vfx';
 
 type Alive = () => boolean;
+const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide ?? 7).board;
 
 /** Dev (?dev=1): a User Timing mark per event, so perf traces can say what a long frame was doing. */
 const MARK = typeof window !== 'undefined' && isDevHook();
@@ -135,7 +136,7 @@ async function groupMoment(view: GameView, vs: GameState, pid: PlayerId, i: numb
   const steps = groupFx(vs, pid, i);
   if (!steps.length || !fxOn()) return;
   const [h] = fire(view, steps);
-  const g = groupOf(i);
+  const g = groupOf(i, vs.settings.spacesPerSide ?? 7);
   if (!fast && g) void h!.cue('stamp').then(() => view.stage.stamp(t('g.monopoly.done', { name: loc(GROUP_NAMES[g]) }), 'gold'));
   void h!.cue('badge').then(() => view.panel(pid)?.bump());
   await h;
@@ -254,7 +255,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       return;
     case 'PropertyBought': {
       const steps = planFx(ev, ctx);
-      if (!fast) void stage.toast(t('g.bought', { name: loc(BOARD[ev.spaceIndex]!.short) }), 500, 'good', spaceIcon(BOARD[ev.spaceIndex]!));
+      if (!fast) void stage.toast(t('g.bought', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 500, 'good', spaceIcon(boardOf(vs)[ev.spaceIndex]!));
       // Coins in → tag drop → the owner colour lands on the 'frame' cue.
       await runSteps(view, steps, () => {
         vs.properties[ev.spaceIndex]!.owner = ev.playerId;
@@ -288,7 +289,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         await Promise.all([
           ...hs,
           board.pulseSpace(ev.spaceIndex, 'shake'),
-          stage.toast(t('g.typhoon', { name: loc(BOARD[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(BOARD[ev.spaceIndex]!)),
+          stage.toast(t('g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!)),
         ]);
       } else await board.pulseSpace(ev.spaceIndex, 'shake');
       return;
@@ -384,7 +385,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       const hs = fire(view, planFx(ev, ctx));
       if (!fast && ev.spaceIndex !== null) {
         // The burst preset plays the festival sound + haptic and pops the flags.
-        void stage.toast(t('g.festival.set', { name: loc(BOARD[ev.spaceIndex]!.short) }), 700, 'gold', 'festival-marker');
+        void stage.toast(t('g.festival.set', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 700, 'gold', 'festival-marker');
         await Promise.all(hs);
       }
       return;
@@ -447,7 +448,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
     }
     case 'AuctionStarted':
       fire(view, planFx(ev, ctx));
-      if (!fast) await stage.toast(t('g.auction.started'), 700, 'gold', spaceIcon(BOARD[ev.spaceIndex]!));
+      if (!fast) await stage.toast(t('g.auction.started'), 700, 'gold', spaceIcon(boardOf(vs)[ev.spaceIndex]!));
       return;
     case 'AuctionBid':
       fire(view, planFx(ev, ctx));
@@ -466,7 +467,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       if (fast) return;
       // The preset plays the warning sound + haptic.
       const p = vs.players[ev.playerId]!;
-      void edgeToast(board.overlay, view.seats, p, spaceIcon(BOARD[ev.missing]!), playerColor(p.colorId).hex);
+      void edgeToast(board.overlay, view.seats, p, spaceIcon(boardOf(vs)[ev.missing]!), playerColor(p.colorId).hex);
       await sleep(500);
       return;
     }

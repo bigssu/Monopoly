@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD, BUILDING_LEVEL_NAMES, GROUP_COLORS } from '../../content/board';
+import { BOARD, BUILDING_LEVEL_NAMES, GROUP_COLORS, getBoard } from '../../content/board';
 import { CARDS, getCard } from '../../content/cards';
 import { ICON_IDS } from '../../content/icons';
 import {
@@ -10,6 +10,7 @@ import {
   citiesOnSide,
   distance,
   nearestHubAhead,
+  getBoardInfo,
   walkPath,
 } from '../board';
 
@@ -91,6 +92,17 @@ describe('board content (DESIGN §3)', () => {
     expect(nearestHubAhead(27)).toBe(29);
     expect(nearestHubAhead(29)).toBe(5);
     expect(nearestHubAhead(30)).toBe(5);
+  });
+
+  it.each([7, 8, 9] as const)('derives a %i-space-side board without changing the original', (size) => {
+    const info = getBoardInfo(size);
+    expect(getBoard(size)).toHaveLength(4 * (size + 1));
+    expect(info.islandIndex).toBe(size + 1);
+    expect(info.festivalIndex).toBe(2 * (size + 1));
+    expect(info.travelIndex).toBe(3 * (size + 1));
+    expect(distance(info.size - 1, 1, size)).toBe(2);
+    expect(walkPath(info.size - 1, 2, size)).toEqual([0, 1]);
+    expect(nearestHubAhead(info.hubIndices.at(-1)!, size)).toBe(info.hubIndices[0]);
   });
 });
 

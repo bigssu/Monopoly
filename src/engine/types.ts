@@ -8,7 +8,7 @@
  *  - Animate `GameEvent`s returned from `reduce` in order.
  */
 import type { CardId, KeepableCardId } from '../content/cards';
-import type { GroupId, SideId } from '../content/board';
+import type { GroupId, SideId, SpacesPerSide } from '../content/board';
 
 export type { CardId, KeepableCardId } from '../content/cards';
 export type { GroupId, SideId, SpaceKind, SpaceDef } from '../content/board';
@@ -55,6 +55,8 @@ export interface Settings {
   buildAnywhere: boolean;
   /** Prompt soft timer in seconds (UI only; 0 = off). */
   promptTimer: 0 | 15 | 30;
+  /** Non-corner spaces on each side. Defaults to the original 7. */
+  spacesPerSide?: SpacesPerSide;
 }
 
 // ---------------------------------------------------------------------------

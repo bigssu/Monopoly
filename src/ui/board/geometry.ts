@@ -3,6 +3,8 @@
  * Index 0 (Start) is the bottom-right corner; spaces run clockwise on screen:
  * bottom row right→left, left column bottom→top, top row left→right, right column top→bottom.
  */
+import type { SpacesPerSide } from '@/engine';
+
 export const VB = 3200;
 /** Ring depth = corner size. */
 export const DEPTH = 460;
@@ -36,54 +38,56 @@ const EDGE_ROT: Record<Edge, number> = { S: 0, W: 90, N: 180, E: -90 };
 /** Corners face diagonally outward. */
 const CORNER_ROT: Record<number, number> = { 0: -45, 8: 45, 16: 135, 24: -135 };
 
-function build(): SpaceGeom[] {
+function build(size: SpacesPerSide): SpaceGeom[] {
   const out: SpaceGeom[] = [];
-  for (let i = 0; i < 32; i++) {
+  const sideW = (VB - 2 * DEPTH) / size;
+  const corners = [0, size + 1, 2 * (size + 1), 3 * (size + 1)];
+  for (let i = 0; i < 4 * (size + 1); i++) {
     let x = 0;
     let y = 0;
-    let w = SIDE_W;
+    let w = sideW;
     let h = DEPTH;
     let edge: Edge = 'S';
-    const corner = i % 8 === 0;
+    const corner = i % (size + 1) === 0;
     if (i === 0) {
       x = VB - DEPTH;
       y = VB - DEPTH;
       w = h = DEPTH;
       edge = 'S';
-    } else if (i < 8) {
-      x = VB - DEPTH - i * SIDE_W;
+    } else if (i < corners[1]!) {
+      x = VB - DEPTH - i * sideW;
       y = VB - DEPTH;
       edge = 'S';
-    } else if (i === 8) {
+    } else if (i === corners[1]!) {
       x = 0;
       y = VB - DEPTH;
       w = h = DEPTH;
       edge = 'W';
-    } else if (i < 16) {
+    } else if (i < corners[2]!) {
       x = 0;
-      y = VB - DEPTH - (i - 8) * SIDE_W;
+      y = VB - DEPTH - (i - corners[1]!) * sideW;
       w = DEPTH;
-      h = SIDE_W;
+      h = sideW;
       edge = 'W';
-    } else if (i === 16) {
+    } else if (i === corners[2]!) {
       x = 0;
       y = 0;
       w = h = DEPTH;
       edge = 'N';
-    } else if (i < 24) {
-      x = DEPTH + (i - 17) * SIDE_W;
+    } else if (i < corners[3]!) {
+      x = DEPTH + (i - corners[2]! - 1) * sideW;
       y = 0;
       edge = 'N';
-    } else if (i === 24) {
+    } else if (i === corners[3]!) {
       x = VB - DEPTH;
       y = 0;
       w = h = DEPTH;
       edge = 'E';
     } else {
       x = VB - DEPTH;
-      y = DEPTH + (i - 25) * SIDE_W;
+      y = DEPTH + (i - corners[3]! - 1) * sideW;
       w = DEPTH;
-      h = SIDE_W;
+      h = sideW;
       edge = 'E';
     }
     out.push({
@@ -96,15 +100,26 @@ function build(): SpaceGeom[] {
       h,
       cx: x + w / 2,
       cy: y + h / 2,
-      rot: corner ? CORNER_ROT[i]! : EDGE_ROT[edge],
-      lw: corner ? DEPTH : SIDE_W,
+      rot: corner ? CORNER_ROT[(i * 8) / (size + 1)]! : EDGE_ROT[edge],
+      lw: corner ? DEPTH : sideW,
       lh: DEPTH,
     });
   }
   return out;
 }
 
-export const GEOM: readonly SpaceGeom[] = build();
+const profiles = new Map<SpacesPerSide, readonly SpaceGeom[]>();
+export function getBoardGeometry(size: SpacesPerSide = 7): readonly SpaceGeom[] {
+  let geom = profiles.get(size);
+  if (!geom) {
+    geom = build(size);
+    profiles.set(size, geom);
+  }
+  return geom;
+}
+
+/** Backward-compatible 7-per-side geometry aliases. */
+export const GEOM: readonly SpaceGeom[] = getBoardGeometry();
 
 /** Rotate a local-frame offset (relative to the space centre) into board units. */
 export function localToBoard(g: SpaceGeom, lx: number, ly: number): { x: number; y: number } {
@@ -116,8 +131,8 @@ export function localToBoard(g: SpaceGeom, lx: number, ly: number): { x: number;
 }
 
 /** Where a token stands on a space (board units), for `n` tokens sharing it. */
-export function tokenSpot(index: number, slot: number, n: number): { x: number; y: number } {
-  const g = GEOM[index]!;
+export function tokenSpot(index: number, slot: number, n: number, size: SpacesPerSide = 7): { x: number; y: number } {
+  const g = getBoardGeometry(size)[index]!;
   const a = g.corner ? 95 : 80;
   const baseY = g.corner ? 30 : -18;
   const offsets: Array<[number, number]> =

@@ -4,7 +4,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { createGame, defaultPlayers, defaultSettings, type GameEvent, type GameEventType, type GameState } from '@/engine';
+import { createGame, defaultPlayers, defaultSettings, getBoardInfo, type GameEvent, type GameEventType, type GameState } from '@/engine';
 import { EVENT_FX, groupFx, planFx, TRANSFER_FX_MAX, type FxCtx } from '../fxmap';
 import { buildPreset, type PresetName } from '../vfx/presets';
 import { TIER_CAP } from '../vfx/timeline';
@@ -155,6 +155,15 @@ describe('fxmap: GameEvent → preset (VFX.md §7)', () => {
     expect(planFx({ ...SAMPLES.RoundStarted, round: 5 }, ctx())).toEqual([]);
     expect(planFx(SAMPLES.PropertyTransferred, ctx(undefined, { transfers: TRANSFER_FX_MAX }))).toEqual([]);
     expect(planFx({ ...SAMPLES.SentToIsland, cause: 'doubles' }, ctx())[0]).toMatchObject({ params: { cause: 'space' } });
+  });
+
+  it('uses the active board profile for special-space FX', () => {
+    const vs = createGame(defaultSettings({ players: defaultPlayers(4, { cpu: false }), roundLimit: 15, spacesPerSide: 9 }), 7);
+    const info = getBoardInfo(9);
+    expect(planFx({ ...SAMPLES.SentToIsland, cause: 'space' }, ctx(vs))[0]).toMatchObject({ params: { space: info.islandIndex } });
+    expect(planFx(SAMPLES.TravelGranted, ctx(vs))[0]).toMatchObject({ params: { at: { space: info.travelIndex } } });
+    const hop = planFx({ ...SAMPLES.TokenMoved, from: 8, path: [9], to: 9 }, ctx(vs))[0]!;
+    expect((hop.params as { dir: number }).dir).toBeCloseTo(180);
   });
 
   it('toll: tiers from amount and the payer cash left; the float comes from MoneyChanged (label null)', () => {

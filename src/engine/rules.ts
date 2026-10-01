@@ -2,13 +2,11 @@
  * Pure rule helpers: tolls, costs, values, set victories (독점), ranking.
  */
 import {
-  CITY_INDICES,
   GROUP_IDS,
-  HUB_INDICES,
-  PROPERTY_INDICES,
   SIDE_IDS,
   citiesInGroup,
   citiesOnSide,
+  getBoardInfo,
   isCity,
   isHub,
   priceOf,
@@ -52,36 +50,36 @@ export function buildCost(price: number, toLevel: number): number {
 /** Cost of the next level on this city, or null if maxed. */
 export function nextBuildCost(state: GameState, index: number): number | null {
   const prop = propertyAt(state, index);
-  if (!isCity(index) || prop.level >= ECONOMY.maxLevel) return null;
-  return buildCost(priceOf(index), prop.level + 1);
+  if (!isCity(index, state.settings.spacesPerSide ?? 7) || prop.level >= ECONOMY.maxLevel) return null;
+  return buildCost(priceOf(index, state.settings.spacesPerSide ?? 7), prop.level + 1);
 }
 
 /** Property value = price + Σ build costs of the current levels. */
-export function valueOf(index: number, level: number): number {
-  const price = priceOf(index);
+export function valueOf(index: number, level: number, spacesPerSide: 7 | 8 | 9 = 7): number {
+  const price = priceOf(index, spacesPerSide);
   let v = price;
   for (let l = 1; l <= level; l++) v += buildCost(price, l);
   return v;
 }
 
 export function propertyValue(state: GameState, index: number): number {
-  return valueOf(index, propertyAt(state, index).level);
+  return valueOf(index, propertyAt(state, index).level, state.settings.spacesPerSide ?? 7);
 }
 
 export function ownedProperties(state: GameState, pid: PlayerId): number[] {
-  return PROPERTY_INDICES.filter((i) => state.properties[i]?.owner === pid);
+  return getBoardInfo(state.settings.spacesPerSide ?? 7).propertyIndices.filter((i) => state.properties[i]?.owner === pid);
 }
 
 export function ownedCities(state: GameState, pid: PlayerId): number[] {
-  return CITY_INDICES.filter((i) => state.properties[i]?.owner === pid);
+  return getBoardInfo(state.settings.spacesPerSide ?? 7).cityIndices.filter((i) => state.properties[i]?.owner === pid);
 }
 
 export function hubCount(state: GameState, pid: PlayerId): number {
-  return HUB_INDICES.filter((i) => state.properties[i]?.owner === pid).length;
+  return getBoardInfo(state.settings.spacesPerSide ?? 7).hubIndices.filter((i) => state.properties[i]?.owner === pid).length;
 }
 
 export function ownsGroup(state: GameState, pid: PlayerId, group: GroupId): boolean {
-  return citiesInGroup(group).every((i) => state.properties[i]?.owner === pid);
+  return citiesInGroup(group, state.settings.spacesPerSide ?? 7).every((i) => state.properties[i]?.owner === pid);
 }
 
 export function completedGroups(state: GameState, pid: PlayerId): GroupId[] {
@@ -89,18 +87,18 @@ export function completedGroups(state: GameState, pid: PlayerId): GroupId[] {
 }
 
 export function ownsSide(state: GameState, pid: PlayerId, side: SideId): boolean {
-  return citiesOnSide(side).every((i) => state.properties[i]?.owner === pid);
+  return citiesOnSide(side, state.settings.spacesPerSide ?? 7).every((i) => state.properties[i]?.owner === pid);
 }
 
 /** Toll for landing on a city/hub (before card multipliers and passes). */
 export function tollOf(state: GameState, index: number): number {
   const prop = propertyAt(state, index);
   if (prop.owner === null) return 0;
-  if (isHub(index)) return ECONOMY.hubTollPerHub * hubCount(state, prop.owner);
-  const price = priceOf(index);
+  if (isHub(index, state.settings.spacesPerSide ?? 7)) return ECONOMY.hubTollPerHub * hubCount(state, prop.owner);
+  const price = priceOf(index, state.settings.spacesPerSide ?? 7);
   const rate = ECONOMY.tollRates[prop.level] ?? 0;
   let toll = round10(price * rate);
-  const group = space(index).group;
+  const group = space(index, state.settings.spacesPerSide ?? 7).group;
   if (prop.level === 0 && group && ownsGroup(state, prop.owner, group)) {
     toll *= ECONOMY.groupLandMultiplier;
   }
@@ -110,14 +108,14 @@ export function tollOf(state: GameState, index: number): number {
 
 /** Toll this city/hub would charge at a hypothetical level (no festival). For AI estimates. */
 export function tollAtLevel(state: GameState, index: number, level: number, owner: PlayerId): number {
-  if (isHub(index)) return ECONOMY.hubTollPerHub * Math.max(1, hubCount(state, owner));
-  return round10(priceOf(index) * (ECONOMY.tollRates[level] ?? 0));
+  if (isHub(index, state.settings.spacesPerSide ?? 7)) return ECONOMY.hubTollPerHub * Math.max(1, hubCount(state, owner));
+  return round10(priceOf(index, state.settings.spacesPerSide ?? 7) * (ECONOMY.tollRates[level] ?? 0));
 }
 
 export function canBeTakenOver(state: GameState, index: number): boolean {
   const prop = propertyAt(state, index);
   if (prop.owner === null) return false;
-  if (isHub(index)) return true;
+  if (isHub(index, state.settings.spacesPerSide ?? 7)) return true;
   return prop.level < ECONOMY.maxLevel;
 }
 
@@ -128,8 +126,8 @@ export function takeoverPrice(state: GameState, index: number): number {
 /** Cash from selling the top building level (levels 1–3 only; landmarks sell whole). */
 export function sellBuildingValue(state: GameState, index: number): number | null {
   const prop = propertyAt(state, index);
-  if (!isCity(index) || prop.level < 1 || prop.level >= ECONOMY.maxLevel) return null;
-  return Math.floor(buildCost(priceOf(index), prop.level) * ECONOMY.sellRate);
+  if (!isCity(index, state.settings.spacesPerSide ?? 7) || prop.level < 1 || prop.level >= ECONOMY.maxLevel) return null;
+  return Math.floor(buildCost(priceOf(index, state.settings.spacesPerSide ?? 7), prop.level) * ECONOMY.sellRate);
 }
 
 /** Cash from selling the whole property (land + any buildings) to the bank. */
@@ -175,7 +173,7 @@ export function setVictory(state: GameState, pid: PlayerId): SetVictory | null {
   for (const side of SIDE_IDS) {
     if (ownsSide(state, pid, side)) return { victory: 'line', side };
   }
-  if (HUB_INDICES.every((i) => state.properties[i]?.owner === pid)) return { victory: 'hubs' };
+  if (getBoardInfo(state.settings.spacesPerSide ?? 7).hubIndices.every((i) => state.properties[i]?.owner === pid)) return { victory: 'hubs' };
   return null;
 }
 
@@ -254,9 +252,9 @@ export function oneAwayWarnings(state: GameState): OneAwayWarning[] {
   };
   for (const p of state.players) {
     if (p.bankrupt) continue;
-    for (const g of GROUP_IDS) check(p.id, 'group', g, citiesInGroup(g));
-    for (const sd of SIDE_IDS) check(p.id, 'line', sd, citiesOnSide(sd));
-    check(p.id, 'hub', 'hubs', HUB_INDICES);
+    for (const g of GROUP_IDS) check(p.id, 'group', g, citiesInGroup(g, state.settings.spacesPerSide ?? 7));
+    for (const sd of SIDE_IDS) check(p.id, 'line', sd, citiesOnSide(sd, state.settings.spacesPerSide ?? 7));
+    check(p.id, 'hub', 'hubs', getBoardInfo(state.settings.spacesPerSide ?? 7).hubIndices);
   }
   return out;
 }

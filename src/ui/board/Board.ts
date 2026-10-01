@@ -1,8 +1,8 @@
 /**
- * The board: an SVG ring of 32 spaces (static art, diffed per space), the Stage host in the
+ * The board: an SVG ring of 7/8/9 spaces per side, the Stage host in the
  * middle and an HTML token layer on top (tokens hop with the Web Animations API).
  */
-import { BOARD, oneAwayWarnings, type GameState, type Player, type PlayerId, type SpaceDef } from '@/engine';
+import { getBoard, oneAwayWarnings, type GameState, type Player, type PlayerId, type SpaceDef, type SpacesPerSide } from '@/engine';
 import { playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
@@ -10,7 +10,7 @@ import { haptic } from '@/ui/audio/haptics';
 import { anim, animSpeed, D, gridTimeout, instant, isSkipping, onFrame } from '@/ui/fx/time';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
-import { DEPTH, GEOM, INNER, VB, tokenSpot, type SpaceGeom } from './geometry';
+import { DEPTH, INNER, VB, getBoardGeometry, tokenSpot, type SpaceGeom } from './geometry';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -182,8 +182,8 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   // Level icons in one group (`sp-lvl`): the fx pop / "under construction" dim target (Board.popIcon).
   if (v.level >= 1 && v.level <= 3) {
     const ids = ['villa', 'building', 'hotel'].slice(0, v.level);
-    const sz = 92;
-    const step = 84;
+    const sz = Math.min(92, (w - 2 * m - 24) / (1 + (ids.length - 1) * 0.91));
+    const step = sz * 0.91;
     const x0 = w / 2 - ((ids.length - 1) * step) / 2 - sz / 2;
     const c = oc?.hex ?? '#E8564F';
     parts.push('<g class="sp-lvl">');
@@ -236,12 +236,12 @@ function cornerMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView): string {
 }
 
 /** Transform of space i's group (board units), as an SVG attribute and as a matrix. */
-function spaceTransform(i: number): string {
-  const g = GEOM[i]!;
+function spaceTransform(i: number, geom: readonly SpaceGeom[]): string {
+  const g = geom[i]!;
   return g.corner ? `translate(${g.x} ${g.y})` : `translate(${g.cx} ${g.cy}) rotate(${g.rot}) translate(${-g.lw / 2} ${-g.lh / 2})`;
 }
-function spaceMatrix(i: number): DOMMatrix {
-  const g = GEOM[i]!;
+function spaceMatrix(i: number, geom: readonly SpaceGeom[]): DOMMatrix {
+  const g = geom[i]!;
   return g.corner ? new DOMMatrix().translate(g.x, g.y) : new DOMMatrix().translate(g.cx, g.cy).rotate(g.rot).translate(-g.lw / 2, -g.lh / 2);
 }
 
@@ -250,8 +250,8 @@ const BARE: Omit<SpaceView, 'lang'> = { owner: null, level: 0, festival: false, 
 const isBare = (v: SpaceView): boolean => v.owner === null && v.level === 0 && !v.festival && v.pot === 0;
 
 /** Invisible hit area of a bare space (taps, picking); the art is in the base image. */
-function hitMarkup(i: number): string {
-  const g = GEOM[i]!;
+function hitMarkup(i: number, geom: readonly SpaceGeom[]): string {
+  const g = geom[i]!;
   return `<rect x="7" y="7" width="${g.lw - 14}" height="${g.lh - 14}" rx="${g.corner ? 34 : 24}" fill="none" pointer-events="all"/>`;
 }
 
@@ -316,19 +316,19 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * plain bitmap painted into the board's layer, so raster work under a changed prompt, token or
  * space is one image copy instead of re-drawing ~950 SVG shapes and 40 text runs per tile.
  */
-async function rasterizeBase(svgEl: SVGSVGElement, players: readonly Player[], pw: number): Promise<string> {
+async function rasterizeBase(svgEl: SVGSVGElement, players: readonly Player[], board: readonly SpaceDef[], geom: readonly SpaceGeom[], pw: number): Promise<string> {
   const st = readBaseStyles(svgEl);
   const texts: BaseText[] = [];
   const groups: string[] = [];
   baseTexts = texts;
   try {
     const lang = getLang();
-    for (let i = 0; i < 32; i++) {
-      const g = GEOM[i]!;
-      baseMatrix = spaceMatrix(i);
+    for (let i = 0; i < board.length; i++) {
+      const g = geom[i]!;
+      baseMatrix = spaceMatrix(i, geom);
       const v: SpaceView = { ...BARE, lang };
-      const inner = g.corner ? cornerMarkup(BOARD[i]!, g, v) : sideSpaceMarkup(BOARD[i]!, g, v, players);
-      groups.push(`<g transform="${spaceTransform(i)}">${inner}</g>`);
+      const inner = g.corner ? cornerMarkup(board[i]!, g, v) : sideSpaceMarkup(board[i]!, g, v, players);
+      groups.push(`<g transform="${spaceTransform(i, geom)}">${inner}</g>`);
     }
   } finally {
     baseTexts = null;
@@ -416,9 +416,15 @@ export class Board {
   private sized = false;
   private lastVs: GameState | null = null;
   private disposed = false;
+  private readonly size: SpacesPerSide;
+  private readonly board: readonly SpaceDef[];
+  private readonly geom: readonly SpaceGeom[];
 
-  constructor(players: readonly Player[], private onTap: (index: number) => void) {
+  constructor(players: readonly Player[], private onTap: (index: number) => void, size: SpacesPerSide = 7) {
     this.players = players;
+    this.size = size;
+    this.board = getBoard(size);
+    this.geom = getBoardGeometry(size);
     this.el = h('div', { class: 'board' });
     this.svgEl = document.createElementNS(NS, 'svg');
     this.svgEl.setAttribute('viewBox', `0 0 ${VB} ${VB}`);
@@ -428,11 +434,11 @@ export class Board {
       `<rect x="0" y="0" width="${VB}" height="${VB}" rx="70" class="board-face"/>` +
       `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="40" class="board-inner-rim"/>`;
     this.defsEl = this.svgEl.querySelector('defs')!;
-    for (let i = 0; i < 32; i++) {
+    for (let i = 0; i < this.board.length; i++) {
       const grp = document.createElementNS(NS, 'g');
-      grp.setAttribute('class', `sp sp-${BOARD[i]!.kind}`);
+      grp.setAttribute('class', `sp sp-${this.board[i]!.kind}`);
       grp.setAttribute('data-i', String(i));
-      grp.setAttribute('transform', spaceTransform(i));
+      grp.setAttribute('transform', spaceTransform(i, this.geom));
       this.svgEl.appendChild(grp);
       this.groups.push(grp);
       this.sigs.push('');
@@ -487,7 +493,8 @@ export class Board {
 
   private baseKeyNow(): { key: string; pw: number; lang: string } {
     const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
-    const pw = Math.min(4096, Math.round(this.px * dpr));
+    // Only the text-bearing board may use 2K. Do not inflate a near-1K request to 2K.
+    const pw = Math.min(2048, 2 ** Math.round(Math.log2(Math.max(1, this.px * dpr))));
     const lang = getLang();
     return { key: `${pw}|${lang}`, pw, lang };
   }
@@ -507,7 +514,7 @@ export class Board {
     this.baseTimer = window.setTimeout(() => {
       if (gen !== this.baseGen || this.disposed) return;
       const { pw } = this.baseKeyNow();
-      rasterizeBase(this.svgEl, this.players, pw)
+      rasterizeBase(this.svgEl, this.players, this.board, this.geom, pw)
         .then(async (url) => {
           if (gen !== this.baseGen || this.disposed) {
             URL.revokeObjectURL(url);
@@ -565,8 +572,8 @@ export class Board {
       rings.set(w.missing, playerColor(vs.players[w.playerId]!.colorId).hex);
     }
     const lang = getLang();
-    for (let i = 0; i < 32; i++) {
-      const sp = BOARD[i]!;
+    for (let i = 0; i < this.board.length; i++) {
+      const sp = this.board[i]!;
       const pr = vs.properties[i];
       const v: SpaceView = {
         owner: pr?.owner ?? null,
@@ -581,8 +588,8 @@ export class Board {
       const grp = this.groups[i]!;
       if (sig !== this.sigs[i]) {
         this.sigs[i] = sig;
-        const g = GEOM[i]!;
-        grp.innerHTML = hit ? hitMarkup(i) : g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
+        const g = this.geom[i]!;
+        grp.innerHTML = hit ? hitMarkup(i, this.geom) : g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
         this.flushAtlasDefs();
         // An fx pop requested in this same frame (the 'swap' cue fires just before the re-render).
         const pop = this.pops.get(i);
@@ -594,7 +601,7 @@ export class Board {
         ring?.remove();
         this.rings.delete(i);
         if (v.ring) {
-          const g = GEOM[i]!;
+          const g = this.geom[i]!;
           const el = this.mark(i, 'bm-ring', `<rect x="10" y="10" width="${g.lw - 20}" height="${g.lh - 20}" rx="22" stroke="${v.ring}"/>`);
           el.dataset.color = v.ring;
           this.rings.set(i, el);
@@ -622,7 +629,7 @@ export class Board {
   async pulseSpace(i: number, kind: 'pop' | 'stamp' | 'shake' = 'pop'): Promise<void> {
     const grp = this.groups[i];
     if (!grp || instant()) return;
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     const cls = `fx-${kind}`;
     const ring = h('div', { class: `space-flash ${cls}` });
     const k = 100 / VB;
@@ -652,7 +659,7 @@ export class Board {
   /** Landing ripple at a space centre. */
   ripple(i: number, color: string): void {
     if (instant()) return;
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     const r = h('div', { class: 'land-ripple' });
     r.style.left = `${(g.cx / VB) * 100}%`;
     r.style.top = `${(g.cy / VB) * 100}%`;
@@ -669,7 +676,7 @@ export class Board {
    * an SVG snippet in local board units. Appended to the marks layer.
    */
   private mark(i: number, cls: string, inner: string): HTMLElement {
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     const k = 100 / VB;
     const el = h('div', { class: `bmark ${cls}` });
     el.style.left = `${g.cx * k}%`;
@@ -684,7 +691,7 @@ export class Board {
 
   /** Outline hugging the outside of a space's background card (`sp-bg`), `w` board units wide. */
   private outline(i: number, cls: string, w: number): HTMLElement {
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     const m = 7 - w / 2;
     return this.mark(i, cls, `<rect x="${m}" y="${m}" width="${g.lw - 2 * m}" height="${g.lh - 2 * m}" rx="${(g.corner ? 34 : 24) + w / 2}"/>`);
   }
@@ -703,10 +710,10 @@ export class Board {
       // without promoting 30 SVG groups to layers for the fade).
       if (!this.dimEl) {
         const veil: string[] = [];
-        for (let i = 0; i < 32; i++) {
+        for (let i = 0; i < this.board.length; i++) {
           if (this.pickSet.has(i)) continue;
-          const g = GEOM[i]!;
-          veil.push(`<rect transform="${spaceTransform(i)}" width="${g.lw}" height="${g.lh}"/>`);
+          const g = this.geom[i]!;
+          veil.push(`<rect transform="${spaceTransform(i, this.geom)}" width="${g.lw}" height="${g.lh}"/>`);
         }
         const dim = h('div', { class: 'bm-dim' });
         dim.innerHTML = `<svg viewBox="0 0 ${VB} ${VB}" aria-hidden="true">${veil.join('')}</svg>`;
@@ -743,7 +750,7 @@ export class Board {
   /** Client rect of space i (for fx): one board rect read + geometry. */
   spaceRect(i: number, boardRect?: { left: number; top: number; width: number }): { x: number; y: number; width: number; height: number } {
     const r = boardRect ?? this.el.getBoundingClientRect();
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     const k = r.width / VB;
     return { x: r.left + g.x * k, y: r.top + g.y * k, width: g.w * k, height: g.h * k };
   }
@@ -822,10 +829,10 @@ export class Board {
   zoomPunch(i: number, k: number): void {
     const grp = this.groups[i];
     if (!grp || instant()) return;
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     // Paint order = z-order in SVG: move the group last (the order of the groups carries no meaning).
     if (grp.nextSibling) this.svgEl.appendChild(grp);
-    this.svgScale(grp, spaceTransform(i), g.lw / 2, g.lh / 2, 12, (t) => {
+    this.svgScale(grp, spaceTransform(i, this.geom), g.lw / 2, g.lh / 2, 12, (t) => {
       const f = t * 12;
       if (f <= 5) {
         const x = f / 5;
@@ -844,7 +851,7 @@ export class Board {
 
   /** Reduced-motion static highlight: an outline mark for `ms`, no animation. */
   highlight(i: number, color: string, ms = 800): void {
-    if (!GEOM[i]) return;
+    if (!this.geom[i]) return;
     const el = this.outline(i, 'bm-hl', 10);
     el.style.setProperty('--fx-hl', color);
     gridTimeout(() => el.remove(), ms);
@@ -853,7 +860,7 @@ export class Board {
   /** Screen centre (client px) of a space — for fx. */
   spaceClientCenter(i: number): { x: number; y: number } {
     const r = this.el.getBoundingClientRect();
-    const g = GEOM[i]!;
+    const g = this.geom[i]!;
     return { x: r.left + (g.cx / VB) * r.width, y: r.top + (g.cy / VB) * r.height };
   }
 
@@ -895,7 +902,7 @@ export class Board {
       pids.sort((a, b) => a - b);
       pids.forEach((pid, slot) => {
         const tk = this.tokens.get(pid)!;
-        const spot = tokenSpot(pos, slot, pids.length);
+        const spot = tokenSpot(pos, slot, pids.length, this.size);
         const shared = pids.length > 1;
         if (shared !== tk.shared) {
           tk.shared = shared;
@@ -928,7 +935,7 @@ export class Board {
     const lift = 0.95 * (this.px / 32);
     for (let n = 0; n < path.length; n++) {
       const idx = path[n]!;
-      const spot = tokenSpot(idx, 0, 1);
+      const spot = tokenSpot(idx, 0, 1, this.size);
       const dx = (tk.x - spot.x) * this.k;
       const dy = (tk.y - spot.y) * this.k;
       this.setTokenXY(tk, spot.x, spot.y);
@@ -969,7 +976,7 @@ export class Board {
     tk.moving = true;
     tk.root.classList.add('is-moving');
     this.layoutTokens(true);
-    const spot = tokenSpot(to, 0, 1);
+    const spot = tokenSpot(to, 0, 1, this.size);
     const dx = (tk.x - spot.x) * this.k;
     const dy = (tk.y - spot.y) * this.k;
     this.setTokenXY(tk, spot.x, spot.y);

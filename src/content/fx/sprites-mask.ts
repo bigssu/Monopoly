@@ -462,7 +462,10 @@ const confettiTri = (): string =>
 const confettiDiamond = (): string =>
   doc(20, 22, tone(`<polygon points="10,2 17.5,11 10,20 2.5,11"/>`, `<polygon points="10,2 17.5,11 10,11"/>`));
 
-export const MASK_SPRITES: SpriteDef[] = [
+// Mask effects are rasterized at 87.5% density; runtime scale metadata keeps their nominal size and anchors unchanged.
+const MASK_BAKE_K = 0.875;
+
+export const MASK_SPRITES: SpriteDef[] = ([
   { name: 'flag_wave', cls: 'mask', w: 64, h: 52, n: 6, fps: 10, loop: true, svg: flagWave },
   { name: 'sparkle4', cls: 'mask', w: 48, h: 48, n: 6, fps: 20, loop: false, svg: sparkle4 },
   { name: 'glint_sweep', cls: 'mask', w: 64, h: 64, n: 8, fps: 24, loop: false, edgeOk: true, svg: glintSweep },
@@ -483,4 +486,4 @@ export const MASK_SPRITES: SpriteDef[] = [
   { name: 'confetti_dot', cls: 'mask', w: 18, h: 18, n: 1, fps: 1, loop: false, svg: () => confettiDot() },
   { name: 'confetti_tri', cls: 'mask', w: 20, h: 20, n: 1, fps: 1, loop: false, svg: () => confettiTri() },
   { name: 'confetti_diamond', cls: 'mask', w: 20, h: 22, n: 1, fps: 1, loop: false, svg: () => confettiDiamond() },
-];
+] satisfies SpriteDef[]).map((sprite) => ({ ...sprite, k: (sprite.k ?? 1) * MASK_BAKE_K }));

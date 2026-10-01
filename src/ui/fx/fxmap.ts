@@ -13,13 +13,10 @@
 import {
   citiesInGroup,
   citiesOnSide,
+  getBoardInfo,
   groupOf,
-  HUB_INDICES,
   isHub,
-  ISLAND_INDEX,
   ownsGroup,
-  START_INDEX,
-  TRAVEL_INDEX,
   type GameEvent,
   type GameEventType,
   type GameState,
@@ -28,7 +25,7 @@ import {
 } from '@/engine';
 import { GROUP_COLORS } from '@/content/board';
 import { getCard, type CardId } from '@/content/cards';
-import { GEOM } from '@/ui/board/geometry';
+import { getBoardGeometry } from '@/ui/board/geometry';
 import type { PresetName, PresetParams } from './vfx/presets';
 import type { CardTone } from './vfx/presets';
 
@@ -97,9 +94,12 @@ export function cardTone(id: CardId): CardTone {
 }
 
 /** Screen direction (deg) of travel from space a to space b (hop speed lines). */
-function dirDeg(a: number, b: number): number {
-  const p = GEOM[a]!;
-  const q = GEOM[b]!;
+const profile = (s: GameState) => getBoardInfo(s.settings.spacesPerSide ?? 7);
+
+function dirDeg(a: number, b: number, s: GameState): number {
+  const geom = getBoardGeometry(s.settings.spacesPerSide ?? 7);
+  const p = geom[a]!;
+  const q = geom[b]!;
   return (Math.atan2(q.cy - p.cy, q.cx - p.cx) * 180) / Math.PI;
 }
 
@@ -110,9 +110,10 @@ export function billCount(delta: number): number {
 
 /** Group colour + member cities when `pid` owns i's whole colour group in `vs` (derived GroupCompleted). */
 export function completedGroup(vs: GameState, pid: PlayerId, i: number): { group: GroupId; spaces: number[]; color: string } | null {
-  const g = groupOf(i);
+  const size = vs.settings.spacesPerSide ?? 7;
+  const g = groupOf(i, size);
   if (!g || !ownsGroup(vs, pid, g)) return null;
-  return { group: g, spaces: [...citiesInGroup(g)], color: GROUP_COLORS[g] };
+  return { group: g, spaces: [...citiesInGroup(g, size)], color: GROUP_COLORS[g] };
 }
 
 /** Derived GroupCompleted (after the ownership change is applied to `vs`): chain → finale. */
@@ -140,29 +141,29 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
     else if (ev.isDouble) out.push(step('doublesFlash', {}));
     return out;
   },
-  TokenMoved: (ev) => {
+  TokenMoved: (ev, c) => {
     if (ev.mode === 'jump') return [step('cometJump', { from: ev.from, to: ev.to, player: ev.playerId }, { wait: 'block' })];
     // Dust on the landing hop only: dust on every hop kept the canvas alive (one upload per frame)
     // for the whole walk for a barely visible accent (4x frame budget, docs/VFX.md §14).
     const n = ev.path.length - 1;
     if (n < 0) return [];
     const sp = ev.path[n]!;
-    return [step('hopDust', { space: sp, long: ev.path.length >= 6, dir: dirDeg(n ? ev.path[n - 1]! : ev.from, sp) }, { hop: n })];
+    return [step('hopDust', { space: sp, long: ev.path.length >= 6, dir: dirDeg(n ? ev.path[n - 1]! : ev.from, sp, c.vs) }, { hop: n })];
   },
   PassedStart: (ev) => [step('passStart', { player: ev.playerId, landed: ev.landed })],
-  MoneyChanged: (ev) => {
+  MoneyChanged: (ev, c) => {
     if (ev.reason === 'card' && ev.delta > 0) return [step('billRain', { player: ev.playerId, n: billCount(ev.delta) })];
     if (ev.delta < 0 && (ev.reason === 'card' || ev.reason === 'tax' || ev.reason === 'donation' || ev.reason === 'bail')) {
-      const to = ev.reason === 'bail' ? { space: ISLAND_INDEX } : ev.spaceIndex !== undefined ? { space: ev.spaceIndex } : { stage: true as const };
+      const to = ev.reason === 'bail' ? { space: profile(c.vs).islandIndex } : ev.spaceIndex !== undefined ? { space: ev.spaceIndex } : { stage: true as const };
       return [step('coinIn', { from: { panel: ev.playerId }, to, n: 5 })];
     }
     // salary / pot / toll / purchase / build / takeover / sale / auction / bankruptcy: the dedicated
     // event's preset shows the money (no double effect); the panel counts up.
     return [];
   },
-  PotChanged: (ev) => (ev.delta > 0 ? [step('ringPulse', { at: { space: START_INDEX }, sparkles: 2, scale: 0.6 })] : []),
-  PropertyBought: (ev) => [
-    step('plotClaim', { space: ev.spaceIndex, player: ev.playerId, price: ev.price, hub: isHub(ev.spaceIndex), via: ev.via }, { applyAt: 'frame', wait: 'block' }),
+  PotChanged: (ev, c) => (ev.delta > 0 ? [step('ringPulse', { at: { space: profile(c.vs).startIndex }, sparkles: 2, scale: 0.6 })] : []),
+  PropertyBought: (ev, c) => [
+    step('plotClaim', { space: ev.spaceIndex, player: ev.playerId, price: ev.price, hub: isHub(ev.spaceIndex, c.vs.settings.spacesPerSide ?? 7), via: ev.via }, { applyAt: 'frame', wait: 'block' }),
   ],
   CannotAfford: (ev) => [step('puff', { at: { panel: ev.playerId }, smoke: 1 })],
   Built: (ev, c) => {
@@ -204,16 +205,16 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   CardNoEffect: () => [step('puff', { at: { stage: true } })],
   ExpressGranted: (ev) => [step('ringPulse', { at: { panel: ev.playerId }, sparkles: 4 })],
   // Third double: the sirens already swept in DiceRolled — the splash only.
-  SentToIsland: (ev) => [step('islandSiren', { space: ISLAND_INDEX, player: ev.playerId, cause: ev.cause === 'doubles' ? 'space' : ev.cause }, { wait: 'block' })],
-  IslandStay: () => [step('ringPulse', { at: { space: ISLAND_INDEX }, color: SKY, double: true, sparkles: 0 })],
-  Escaped: (ev) => [step('ringPulse', { at: { space: ISLAND_INDEX }, player: ev.playerId, sparkles: 8 })],
+  SentToIsland: (ev, c) => [step('islandSiren', { space: profile(c.vs).islandIndex, player: ev.playerId, cause: ev.cause === 'doubles' ? 'space' : ev.cause }, { wait: 'block' })],
+  IslandStay: (_ev, c) => [step('ringPulse', { at: { space: profile(c.vs).islandIndex }, color: SKY, double: true, sparkles: 0 })],
+  Escaped: (ev, c) => [step('ringPulse', { at: { space: profile(c.vs).islandIndex }, player: ev.playerId, sparkles: 8 })],
   FestivalSet: (ev) =>
     ev.spaceIndex !== null
       ? [step('festivalBurst', { space: ev.spaceIndex, player: ev.playerId, previous: ev.previous }, { wait: 'block' })]
       : ev.previous !== null
         ? [step('puff', { at: { space: ev.previous } })]
         : [],
-  TravelGranted: () => [step('ringPulse', { at: { space: TRAVEL_INDEX }, color: SKY, sparkles: 8 })],
+  TravelGranted: (_ev, c) => [step('ringPulse', { at: { space: profile(c.vs).travelIndex }, color: SKY, sparkles: 8 })],
   TravelDeclined: () => [],
   DebtStarted: (ev) => [step('ringPulse', { at: { panel: ev.playerId }, color: AMBER, double: true, sparkles: 0 })],
   DebtSettled: (ev) => [step('ringPulse', { at: { panel: ev.playerId }, color: GREEN, sparkles: 6 })],
@@ -232,15 +233,16 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   AuctionEnded: () => [],
   OneAway: (ev) => [step('oneAway', { space: ev.missing, player: ev.playerId })],
   PromptOpened: () => [],
-  GameOver: (ev) => {
+  GameOver: (ev, c) => {
     const r = ev.result;
     let spaces: readonly number[] = [];
     let colors: string[] = [];
     if (r.victory === 'triple' && r.groups?.length) {
-      spaces = r.groups.map((g) => citiesInGroup(g)[1] ?? citiesInGroup(g)[0]!);
+      const size = c.vs.settings.spacesPerSide ?? 7;
+      spaces = r.groups.map((g) => citiesInGroup(g, size)[1] ?? citiesInGroup(g, size)[0]!);
       colors = r.groups.map((g) => GROUP_COLORS[g]);
-    } else if (r.victory === 'line' && r.side) spaces = citiesOnSide(r.side);
-    else if (r.victory === 'hubs') spaces = HUB_INDICES;
+    } else if (r.victory === 'line' && r.side) spaces = citiesOnSide(r.side, c.vs.settings.spacesPerSide ?? 7);
+    else if (r.victory === 'hubs') spaces = profile(c.vs).hubIndices;
     return [step('victory', { winner: r.winnerId, kind: r.victory, spaces, colors }, { wait: 'block' })];
   },
 };

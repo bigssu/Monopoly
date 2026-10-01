@@ -153,8 +153,8 @@
   align-content: center;
   justify-content: center;
 }
-.pp-sets.is-cols { grid-template-columns: repeat(8, var(--slot)); grid-template-rows: repeat(4, var(--slot)); }
-.pp-sets.is-rows { grid-template-columns: repeat(4, var(--slot)); grid-template-rows: repeat(8, var(--slot)); }
+.pp-sets.is-cols { grid-template-columns: repeat(8, var(--slot)); grid-template-rows: repeat(var(--member-tracks, 4), var(--slot)); }
+.pp-sets.is-rows { grid-template-columns: repeat(var(--member-tracks, 4), var(--slot)); grid-template-rows: repeat(8, var(--slot)); }
 .pp-sets.is-cols .slot { grid-column: var(--g); grid-row: var(--k); }
 .pp-sets.is-rows .slot { grid-row: var(--g); grid-column: var(--k); }
 /* Rings are outlines (outline-offset = -width draws exactly the old inset box-shadow ring) and

@@ -47,6 +47,23 @@ describe('legal actions', () => {
       expect(legalActions(s)).toEqual([]);
     }
   });
+
+  it.each([8, 9] as const)('CPU actions remain legal and finish on the %i-space-side board', (spacesPerSide) => {
+    const result = simulateGame(cpu(3, { spacesPerSide, roundLimit: 10 }), 4321 + spacesPerSide, { maxSteps: 10_000 });
+    expect(result.timedOut).toBe(false);
+    expect(result.finalState.properties).toHaveLength(4 * (spacesPerSide + 1));
+    expect(result.victory).not.toBeNull();
+  });
+
+  it('keeps interleaved board-size games independent', () => {
+    const eight = createGame(cpu(2, { spacesPerSide: 8, roundLimit: 10 }), 8);
+    const nine = createGame(cpu(2, { spacesPerSide: 9, roundLimit: 10 }), 9);
+    const nextEight = reduce(eight, chooseAction(eight, 0)).state;
+    expect(eight.properties).toHaveLength(36);
+    expect(nine.properties).toHaveLength(40);
+    expect(nextEight.players.every((player) => player.position >= 0 && player.position < 36)).toBe(true);
+    expect(nine.players.every((player) => player.position >= 0 && player.position < 40)).toBe(true);
+  });
 });
 
 describe('fuzz: 200 seeded CPU games', () => {

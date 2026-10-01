@@ -405,12 +405,16 @@ node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽
 | 적응형 아이콘 배경 (펠트 방사형 그라디언트) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
 | 적응형 아이콘 정의 | `res/mipmap-anydpi-v26/ic_launcher{,_round}.xml` (템플릿 파일을 배경 drawable 참조로 수정, 스크립트는 건드리지 않음) |
 | 구형 아이콘 (API 24-25) | `res/mipmap-*dpi/ic_launcher.png`, `ic_launcher_round.png` (48-192 px) |
-| Android 12+ 스플래시 아이콘 | `res/drawable-*dpi/splash_icon.png` (288dp 캔버스) |
-| Android 11 이하 스플래시 | `res/drawable/splash.png`, `res/drawable-{land,port}-*dpi/splash.png` (어두운 펠트 + 로고) |
+| Android 12+ 스플래시 아이콘 | `res/drawable-nodpi/splash_icon.png` (공용 512×512, 288dp 안전 영역) |
+| Android 11 이하 스플래시 | `res/drawable/splash.xml` (단색 배경 + 중앙 288dp 공용 아이콘) |
 | Play 아이콘 512x512 | `docs/assets/play-icon-512.png` |
 | Play 피처 그래픽 1024x500 (알파 없음) | `docs/assets/feature-graphic-1024x500.png` (Jua 폰트로 렌더링) |
 
 배경을 금색(`#F2B633`)이 아니라 어두운 펠트로 한 이유: 로고의 노란 혜성 꼬리가 금색 배경에서는 거의 보이지 않습니다.
+
+시작 화면만 다시 만들려면 `node scripts/gen-android-icons.mjs --splash-only --no-play`를 실행합니다.
+Windows에서는 `CHROMIUM_PATH`로 Chrome을 지정합니다. 생성기는 [Android SplashScreen 안전 영역](https://developer.android.com/reference/androidx/core/splashscreen/SplashScreen)을 픽셀 단위로 검사하며, 이전 밀도/방향별 시작 PNG를 제거합니다.
+공용 512px 이미지는 고밀도 기기에서 확대되므로 APK를 설치해 시작 화면의 선명도를 확인해야 합니다.
 
 웹 쪽은 `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">`
 와 `env(safe-area-inset-*)` / `--safe-area-inset-*` 패딩을 함께 사용합니다.

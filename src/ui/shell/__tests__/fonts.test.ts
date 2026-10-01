@@ -1,8 +1,8 @@
 /**
  * Font subset guard (docs/PERFORMANCE.md, "글꼴"): the preloaded app faces (public/fonts/app) hold
  * every character the UI source can show; anything else — e.g. an unusual Hangul syllable typed in a
- * player name — must fall back to the full Google Fonts families (unicode-range slices, loaded on
- * demand), which have to cover all 11,172 modern Hangul syllables for every weight the UI uses.
+ * player name — must fall back to the remaining Google Fonts slices on demand. The complete
+ * font stack must cover all 11,172 modern Hangul syllables at every weight the UI uses.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ function sourceFiles(dir: string): string[] {
 
 interface Face {
   family: string;
-  weight: string;
+  weight: [number, number];
   src: string;
   ranges: [number, number][] | null;
 }
@@ -34,9 +34,10 @@ function faces(): Face[] {
   return [...css.matchAll(/@font-face\s*{([^}]*)}/g)].map((m) => {
     const b = m[1]!;
     const ur = /unicode-range:\s*([^;]+);/.exec(b);
+    const weights = /font-weight:\s*([\d ]+);/.exec(b)![1]!.trim().split(/\s+/).map(Number);
     return {
       family: /font-family:\s*'([^']+)'/.exec(b)![1]!,
-      weight: /font-weight:\s*(\d+)/.exec(b)![1]!,
+      weight: [weights[0]!, weights[1] ?? weights[0]!],
       src: /url\(([^)]+)\)/.exec(b)![1]!,
       ranges: ur
         ? ur[1]!.split(',').map((r) => {
@@ -65,14 +66,16 @@ describe('app font subset', () => {
     expect([...missing]).toEqual([]);
   });
 
-  it('keeps the full Google Fonts families as a fallback for all 11,172 Hangul syllables', () => {
+  it('covers all 11,172 Hangul syllables through the app and fallback font stacks', () => {
     const all = faces();
     for (const [family, weights] of [
-      ['Noto Sans KR Fallback', ['400', '700', '900']],
-      ['Jua Fallback', ['400']],
+      ['Noto Sans KR', [400, 700, 900]],
+      ['Jua', [400]],
     ] as const) {
       for (const w of weights) {
-        const fs = all.filter((f) => f.family === family && f.weight === w);
+        // Jua itself contains only 2,367 Hangul syllables; the Noto stack covers rare names.
+        const families = [family, `${family} Fallback`, 'Noto Sans KR', 'Noto Sans KR Fallback'];
+        const fs = all.filter((f) => families.includes(f.family) && f.weight[0] <= w && f.weight[1] >= w);
         expect(fs.length, `${family} ${w}`).toBeGreaterThan(0);
         const gaps: number[] = [];
         for (let cp = 0xac00; cp <= 0xd7a3; cp++) if (!covers(fs, cp)) gaps.push(cp);
@@ -81,6 +84,17 @@ describe('app font subset', () => {
         for (const f of fs) expect(statSync(join(ROOT, 'public/fonts', f.src)).size, f.src).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('declares each fallback source once and keeps bundled fonts below 4.5 MB', () => {
+    const fallback = faces().filter((f) => f.family.endsWith(' Fallback'));
+    expect(new Set(fallback.map((f) => `${f.family}:${f.src}`)).size).toBe(fallback.length);
+    const bytes = (dir: string): number => readdirSync(dir).reduce((total, name) => {
+      const path = join(dir, name);
+      const stat = statSync(path);
+      return total + (stat.isDirectory() ? bytes(path) : stat.size);
+    }, 0);
+    expect(bytes(join(ROOT, 'public/fonts'))).toBeLessThan(4_500_000);
   });
 
   it('lists the fallback families after the subsets in every UI font stack', () => {

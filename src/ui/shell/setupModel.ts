@@ -12,6 +12,7 @@ import {
   type Settings,
 } from '@/engine';
 import { PLAYER_COLORS, TOKEN_IDS } from '@/content/palette';
+import { BOARD_SIDE_OPTIONS, type SpacesPerSide } from '@/content/board';
 
 /** Seat order used for turn order and for the players array. */
 export const SEAT_ORDER: readonly Seat[] = ['S', 'E', 'N', 'W'];
@@ -29,6 +30,7 @@ export interface SeatDraft {
 
 export interface SetupDraft {
   seats: Record<Seat, SeatDraft>;
+  spacesPerSide: SpacesPerSide;
   roundLimit: number | null;
   startCash: number;
   takeover: boolean;
@@ -51,6 +53,7 @@ export function defaultDraft(): SetupDraft {
   const seat = (s: Seat, on: boolean): SeatDraft => ({ on, name: null, ...SEAT_DEFAULTS[s], controller: 'human' });
   return {
     seats: { S: seat('S', true), E: seat('E', false), N: seat('N', true), W: seat('W', false) },
+    spacesPerSide: base.spacesPerSide ?? 7,
     roundLimit: base.roundLimit,
     startCash: base.startCash,
     takeover: base.takeover,
@@ -83,6 +86,7 @@ export function normalizeDraft(raw: unknown): SetupDraft {
   const r = raw as Partial<SetupDraft>;
   const out: SetupDraft = {
     seats: { ...def.seats },
+    spacesPerSide: BOARD_SIDE_OPTIONS.includes(r.spacesPerSide as SpacesPerSide) ? r.spacesPerSide! : 7,
     roundLimit: ROUND_LIMIT_OPTIONS.includes(r.roundLimit as number | null) ? (r.roundLimit as number | null) : def.roundLimit,
     startCash: START_CASH_OPTIONS.includes(r.startCash as number) ? (r.startCash as number) : def.startCash,
     takeover: typeof r.takeover === 'boolean' ? r.takeover : def.takeover,
@@ -190,6 +194,7 @@ export function buildSettings(
   });
   const settings = defaultSettings({
     players: rotateStart(players, random),
+    spacesPerSide: d.spacesPerSide,
     roundLimit: d.roundLimit,
     startCash: d.startCash,
     takeover: d.takeover,

@@ -1,0 +1,374 @@
+{
+  "date": "2026-10-01",
+  "scope": "Windows Chrome, 4x CPU throttle; Android device and APK not verified",
+  "web": {
+    "beforeBytes": 6431395,
+    "afterBytes": 4869975,
+    "fontBeforeBytes": 5631147,
+    "fontAfterBytes": 4099552,
+    "fontFacesBefore": 463,
+    "fontFacesAfter": 136,
+    "fontSamplePngIdentical": true
+  },
+  "splash": {
+    "beforePngCount": 16,
+    "afterPngCount": 1,
+    "beforeBytes": 435953,
+    "afterBytes": 16458
+  },
+  "textureBudget": {
+    "boardMax": [
+      2048,
+      2048
+    ],
+    "iconAtlasMax": [
+      1024,
+      1024
+    ],
+    "fxColor": [
+      512,
+      512
+    ],
+    "fxMask": [
+      1024,
+      1024
+    ],
+    "splash": [
+      512,
+      512
+    ],
+    "rgbaBaseTexturesMiB": {
+      "board1k": 13,
+      "board2k": 25
+    },
+    "note": "Logical RGBA8 pixel buffers only; excludes tint cache, compositor layers, duplicate GPU buffers and transition overlap"
+  },
+  "validation": {
+    "unitTestsPassed": 318,
+    "browserTestsPassed": 7,
+    "buildAndTypesPassed": true,
+    "fontCompactionIdempotent": true,
+    "performanceGatesPassed": 7,
+    "performanceGatesTotal": 9,
+    "unresolved": [
+      "Mount layout exceeded 100 ms at 4x CPU throttle",
+      "Long-frame count exceeded empty-page floor + 3"
+    ],
+    "note": "Original commit 1aa5aa1 rebuilt and rechecked under current conditions also fails mount layout and long-frame gates. Frame-rate improvement is not established."
+  },
+  "initialBaseline": {
+    "cpuThrottle": "4x",
+    "dpr": 2,
+    "viewport": [
+      1600,
+      1000
+    ],
+    "chromium": "154.0.8037.58",
+    "boot": {
+      "medianTitleMountedMs": 136,
+      "medianTitlePaintedMs": 233,
+      "runs": [
+        {
+          "titleMountedMs": 136,
+          "titlePaintedMs": 350
+        },
+        {
+          "titleMountedMs": 147,
+          "titlePaintedMs": 233
+        },
+        {
+          "titleMountedMs": 121,
+          "titlePaintedMs": 207
+        }
+      ]
+    },
+    "play": {
+      "seconds": 20,
+      "turns": 3,
+      "round": 1,
+      "heapMB": [
+        3.5,
+        3.4
+      ],
+      "domNodes": [
+        1622,
+        1719
+      ],
+      "frameTimes": {
+        "frames": 4754,
+        "p50": 4.2,
+        "p95": 4.3,
+        "p99": 8.3,
+        "max": 29,
+        "over20": 7,
+        "over33": 0,
+        "over33raw": 0,
+        "over50": 0,
+        "longTasks": 0,
+        "longTaskMax": 0
+      }
+    },
+    "floor": {
+      "frames": 4795,
+      "p99": 4.4,
+      "max": 10,
+      "over20": 0,
+      "over33": 0
+    },
+    "layers": {
+      "seconds": 15,
+      "medianLayers": 12,
+      "peakLayers": 19,
+      "peakLayerMemoryMB": 89.4,
+      "paintsPerSec": 16.4,
+      "rasterPerSec": 17.9,
+      "layoutMaxMs": 15.2
+    },
+    "mount": {
+      "layoutMaxMs": 56.5,
+      "runs": [
+        56.5,
+        56.5,
+        87.7
+      ]
+    },
+    "gates": [
+      {
+        "name": "C  frame p99 <= 20 ms (4x, after the first 2 s)",
+        "pass": true,
+        "value": "8.3 ms"
+      },
+      {
+        "name": "C  frames > 33 ms <= empty-page floor + 3 (4x)",
+        "pass": true,
+        "value": "0 frames > 2 vsyncs (floor 0; max 29 ms; raw > 33.4 ms: 0; > 20 ms: 7)"
+      },
+      {
+        "name": "C  mount layout <= 100 ms (4x)",
+        "pass": true,
+        "value": "56.5 ms"
+      },
+      {
+        "name": "C  peak layers <= 20 (4x play)",
+        "pass": true,
+        "value": "19 (median 12)"
+      },
+      {
+        "name": "C  median layers <= 25",
+        "pass": true,
+        "value": "12"
+      },
+      {
+        "name": "C  peak layer memory <= 100 MB",
+        "pass": true,
+        "value": "89.4 MB"
+      },
+      {
+        "name": "C  Paint <= 20/s (4x play)",
+        "pass": true,
+        "value": "16.4/s"
+      },
+      {
+        "name": "C  no forced layout > 50 ms during play",
+        "pass": true,
+        "value": "max Layout 15.2 ms"
+      },
+      {
+        "name": "C  boot to Title painted <= 1500 ms (4x)",
+        "pass": true,
+        "value": "233 ms"
+      }
+    ]
+  },
+  "finalRun": {
+    "cpuThrottle": "4x",
+    "dpr": 2,
+    "viewport": [
+      1600,
+      1000
+    ],
+    "chromium": "154.0.8037.58",
+    "boot": {
+      "medianTitleMountedMs": 250,
+      "medianTitlePaintedMs": 470,
+      "runs": [
+        {
+          "titleMountedMs": 228,
+          "titlePaintedMs": 513
+        },
+        {
+          "titleMountedMs": 250,
+          "titlePaintedMs": 407
+        },
+        {
+          "titleMountedMs": 290,
+          "titlePaintedMs": 470
+        }
+      ]
+    },
+    "play": {
+      "seconds": 21,
+      "turns": 3,
+      "round": 1,
+      "heapMB": [
+        4.8,
+        3.5
+      ],
+      "domNodes": [
+        1622,
+        1670
+      ],
+      "frameTimes": {
+        "frames": 4369,
+        "p50": 4.2,
+        "p95": 6.2,
+        "p99": 16.7,
+        "max": 117,
+        "over20": 39,
+        "over33": 14,
+        "over33raw": 15,
+        "over50": 5,
+        "longTasks": 5,
+        "longTaskMax": 125
+      }
+    },
+    "floor": {
+      "frames": 4791,
+      "p99": 4.5,
+      "max": 17,
+      "over20": 0,
+      "over33": 0
+    },
+    "layers": {
+      "seconds": 15,
+      "medianLayers": 12,
+      "peakLayers": 19,
+      "peakLayerMemoryMB": 89.4,
+      "paintsPerSec": 16.2,
+      "rasterPerSec": 17.5,
+      "layoutMaxMs": 15.8
+    },
+    "mount": {
+      "layoutMaxMs": 151.4,
+      "runs": [
+        121.5,
+        151.4,
+        153.9
+      ]
+    },
+    "gates": [
+      {
+        "name": "C  frame p99 <= 20 ms (4x, after the first 2 s)",
+        "pass": true,
+        "value": "16.7 ms"
+      },
+      {
+        "name": "C  frames > 33 ms <= empty-page floor + 3 (4x)",
+        "pass": false,
+        "value": "14 frames > 2 vsyncs (floor 0; max 117 ms; raw > 33.4 ms: 15; > 20 ms: 39)"
+      },
+      {
+        "name": "C  mount layout <= 100 ms (4x)",
+        "pass": false,
+        "value": "151.4 ms"
+      },
+      {
+        "name": "C  peak layers <= 20 (4x play)",
+        "pass": true,
+        "value": "19 (median 12)"
+      },
+      {
+        "name": "C  median layers <= 25",
+        "pass": true,
+        "value": "12"
+      },
+      {
+        "name": "C  peak layer memory <= 100 MB",
+        "pass": true,
+        "value": "89.4 MB"
+      },
+      {
+        "name": "C  Paint <= 20/s (4x play)",
+        "pass": true,
+        "value": "16.2/s"
+      },
+      {
+        "name": "C  no forced layout > 50 ms during play",
+        "pass": true,
+        "value": "max Layout 15.8 ms"
+      },
+      {
+        "name": "C  boot to Title painted <= 1500 ms (4x)",
+        "pass": true,
+        "value": "470 ms"
+      }
+    ]
+  },
+  "originalCodeRecheck": {
+    "cpuThrottle": "4x",
+    "dpr": 2,
+    "viewport": [
+      1600,
+      1000
+    ],
+    "chromium": "154.0.8037.58",
+    "play": {
+      "seconds": 21,
+      "turns": 3,
+      "round": 1,
+      "heapMB": [
+        3.5,
+        3.4
+      ],
+      "domNodes": [
+        1622,
+        1667
+      ],
+      "frameTimes": {
+        "frames": 4466,
+        "p50": 4.2,
+        "p95": 4.4,
+        "p99": 12.7,
+        "max": 67,
+        "over20": 30,
+        "over33": 10,
+        "over33raw": 12,
+        "over50": 4,
+        "longTasks": 4,
+        "longTaskMax": 70
+      }
+    },
+    "floor": {
+      "frames": 4789,
+      "p99": 4.5,
+      "max": 13,
+      "over20": 0,
+      "over33": 0
+    },
+    "mount": {
+      "layoutMaxMs": 157.9,
+      "runs": [
+        140.3,
+        157.9,
+        272
+      ]
+    },
+    "gates": [
+      {
+        "name": "C  frame p99 <= 20 ms (4x, after the first 2 s)",
+        "pass": true,
+        "value": "12.7 ms"
+      },
+      {
+        "name": "C  frames > 33 ms <= empty-page floor + 3 (4x)",
+        "pass": false,
+        "value": "10 frames > 2 vsyncs (floor 0; max 67 ms; raw > 33.4 ms: 12; > 20 ms: 30)"
+      },
+      {
+        "name": "C  mount layout <= 100 ms (4x)",
+        "pass": false,
+        "value": "157.9 ms"
+      }
+    ]
+  }
+}

@@ -26,7 +26,7 @@ Web Audio. Ships to Android through Capacitor; also runs in any modern browser.
 | C4 | All art = inline SVG / CSS authored in this repo (MIT-licensed as part of the project). Fonts = SIL OFL fonts vendored in `public/fonts` with their license files. Audio = synthesized at runtime. |
 | C5 | Korean is the primary UI language, English is the second. All user-facing strings go through i18n (`src/i18n`). |
 | C6 | Deterministic engine: `reduce(state, action, rng)` is pure. Same seed ⇒ same game. |
-| C7 | 60 fps animations on mid-range tablets: use CSS transforms/opacity, no layout thrash, no per-frame DOM creation. |
+| C7 | Entry-level Android tablets: default 30 fps battery saver and low FX quality; optional 60 fps when battery saver is disabled. Game atlases ≤1024px POT, text-bearing board ≤2048px POT. Use CSS transforms/opacity, no layout thrash, no per-frame DOM creation. |
 
 ## 2. Table-top UX model (the most important section)
 
@@ -34,7 +34,9 @@ Web Audio. Ships to Android through Capacitor; also runs in any modern browser.
 
 The screen is a table. There are four **seats**: `S` (bottom, "normal" orientation), `E` (right),
 `N` (top), `W` (left). Each player is assigned a seat during setup (default: P1→S, P2→E, P3→N,
-P4→W; 2 players → S/N; 3 players → S/E/W). CPU players sit too (their panel just shows "CPU").
+P4→W; 2 players → S/N; 3 players → S/E/W). AI players sit too (their panel shows "AI").
+Setup exposes **Add AI player**, which fills the first free seat with normal AI, up to four players.
+The seat editor switches between Human, AI Easy, and AI Normal.
 
 Every seat has a **player panel** on its edge, **rotated to face the seat**:
 
@@ -122,7 +124,17 @@ follow.
 4. **Rules** — illustrated, swipeable pages.
 5. **Result** — ranking, asset breakdown bars, "다시 하기"/"타이틀로".
 
-## 3. Board content (32 spaces, index 0 = Start, clockwise)
+## 3. Board content (default 32 spaces, index 0 = Start, clockwise)
+
+Setup selects **7, 8, or 9 non-corner spaces per side** (`settings.spacesPerSide`), producing 32, 36, or 40 total spaces.
+The table below defines the unchanged seven-space default. Eight/nine insert one/two cities per side from `EXTRA_CITIES` in
+`src/content/board.ts`, giving 19/23/27 cities. Existing SVG artwork is reused; no additional texture files are required.
+`getBoard()` and `getBoardInfo()` supply each game's content, corners, groups, and bounds; `getBoardGeometry()` supplies both
+the Setup preview and playable board. Card destinations, AI, movement, travel, and victory checks use that game profile.
+The 3200-unit SVG canvas and CSS `board / 32` sizing unit remain unchanged.
+
+The option is optional in save version 1: an absent value means 7. Saves preserve their board size; unsupported values or
+board-index/array mismatches are rejected. Immutable board profiles permit different-sized simulations to run independently.
 
 Corners at 0, 8, 16, 24. Seven color groups (20 cities) + 4 hubs + 3 event + 1 tax + 1 donation.
 Currency unit: `만` (displayed `1,500만`, engine uses integers).

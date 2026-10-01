@@ -2,7 +2,7 @@
  * Setup screen: a top-down table with four seats (each facing its player, like the game),
  * a per-seat editor that opens rotated toward that seat, and the house-rule options.
  */
-import { BOARD, GROUP_COLORS, HUB_COLOR } from '@/content/board';
+import { BOARD_SIDE_OPTIONS, getBoard, GROUP_COLORS, HUB_COLOR, type SpacesPerSide } from '@/content/board';
 import { icon, LOGO_SVG } from '@/content/icons';
 import { PLAYER_COLORS, TOKEN_IDS } from '@/content/palette';
 import { PROMPT_TIMER_OPTIONS, ROUND_LIMIT_OPTIONS, START_CASH_OPTIONS, type Seat } from '@/engine';
@@ -10,6 +10,7 @@ import { fmtMoney, onLangChange, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { registerScreen } from '@/ui/router';
+import { getBoardGeometry, VB } from '@/ui/board/geometry';
 import { h, ico, iconButton, onTap } from '@/ui/shell/dom';
 import { openDialog, promptText, toast } from '@/ui/shell/dialog';
 import { go, setBackTarget } from '@/ui/shell/nav';
@@ -43,7 +44,7 @@ function controllerLabel(c: Controller): string {
 
 // ---------------------------------------------------------------------------- mini board
 
-let boardSvgCache: string | null = null;
+const boardSvgCache = new Map<SpacesPerSide, string>();
 
 /** Board content ids that differ from the icon registry. */
 const ICON_ALIAS: Record<string, string> = { 'corner-travel': 'corner-tour' };
@@ -55,31 +56,23 @@ function safeIcon(id: string): string {
   }
 }
 
-/** Decorative 32-space ring (same space order as the game board), built once. */
-function miniBoardSvg(): string {
-  if (boardSvgCache) return boardSvgCache;
-  const C = 13;
-  const W = (100 - 2 * C) / 8;
+/** Preview uses the same geometry as the playable board. */
+function miniBoardSvg(size: SpacesPerSide): string {
+  const cached = boardSvgCache.get(size);
+  if (cached) return cached;
+  const geom = getBoardGeometry(size);
+  const scale = 100 / VB;
   const parts: string[] = [];
   const nest = (svg: string, x: number, y: number, s: number) =>
     svg.replace('<svg ', `<svg x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" `);
-  for (const sp of BOARD) {
-    const i = sp.index;
-    let x = 0;
-    let y = 0;
-    let w = W;
-    let hgt = C;
-    let side: 'b' | 'l' | 't' | 'r' | 'c' = 'c';
-    if (i === 0) [x, y, w, hgt] = [100 - C, 100 - C, C, C];
-    else if (i < 8) [x, y, side] = [100 - C - i * W, 100 - C, 'b'];
-    else if (i === 8) [x, y, w, hgt] = [0, 100 - C, C, C];
-    else if (i < 16) [x, y, w, hgt, side] = [0, 100 - C - (i - 8) * W, C, W, 'l'];
-    else if (i === 16) [x, y, w, hgt] = [0, 0, C, C];
-    else if (i < 24) [x, y, side] = [C + (i - 17) * W, 0, 't'];
-    else if (i === 24) [x, y, w, hgt] = [100 - C, 0, C, C];
-    else [x, y, w, hgt, side] = [100 - C, C + (i - 25) * W, C, W, 'r'];
-    if (side === 'c') [w, hgt] = [C, C];
-    const corner = side === 'c';
+  for (const sp of getBoard(size)) {
+    const g = geom[sp.index]!;
+    const x = g.x * scale;
+    const y = g.y * scale;
+    const w = g.w * scale;
+    const hgt = g.h * scale;
+    const side = { S: 'b', W: 'l', N: 't', E: 'r' }[g.edge];
+    const corner = g.corner;
     const fill = corner ? '#F1E9DA' : '#FBF8F2';
     parts.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${hgt.toFixed(2)}" fill="${fill}" stroke="#DCCFB9" stroke-width=".35"/>`);
     const color = sp.group ? GROUP_COLORS[sp.group] : sp.kind === 'hub' ? HUB_COLOR : null;
@@ -101,8 +94,9 @@ function miniBoardSvg(): string {
     const s = Math.min(iw, ih) * (corner ? 0.86 : 0.84);
     parts.push(nest(safeIcon(sp.iconId), ix + (iw - s) / 2, iy + (ih - s) / 2, s));
   }
-  boardSvgCache = `<svg class="mini-board-svg" viewBox="-1 -1 102 102" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="-1" y="-1" width="102" height="102" rx="3" fill="#E9DFCC"/>${parts.join('')}</svg>`;
-  return boardSvgCache;
+  const svg = `<svg class="mini-board-svg" viewBox="-1 -1 102 102" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="-1" y="-1" width="102" height="102" rx="3" fill="#E9DFCC"/>${parts.join('')}</svg>`;
+  boardSvgCache.set(size, svg);
+  return svg;
 }
 
 // ---------------------------------------------------------------------------- screen
@@ -132,7 +126,7 @@ registerScreen('setup', (root) => {
   function renderTable(): HTMLElement {
     const table = h('div', { class: `setup-table ${intro ? 'is-intro' : ''}`.trim() });
     const board = h('div', { class: 'mini-board' });
-    board.innerHTML = miniBoardSvg();
+    board.innerHTML = miniBoardSvg(draft.spacesPerSide);
     board.append(
       h(
         'div',
@@ -356,6 +350,20 @@ registerScreen('setup', (root) => {
       { class: 'opt-card' },
       h('h2', { class: 'opt-card-title' }, t('setup.rules')),
       row(
+        t('setup.spacesPerSide'),
+        'landmark',
+        segmented(
+          BOARD_SIDE_OPTIONS.map((value) => ({ value, label: String(value) })),
+          draft.spacesPerSide,
+          (value) => {
+            draft.spacesPerSide = value;
+            save();
+            renderAll();
+          },
+          { label: t('setup.spacesPerSide') },
+        ),
+      ),
+      row(
         t('setup.rounds'),
         'restart',
         segmented(
@@ -414,6 +422,27 @@ registerScreen('setup', (root) => {
     );
 
     const problem = validateDraft(draft);
+    const freeSeat = SEAT_ORDER.find((seat) => !draft.seats[seat].on);
+    const addAi = h(
+      'button',
+      {
+        type: 'button',
+        class: 'btn btn-ghost setup-add-ai',
+        'data-action': 'add-ai',
+        disabled: !freeSeat,
+        'aria-disabled': String(!freeSeat),
+      },
+      ico('cpu'),
+      h('span', null, t('setup.addAi')),
+    );
+    onTap(addAi, () => {
+      if (!freeSeat || draft.seats[freeSeat].on) return;
+      toggleSeat(draft, freeSeat);
+      draft.seats[freeSeat].controller = 'normal';
+      save();
+      sfx.play('buy');
+      renderAll();
+    }, { sound: null, haptic: 'medium' });
     const start = h(
       'button',
       { type: 'button', class: 'btn btn-primary btn-xl setup-start', 'data-action': 'start', 'aria-disabled': String(!!problem) },
@@ -455,7 +484,7 @@ registerScreen('setup', (root) => {
       head,
       opts,
       order,
-      h('div', { class: 'setup-foot' }, h('p', { class: 'setup-note' }, ico('rotate'), problem ? t(problem) : t('setup.randomStart')), start),
+      h('div', { class: 'setup-foot' }, h('p', { class: 'setup-note' }, ico('rotate'), problem ? t(problem) : t('setup.randomStart')), addAi, start),
     );
   }
 

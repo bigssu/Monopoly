@@ -29,7 +29,7 @@ registerScreen('game', (root, props) => {
   const view = new GameView(state);
   view.mount(root);
   // FX atlas in idle time after the game is up (not part of boot; a play() before it loads waits for it).
-  gridTimeout(() => void view.vfx.preload(), 600);
+  const cancelVfxPreload = gridTimeout(() => void view.vfx.preload(), 600);
 
   let leaving = false;
   const ctrl = new GameController({
@@ -114,6 +114,7 @@ registerScreen('game', (root, props) => {
 
   return () => {
     leaving = true;
+    cancelVfxPreload();
     window.clearInterval(overlayPoll);
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('lotandroll:back', onBack);

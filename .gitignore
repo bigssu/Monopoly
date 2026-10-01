@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+.omx/
 
 # build output
 dist/

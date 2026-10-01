@@ -4,7 +4,6 @@
  * shown read-only ("thinking…") so the table can follow what the CPU is deciding.
  */
 import {
-  BOARD,
   BUILDING_LEVEL_IDS,
   BUILDING_LEVEL_NAMES,
   GROUP_NAMES,
@@ -15,7 +14,7 @@ import {
   citiesOnSide,
   completedGroups,
   defaultAction,
-  HUB_INDICES,
+  getBoardInfo,
   hubCount,
   legalActions,
   propertyValue,
@@ -136,8 +135,10 @@ function levelName(level: number): string {
 }
 
 /** Toll by level for a city, current level highlighted. */
+const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide ?? 7);
+
 function tollLadder(state: GameState, i: number, owner: PlayerId, current: number | null, next: number | null): HTMLElement {
-  const sp = BOARD[i]!;
+  const sp = boardOf(state).board[i]!;
   const row = h('div', { class: 'ladder' });
   for (let l = 0; l <= 4; l++) {
     const cell = h(
@@ -154,18 +155,18 @@ function tollLadder(state: GameState, i: number, owner: PlayerId, current: numbe
 /** Group members as chips, tinted by owner. */
 function groupChips(state: GameState, group: GroupId, focus: number): HTMLElement {
   const row = h('div', { class: 'gchips' });
-  for (const i of citiesInGroup(group)) {
+  for (const i of citiesInGroup(group, state.settings.spacesPerSide ?? 7)) {
     const owner = state.properties[i]?.owner ?? null;
     const chip = h('span', { class: `gchip${i === focus ? ' is-focus' : ''}${owner !== null ? ' is-owned' : ''}` });
-    chip.append(iconEl(spaceIcon(BOARD[i]!), 'ico gchip-ico'));
+    chip.append(iconEl(spaceIcon(boardOf(state).board[i]!), 'ico gchip-ico'));
     if (owner !== null) setPlayerVars(chip, state.players[owner]!.colorId);
     row.append(chip);
   }
   return row;
 }
 
-function spaceTitle(i: number): string {
-  return loc(BOARD[i]!.name);
+function spaceTitle(state: GameState, i: number): string {
+  return loc(boardOf(state).board[i]!.name);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,25 +251,26 @@ function islandPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'island' }>): P
 }
 
 function victoryHint(state: GameState, pid: PlayerId, i: number): HTMLElement | null {
-  const sp = BOARD[i]!;
+  const sp = boardOf(state).board[i]!;
   const owns = (j: number): boolean => j === i || state.properties[j]?.owner === pid;
   if (sp.kind === 'hub') {
-    if (HUB_INDICES.every(owns)) return tag(t('g.hint.hubWin'), 'gold', 'trophy');
+    if (boardOf(state).hubIndices.every(owns)) return tag(t('g.hint.hubWin'), 'gold', 'trophy');
     return null;
   }
-  if (sp.side && citiesOnSide(sp.side).every(owns)) return tag(t('g.hint.lineWin'), 'gold', 'trophy');
-  if (sp.group && citiesInGroup(sp.group).every(owns)) {
+  const size = state.settings.spacesPerSide ?? 7;
+  if (sp.side && citiesOnSide(sp.side, size).every(owns)) return tag(t('g.hint.lineWin'), 'gold', 'trophy');
+  if (sp.group && citiesInGroup(sp.group, size).every(owns)) {
     if (completedGroups(state, pid).length >= 2) return tag(t('g.hint.tripleWin'), 'gold', 'trophy');
     return tag(t('g.hint.complete'), 'gold', 'check');
   }
-  if (sp.group && citiesInGroup(sp.group).filter((j) => !owns(j)).length === 1) return tag(t('g.hint.oneAway'), 'info');
+  if (sp.group && citiesInGroup(sp.group, size).filter((j) => !owns(j)).length === 1) return tag(t('g.hint.oneAway'), 'info');
   return null;
 }
 
 function buyPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'buy' }>): PromptResult {
   const { state } = ctx;
   const i = ph.spaceIndex;
-  const sp = BOARD[i]!;
+  const sp = boardOf(state).board[i]!;
   const p = state.players[ph.playerId]!;
   const body: Array<Node | null> = [];
   if (sp.kind === 'city' && sp.group) {
@@ -296,7 +298,7 @@ function buyPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'buy' }>): PromptR
       icon: spaceIcon(sp),
       accent: groupColor(sp),
       kicker: t('g.buy.kicker'),
-      title: spaceTitle(i),
+      title: spaceTitle(state, i),
       body,
       buttons: [
         button(t('g.buy'), ctx, { type: 'Buy', playerId: ph.playerId }, { primary: true, sub: money(ph.price), disabled: p.cash < ph.price }),
@@ -311,7 +313,7 @@ function buyPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'buy' }>): PromptR
 function buildPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'build' }>): PromptResult {
   const { state } = ctx;
   const i = ph.spaceIndex;
-  const sp = BOARD[i]!;
+  const sp = boardOf(state).board[i]!;
   const from = state.properties[i]!.level;
   const to = ph.toLevel;
   const fest = state.festival === i ? 2 : 1;
@@ -330,7 +332,7 @@ function buildPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'build' }>): Pro
       icon: spaceIcon(sp),
       accent: groupColor(sp),
       kicker: to === 4 ? t('g.build.kickerLandmark') : t('g.build.kicker'),
-      title: spaceTitle(i),
+      title: spaceTitle(state, i),
       body: [
         preview,
         h('div', { class: 'pc-kvs' }, kv(t('g.toll'), `${money(now)} → ${money(next)}`, 'is-strong')),
@@ -349,7 +351,7 @@ function buildPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'build' }>): Pro
 function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>): PromptResult {
   const { state } = ctx;
   const i = ph.spaceIndex;
-  const sp = BOARD[i]!;
+  const sp = boardOf(state).board[i]!;
   const owner = state.players[ph.ownerId]!;
   const body: Array<Node | null> = [
     h('div', { class: 'pc-row' }, tokenBadge(owner, 'tok-badge pc-owner-tok'), h('span', { class: 'pc-sub', text: t('g.takeover.owner', { name: owner.name }) })),
@@ -365,7 +367,7 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
         icon: spaceIcon(sp),
         accent: playerColor(owner.colorId).hex,
         kicker: t('g.takeover.kicker'),
-        title: spaceTitle(i),
+        title: spaceTitle(state, i),
         body,
         buttons: [
           button(t('g.takeover'), ctx, { type: 'Takeover', playerId: ph.playerId }, { primary: true, sub: money(ph.price), tone: 'danger' }),
@@ -386,7 +388,7 @@ function pickList(
 ): HTMLElement {
   const list = h('div', { class: 'pick-list' });
   for (const i of options) {
-    const sp = BOARD[i]!;
+    const sp = boardOf(ctx.state).board[i]!;
     const act = make(i);
     const row = h('button', { class: 'pick-row', type: 'button', 'data-action': act.type, 'data-space': i });
     row.style.setProperty('--gc', groupColor(sp) ?? '#CBD2DE');
@@ -458,7 +460,7 @@ function travelPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'travel' }>): P
   const grid = h('div', { class: 'travel-grid' });
   const go = (i: number): void => ctx.act({ type: 'ChooseTravel', playerId: pid, spaceIndex: i });
   for (const i of ph.options) {
-    const sp = BOARD[i]!;
+    const sp = boardOf(ctx.state).board[i]!;
     const owner = ctx.state.properties[i]?.owner ?? null;
     const b = h('button', { class: `tg-cell${owner !== null ? ' is-owned' : ''}`, type: 'button', title: loc(sp.name), 'data-action': 'ChooseTravel', 'data-space': i });
     b.style.setProperty('--gc', groupColor(sp) ?? '#CBD2DE');
@@ -505,7 +507,7 @@ function debtPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'debt' }>): Promp
   const opts = saleOptions(state, pid).sort((a, b) => a.amount - b.amount);
   for (const o of opts) {
     const i = (o.action as Extract<Action, { type: 'SellProperty' }>).spaceIndex;
-    const sp = BOARD[i]!;
+    const sp = boardOf(state).board[i]!;
     const lvl = state.properties[i]!.level;
     const isBest = !!best && sameAction(best, o.action);
     const what = o.action.type === 'SellBuilding' ? t('g.debt.building', { level: levelName(lvl) }) : t('g.debt.whole');
@@ -537,7 +539,7 @@ function debtPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'debt' }>): Promp
 
 function auctionPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'auction' }>): PromptResult {
   const { state } = ctx;
-  const sp = BOARD[ph.spaceIndex]!;
+  const sp = boardOf(state).board[ph.spaceIndex]!;
   const high = ph.highBidderId !== null ? state.players[ph.highBidderId]! : null;
   return {
     el: card(
@@ -600,7 +602,7 @@ export function buildPromptFor(ctx: PromptCtx): PromptResult | null {
 // ---------------------------------------------------------------------------
 
 export function spaceInfo(state: GameState, i: number): HTMLElement {
-  const sp = BOARD[i]!;
+  const sp = boardOf(state).board[i]!;
   const el = h('div', { class: 'info-card' });
   const accent = groupColor(sp);
   if (accent) el.style.setProperty('--accent', accent);

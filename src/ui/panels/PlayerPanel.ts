@@ -3,16 +3,16 @@
  * island badge, turn glow, rank (last 3 rounds), bankrupt state. Rotated to face its seat
  * by layout.ts; content adapts to its own (pre-rotation) box with container queries.
  */
-import { BOARD } from '@/content/board';
 import {
   GROUP_IDS,
-  HUB_INDICES,
   citiesInGroup,
+  getBoardInfo,
   oneAwayWarnings,
   ranking,
   totalAssets,
   type GameState,
   type Player,
+  type SpacesPerSide,
 } from '@/engine';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
@@ -21,7 +21,7 @@ import { groupColor, h, iconEl, setPlayerVars, signedMoney, svgNode } from '@/ui
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
 
 /** The set grid: one line per color group + one for hubs (board order). */
-const SETS: readonly (readonly number[])[] = [...GROUP_IDS.map((g) => citiesInGroup(g)), HUB_INDICES];
+const setsFor = (size: SpacesPerSide): readonly (readonly number[])[] => [...GROUP_IDS.map((g) => citiesInGroup(g, size)), getBoardInfo(size).hubIndices];
 
 export class PlayerPanel {
   readonly el: HTMLElement;
@@ -43,8 +43,16 @@ export class PlayerPanel {
   /** Last rendered class + content (0 = empty, 1-3 pips, 4 = star) of every set slot. */
   private slotState = new Map<number, { cls: string; content: number }>();
 
-  constructor(readonly player: Player) {
+  private readonly sets: readonly (readonly number[])[];
+  private readonly board;
+  private readonly maxMembers: number;
+
+  constructor(readonly player: Player, size: SpacesPerSide = 7) {
+    this.sets = setsFor(size);
+    this.board = getBoardInfo(size).board;
+    this.maxMembers = Math.max(...this.sets.map((set) => set.length));
     this.el = h('div', { class: player.isCpu ? 'pp is-cpu' : 'pp', 'data-seat': player.seat, 'data-pid': player.id });
+    this.el.style.setProperty('--member-tracks', String(this.maxMembers));
     setPlayerVars(this.el, player.colorId);
     const badge = h('span', { class: 'pp-tok' }, svgNode(player.tokenId));
     this.rank = h('span', { class: 'pp-rank' });
@@ -57,9 +65,9 @@ export class PlayerPanel {
     this.assets = h('div', { class: 'pp-assets' });
     this.chips = h('div', { class: 'pp-sets' });
     this.slots = new Map();
-    SETS.forEach((members, g) => {
+    this.sets.forEach((members, g) => {
       members.forEach((i, k) => {
-        const sp = BOARD[i]!;
+        const sp = this.board[i]!;
         const slot = h('span', { class: `slot${sp.kind === 'hub' ? ' is-hub' : ''}` });
         slot.style.setProperty('--gc', groupColor(sp) ?? '#7B8AA3');
         slot.style.setProperty('--g', String(g + 1));
@@ -86,8 +94,8 @@ export class PlayerPanel {
     const tok = Math.max(32, Math.min(104, wide ? Math.min(0.2 * w, 0.3 * hgt) : Math.min(0.3 * w, 0.22 * hgt)));
     const avail = hgt - tok - pad * 3;
     const inner = w - pad * 2;
-    const colsMode = Math.min(inner / 8, avail / 4);
-    const rowsMode = Math.min(inner / 4, avail / 8);
+    const colsMode = Math.min(inner / this.sets.length, avail / this.maxMembers);
+    const rowsMode = Math.min(inner / this.maxMembers, avail / this.sets.length);
     const rows = rowsMode > colsMode * 1.05;
     this.chips.classList.toggle('is-rows', rows);
     this.chips.classList.toggle('is-cols', !rows);
@@ -104,7 +112,7 @@ export class PlayerPanel {
     const limit = state.settings.roundLimit;
     const showRank = limit !== null && state.round > limit - 3;
     const r = showRank ? (ranking(state).find((e) => e.playerId === p.id)?.rank ?? 0) : 0;
-    const props = SETS.flat().map((i) => `${state.properties[i]?.owner === p.id ? state.properties[i]!.level : '-'}`);
+    const props = this.sets.flat().map((i) => `${state.properties[i]?.owner === p.id ? state.properties[i]!.level : '-'}`);
     const away = oneAwayWarnings(state).filter((w) => w.playerId === p.id && w.kind !== 'line').map((w) => w.missing);
     const sig = [totalAssets(state, p.id), r, props.join(','), away.join(','), p.cards.join(','), p.islandTurns, state.festival, p.expressPending, p.travelPending].join('|');
     if (sig === this.sig) return;
@@ -116,13 +124,13 @@ export class PlayerPanel {
     this.rank.classList.toggle('is-on', r > 0);
     this.rank.classList.toggle('is-first', r === 1);
     // Set grid.
-    SETS.forEach((members) => {
+    this.sets.forEach((members) => {
       const complete = members.every((i) => state.properties[i]?.owner === p.id);
       for (const i of members) {
         const slot = this.slots.get(i)!;
         const pr = state.properties[i]!;
         const mine = pr.owner === p.id;
-        const cls = `slot${BOARD[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
+        const cls = `slot${this.board[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
         // Only touch slots that changed: rebuilding all 28 on every money change restyled and
         // re-laid-out ~250 elements per panel (docs/PERFORMANCE.md).
         const content = mine ? pr.level : 0;

@@ -220,6 +220,10 @@ export function createFx(o: FxOptions): FxHandle {
   let worker: Worker | null = null;
   let workerState: 'none' | 'loading' | 'ready' | 'failed' = 'none';
   let workerP: Promise<boolean> | null = null;
+  let settleWorker: ((ok: boolean) => void) | null = null;
+  let disposed = false;
+  /** Cancels starts that are waiting for the atlas without making a reusable engine terminal. */
+  let startGeneration = 0;
   const freeBuffers: Bufs[] = [];
   let sentTints = 1;
 
@@ -308,9 +312,11 @@ export function createFx(o: FxOptions): FxHandle {
   }
 
   function ensureMainAtlas(): Promise<FxAtlas | null> {
+    if (disposed) return Promise.resolve(null);
     if (!atlasP) {
       atlasP = (o.loadAtlas ?? (() => loadAtlas()))().then(
         (a) => {
+          if (disposed) return null;
           atlas = a;
           if (a) meta = a;
           return a;
@@ -322,41 +328,61 @@ export function createFx(o: FxOptions): FxHandle {
   }
 
   function ensureWorker(): Promise<boolean> {
+    if (disposed) return Promise.resolve(false);
     if (workerP) return workerP;
     workerP = new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ok: boolean): void => {
+        if (settled) return;
+        settled = true;
+        if (settleWorker === finish) settleWorker = null;
+        resolve(ok);
+      };
+      settleWorker = finish;
+      let started: Worker;
       try {
-        worker = new Worker(new URL('./fx.worker.ts', import.meta.url), { type: 'module' });
+        started = new Worker(new URL('./fx.worker.ts', import.meta.url), { type: 'module' });
+        worker = started;
       } catch {
         workerState = 'failed';
-        resolve(false);
+        finish(false);
         return;
       }
       workerState = 'loading';
-      worker.onmessage = (e: MessageEvent<FromWorker>) => {
+      started.onmessage = (e: MessageEvent<FromWorker>) => {
+        if (disposed || worker !== started) {
+          finish(false);
+          return;
+        }
         const m = e.data;
         if (m.t === 'buffers') freeBuffers.push(m);
         else if (m.t === 'ready') {
           workerState = 'ready';
-          resolve(true);
+          finish(true);
         } else if (m.t === 'failed') {
           console.warn('[vfx] paint worker unavailable, painting on the main thread:', m.error);
           workerState = 'failed';
-          resolve(false);
+          finish(false);
         }
       };
-      worker.onerror = () => {
+      started.onerror = () => {
+        if (disposed || worker !== started) {
+          finish(false);
+          return;
+        }
         if (workerState === 'loading') console.warn('[vfx] paint worker failed to start; painting on the main thread');
         workerState = 'failed';
-        resolve(false);
+        finish(false);
       };
-      worker.postMessage({ t: 'init', urls: atlasUrls(), software } satisfies ToWorker);
+      started.postMessage({ t: 'init', urls: atlasUrls(), software } satisfies ToWorker);
     });
     return workerP;
   }
 
   function ensureMeta(): Promise<FxAtlasMeta | null> {
+    if (disposed) return Promise.resolve(null);
     if (meta) return Promise.resolve(meta);
-    metaP ??= loadAtlasJson().then((j) => (j ? (meta ??= createAtlasMeta(j)) : null));
+    metaP ??= loadAtlasJson().then((j) => (disposed || !j ? null : (meta ??= createAtlasMeta(j))));
     return metaP;
   }
 
@@ -365,6 +391,7 @@ export function createFx(o: FxOptions): FxHandle {
    * main → the full atlas here. A worker failure falls back to the main thread. Resolves ready.
    */
   async function ensureReady(): Promise<boolean> {
+    if (disposed) return false;
     if (atlasState === 'idle') atlasState = 'loading';
     let ok = false;
     if (workerWanted()) {
@@ -372,6 +399,7 @@ export function createFx(o: FxOptions): FxHandle {
       ok = !!m && w;
     }
     if (!ok) ok = !!(await ensureMainAtlas());
+    if (disposed) return false;
     atlasState = ok ? 'ready' : 'failed';
     return ok;
   }
@@ -696,9 +724,11 @@ export function createFx(o: FxOptions): FxHandle {
   function start(tl: Timeline, seed?: number): FxPlay {
     let effect: Effect | null = null;
     let cancelled = false;
+    const generation = startGeneration;
+    const stopped = (): boolean => cancelled || disposed || generation !== startGeneration;
     const ready: Promise<Effect | null> = (async () => {
       const ok = await ensureReady();
-      if (cancelled) return null;
+      if (stopped()) return null;
       if (!ok || !ensureCanvas()) {
         runReduced(tl, reducedHooks());
         return null;
@@ -706,7 +736,7 @@ export function createFx(o: FxOptions): FxHandle {
       // One big moment at a time (§6.2-4): wait for the previous I3+ effect's timeline.
       if (o.serializeBig && tl.tier >= 3 && stopTick && bigBusy(runningFx())) {
         await new Promise<void>((go) => bigQueue.push({ left: BIG_WAIT_FRAMES, go }));
-        if (cancelled) return null;
+        if (stopped()) return null;
       }
       const mode = o.policy ? o.policy({ name: tl.name, tier: tl.tier, ...(tl.highlight ? { highlight: tl.highlight } : {}) }, runningFx()) : 'full';
       const accent = mode === 'accent';
@@ -749,6 +779,7 @@ export function createFx(o: FxOptions): FxHandle {
 
   const handle: FxHandle = {
     play(name, params, opt) {
+      if (disposed) return noopPlay(name);
       if (clock.instant()) return noopPlay(name);
       const tl = buildPreset(name, params, env());
       if (reducedNow()) {
@@ -758,6 +789,7 @@ export function createFx(o: FxOptions): FxHandle {
       return start(tl, opt?.seed);
     },
     run(tl, opt) {
+      if (disposed) return noopPlay(tl.name, tl.tier);
       if (clock.instant()) return noopPlay();
       if (reducedNow()) {
         runReduced(tl, reducedHooks());
@@ -770,6 +802,7 @@ export function createFx(o: FxOptions): FxHandle {
       runner.skip();
     },
     stopAll() {
+      startGeneration++;
       runner.stopAll();
       for (const w of bigQueue.splice(0)) w.go();
       for (const w of settleWaiters.splice(0)) w.go();
@@ -787,6 +820,7 @@ export function createFx(o: FxOptions): FxHandle {
       if (q === 'off') handle.stopAll();
     },
     async preload() {
+      if (disposed || clock.reducedMotion() || quality === 'off') return false;
       return ensureReady();
     },
     stats() {
@@ -825,10 +859,13 @@ export function createFx(o: FxOptions): FxHandle {
       tick.max = tick.sum = tick.n = 0;
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       handle.stopAll();
       workerPres?.dispose();
       mainPres?.dispose();
       workerPres = mainPres = pres = null;
+      settleWorker?.(false);
       worker?.terminate();
       worker = null;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);

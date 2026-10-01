@@ -89,7 +89,7 @@ export function assertInvariants(state: GameState): void {
     if (p.bankrupt && state.properties.some((pr) => pr?.owner === p.id)) {
       throw new Error(`Invariant: bankrupt player ${p.id} still owns property`);
     }
-    if (p.position < 0 || p.position >= 32) throw new Error(`Invariant: bad position ${p.position}`);
+    if (p.position < 0 || p.position >= state.properties.length) throw new Error(`Invariant: bad position ${p.position}`);
   }
   if (!Number.isInteger(state.pot) || state.pot < 0) throw new Error(`Invariant: pot ${state.pot}`);
   if (state.festival !== null) {
