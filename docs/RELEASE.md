@@ -393,8 +393,8 @@ lint 경고만 납니다).
 ### 7.4 아이콘 / 스플래시 / Play 그래픽 (`scripts/gen-android-icons.mjs`)
 
 모든 런처 아이콘과 스플래시는 256×256 viewBox의 `docs/assets/launcher-mark.svg`에서 생성합니다 (Playwright + Chromium 필요).
-투명한 256px 확인용 PNG는 `docs/assets/launcher-mark-256.png`이며, Play 등록용 512px 이미지와 Android 밀도별 리소스는 같은 벡터에서 생성합니다.
-게임 타이틀 화면의 벡터 로고는 같은 주사위·땅 타일 모티프를 사용합니다.
+256px 확인용 PNG는 `docs/assets/launcher-mark-256.png`이며, Play 등록용 512px 이미지와 Android 밀도별 리소스는 같은 벡터에서 생성합니다.
+아이콘은 두 건물과 정육면체 주사위, 밝은 바탕을 사용합니다. 게임 타이틀 화면은 기존 주사위 로고를 사용합니다.
 
 ```bash
 node scripts/gen-android-icons.mjs              # Android 리소스 + Play 그래픽 모두
@@ -404,7 +404,7 @@ node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽
 | 산출물 | 경로 |
 |---|---|
 | 적응형 아이콘 전경 (108dp, 도안 약 63%) | `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_foreground.png` (108/162/216/324/432 px) |
-| 적응형 아이콘 배경 (펠트 방사형 그라디언트) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
+| 적응형 아이콘 배경 (밝은 아이보리 그라디언트) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
 | 적응형 아이콘 정의 | `res/mipmap-anydpi-v26/ic_launcher{,_round}.xml` (템플릿 파일을 배경 drawable 참조로 수정, 스크립트는 건드리지 않음) |
 | 구형 아이콘 (API 24-25) | `res/mipmap-*dpi/ic_launcher.png`, `ic_launcher_round.png` (48-192 px) |
 | Android 12+ 스플래시 아이콘 | `res/drawable-nodpi/splash_icon.png` (공용 512×512, 288dp 안전 영역) |
@@ -412,7 +412,7 @@ node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽
 | Play 아이콘 512x512 | `docs/assets/play-icon-512.png` |
 | Play 피처 그래픽 1024x500 (알파 없음) | `docs/assets/feature-graphic-1024x500.png` (Jua 폰트로 렌더링) |
 
-배경을 금색(`#F2B633`)이 아니라 어두운 펠트로 한 이유: 로고의 노란 혜성 꼬리가 금색 배경에서는 거의 보이지 않습니다.
+런처 아이콘은 밝은 아이보리 배경에서 남색 건물과 빨간 주사위를 분리한다. 앱 시작 화면은 기존 펠트 배경 위에 밝은 원형 아이콘을 배치한다.
 
 시작 화면만 다시 만들려면 `node scripts/gen-android-icons.mjs --splash-only --no-play`를 실행합니다.
 Windows에서는 `CHROMIUM_PATH`로 Chrome을 지정합니다. 생성기는 [Android SplashScreen 안전 영역](https://developer.android.com/reference/androidx/core/splashscreen/SplashScreen)을 픽셀 단위로 검사하며, 이전 밀도/방향별 시작 PNG를 제거합니다.

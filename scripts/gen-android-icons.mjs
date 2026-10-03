@@ -6,8 +6,8 @@
 // Outputs
 //   android/app/src/main/res/mipmap-*dpi/ic_launcher_foreground.png   adaptive foreground (108dp canvas, logo ~62%)
 //   android/app/src/main/res/mipmap-*dpi/ic_launcher{,_round}.png      legacy launcher icons (pre-API 26)
-//   android/app/src/main/res/drawable/ic_launcher_background.xml      adaptive background (radial felt gradient)
-//   android/app/src/main/res/drawable-nodpi/splash_icon.png             shared 512px splash icon (50% safe-zone canvas)
+//   android/app/src/main/res/drawable/ic_launcher_background.xml      adaptive background (warm ivory gradient)
+//   android/app/src/main/res/drawable-nodpi/splash_icon.png             shared 512px splash icon (light disk inside safe zone)
 //   android/app/src/main/res/drawable/splash.xml                        shared splash background + centered icon
 //   docs/assets/play-icon-512.png, docs/assets/feature-graphic-1024x500.png
 import fs from 'node:fs';
@@ -25,6 +25,8 @@ const GOLD_HI = '#FFD968';
 const FELT = '#1E2A3A'; // must match capacitor.config.ts / colors.xml (table_bg)
 const FELT_HI = '#2B3C53';
 const FELT_LO = '#111925';
+const ICON_BG_HI = '#FAF7F1';
+const ICON_BG_LO = '#E8E3DA';
 
 const mark = fs.readFileSync(path.join(root, 'docs', 'assets', 'launcher-mark.svg'));
 if (!mark.includes('viewBox="0 0 256 256"')) throw new Error('launcher mark must use a 256x256 viewBox');
@@ -114,15 +116,16 @@ function stripAlpha(png) {
 const write = (file, buf) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, buf); console.log('wrote', path.relative(root, file), `(${buf.length} B)`); };
 
 // ---------- renderers ----------
-// dark felt behind the logo: the yellow swoosh disappears on a gold background
-const iconBg = `radial-gradient(circle at 50% 40%, ${FELT_HI} 0%, ${FELT} 70%)`;
+// The light launcher background separates the navy buildings from the coral die.
+const iconBg = `radial-gradient(circle at 50% 40%, ${ICON_BG_HI} 0%, ${ICON_BG_LO} 100%)`;
 const foreground = (s) => shot(wrap(logoBox(s), `body{width:${s}px;height:${s}px}`), s, s, { transparent: true });
 const legacy = (s, round) =>
   shot(
     wrap(logoBox(Math.round(s * 1.18)),
       `body{width:${s}px;height:${s}px;background:${iconBg};border-radius:${round ? '50%' : s * 0.2 + 'px'}}`),
     s, s, { transparent: true });
-const splashIcon = () => shot(wrap(logoBox(256), 'body{width:512px;height:512px}'), 512, 512, { transparent: true });
+const splashIcon = () => shot(wrap(`<div style="position:absolute;left:112px;top:112px;width:288px;height:288px;border-radius:50%;background:${ICON_BG_HI}"></div><div style="position:relative;z-index:1">${logoBox(256)}</div>`,
+  'body{width:512px;height:512px;position:relative}'), 512, 512, { transparent: true });
 
 function removeObsoleteSplashAssets() {
   for (const relative of obsoleteSplashPaths) {
@@ -144,6 +147,7 @@ function assertSplashSafeZone(png) {
   }
   if (w !== 512 || h !== 512 || ct !== 6) throw new Error('shared splash icon must be a 512px RGBA PNG');
   const raw = zlib.inflateSync(Buffer.concat(idat)), stride = w * 4, cur = Buffer.alloc(stride), prev = Buffer.alloc(stride);
+  let markPixels = 0;
   for (let y = 0; y < h; y++) {
     const f = raw[y * (stride + 1)], line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
     for (let i = 0; i < stride; i++) {
@@ -153,14 +157,19 @@ function assertSplashSafeZone(png) {
       else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
       cur[i] = v & 255;
     }
-    for (let x = 0; x < w; x++) if (cur[x * 4 + 3] && Math.hypot(x + .5 - 256, y + .5 - 256) > 170.667) throw new Error('splash icon exceeds the Android 12 safe-zone circle');
+    for (let x = 0; x < w; x++) {
+      const i = x * 4;
+      if (cur[i + 3] && Math.hypot(x + .5 - 256, y + .5 - 256) > 170.667) throw new Error('splash icon exceeds the Android 12 safe-zone circle');
+      if (cur[i + 3] > 200 && Math.abs(cur[i] - 250) + Math.abs(cur[i + 1] - 247) + Math.abs(cur[i + 2] - 241) > 120) markPixels++;
+    }
     cur.copy(prev);
   }
+  if (markPixels < 1000) throw new Error('splash icon mark is hidden');
 }
 
 // ---------- Android resources ----------
 write(path.join(root, 'docs', 'assets', 'launcher-mark-256.png'),
-  await shot(wrap(logoBox(256), 'body{width:256px;height:256px}'), 256, 256, { transparent: true }));
+  await shot(wrap(logoBox(256), `body{width:256px;height:256px;background:${iconBg}}`), 256, 256));
 if (!process.argv.includes('--no-android')) {
   if (!fs.existsSync(res)) throw new Error('android/ missing - run `npx cap add android` first');
   if (!splashOnly) {
@@ -179,8 +188,8 @@ if (!process.argv.includes('--no-android')) {
         android:centerX="0.5"
         android:centerY="0.4"
         android:gradientRadius="70%p"
-        android:startColor="${FELT_HI}"
-        android:endColor="${FELT}" />
+        android:startColor="${ICON_BG_HI}"
+        android:endColor="${ICON_BG_LO}" />
 </shape>
 `));
   }
@@ -214,7 +223,7 @@ body{width:1024px;height:500px;overflow:hidden;position:relative;font-family:'Ju
   background:radial-gradient(90% 120% at 28% 45%, ${FELT_HI} 0%, ${FELT} 50%, ${FELT_LO} 100%)}
 .glow{position:absolute;left:-40px;top:20px;width:520px;height:520px;border-radius:50%;
   background:radial-gradient(circle, rgba(242,182,51,.30) 0%, rgba(242,182,51,0) 68%)}
-.logo{position:absolute;left:20px;top:30px;width:440px;height:440px;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
+.logo{position:absolute;left:30px;top:50px;width:400px;height:400px;border-radius:44px;background:${iconBg};filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
 .txt{position:absolute;left:452px;top:0;height:500px;width:540px;display:flex;flex-direction:column;justify-content:center}
 h1{margin:0;font-weight:400;font-size:168px;line-height:1.05;letter-spacing:2px;color:${GOLD};
   background:linear-gradient(180deg, ${GOLD_HI} 0%, ${GOLD} 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
@@ -224,7 +233,7 @@ h1{margin:0;font-weight:400;font-size:168px;line-height:1.05;letter-spacing:2px;
 .bar{position:absolute;left:0;right:0;bottom:0;height:10px;background:linear-gradient(90deg, #EF5B5B, ${GOLD}, #5CC689, #4A6CF7)}
 </style>
 <div class="glow"></div>
-<div class="logo">${logoBox(440)}</div>
+<div class="logo">${logoBox(400)}</div>
 <div class="txt"><h1>랏앤롤</h1><div class="en">Lot &amp; Roll</div><div class="tag">한 대의 태블릿, 네 명의 여행자<br>One tablet · 2–4 players</div></div>
 <div class="bar"></div>`);
   const png = stripAlpha(await shot(null, 1024, 500, { file: tmp }));
