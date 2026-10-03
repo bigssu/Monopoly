@@ -56,7 +56,7 @@ npm run dev          # http://localhost:5173  (가로 태블릿 크기 창 권�
 npm ci
 npm run build
 npx cap sync android
-cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/LotAndRoll-debug.apk
 ```
 
 JDK 21, Android SDK 36, 릴리스 서명, 버전 관리, Google Play 제출 체크리스트는 **[docs/RELEASE.md](docs/RELEASE.md)** 를 보세요.

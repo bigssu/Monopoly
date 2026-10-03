@@ -43,6 +43,11 @@ android {
             }
         }
     }
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = "LotAndRoll-${variant.buildType.name}.apk"
+        }
+    }
 }
 
 repositories {

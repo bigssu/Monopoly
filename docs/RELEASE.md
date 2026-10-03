@@ -59,9 +59,9 @@ Run 버튼으로 에뮬레이터/실기기에 설치합니다. 가로 전용이�
 cd android
 chmod +x gradlew
 ./gradlew assembleDebug --no-daemon
-# 결과: android/app/build/outputs/apk/debug/app-debug.apk
+# 결과: android/app/build/outputs/apk/debug/LotAndRoll-debug.apk (앱 표시 이름: 랏앤롤)
 
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/LotAndRoll-debug.apk
 adb shell am start -n com.bigssu.lotandroll/.MainActivity
 ```
 
@@ -157,13 +157,13 @@ android {
 cd android
 ./gradlew bundleRelease assembleRelease --no-daemon
 # AAB: app/build/outputs/bundle/release/app-release.aab
-# APK: app/build/outputs/apk/release/app-release.apk   (keystore.properties 없으면 app-release-unsigned.apk)
+# APK: app/build/outputs/apk/release/LotAndRoll-release.apk   (keystore.properties 없으면 서명되지 않음)
 ```
 
 서명 검증:
 
 ```bash
-$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/LotAndRoll-release.apk
 keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab
 ```
 
@@ -231,7 +231,7 @@ CI에서 서명된 AAB/APK를 받는 방법은 6장을 참고하세요.
 | 워크플로 | 파일 | 트리거 | 하는 일 |
 |---|---|---|---|
 | CI | `.github/workflows/ci.yml` | push, PR | Node 22, `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, Playwright e2e(실패해도 통과) 후 `e2e/__screenshots__` 업로드 |
-| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `app-debug-apk` 아티팩트. 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `app-release-apk` 업로드 |
+| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `lot-and-roll-debug-apk` 아티팩트. 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `lot-and-roll-release-apk` 업로드 |
 
 - `android/` 폴더가 아직 저장소에 없으면 Android 워크플로는 안내 메시지를 출력하고 성공(exit 0)으로 끝납니다.
 - 사용한 액션 태그: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-java@v6`,
@@ -392,7 +392,8 @@ lint 경고만 납니다).
 
 ### 7.4 아이콘 / 스플래시 / Play 그래픽 (`scripts/gen-android-icons.mjs`)
 
-모든 런처 아이콘과 스플래시는 `src/content/icons/logo.ts` 의 `LOGO_SVG` 에서 생성합니다 (Playwright + Chromium 필요).
+모든 런처 아이콘과 스플래시는 투명한 1K 원본 `docs/assets/launcher-mark-1024.png`에서 생성합니다 (Playwright + Chromium 필요).
+게임 타이틀 화면의 벡터 로고는 같은 주사위·땅 타일 모티프를 사용합니다.
 
 ```bash
 node scripts/gen-android-icons.mjs              # Android 리소스 + Play 그래픽 모두
@@ -401,7 +402,7 @@ node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽
 
 | 산출물 | 경로 |
 |---|---|
-| 적응형 아이콘 전경 (108dp, 로고 62%) | `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_foreground.png` (108/162/216/324/432 px) |
+| 적응형 아이콘 전경 (108dp, 도안 59%) | `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_foreground.png` (108/162/216/324/432 px) |
 | 적응형 아이콘 배경 (펠트 방사형 그라디언트) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
 | 적응형 아이콘 정의 | `res/mipmap-anydpi-v26/ic_launcher{,_round}.xml` (템플릿 파일을 배경 drawable 참조로 수정, 스크립트는 건드리지 않음) |
 | 구형 아이콘 (API 24-25) | `res/mipmap-*dpi/ic_launcher.png`, `ic_launcher_round.png` (48-192 px) |

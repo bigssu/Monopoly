@@ -1,6 +1,6 @@
-// Generates every Android launcher / splash asset and the Play listing graphics from LOGO_SVG.
+// Generates every Android launcher / splash asset and the Play listing graphics from the 1K launcher mark.
 //   node scripts/gen-android-icons.mjs [--no-android] [--no-play] [--splash-only]
-// Needs playwright + Chromium (same lookup as scripts/icon-sheet.mjs). Re-run after changing the logo,
+// Needs playwright + Chromium (same lookup as scripts/icon-sheet.mjs). Re-run after changing the mark,
 // then commit android/app/src/main/res/** and docs/assets/*.png.
 //
 // Outputs
@@ -16,7 +16,6 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { loadAll } from './lib/load-icons.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const res = path.join(root, 'android', 'app', 'src', 'main', 'res');
@@ -27,8 +26,10 @@ const FELT = '#1E2A3A'; // must match capacitor.config.ts / colors.xml (table_bg
 const FELT_HI = '#2B3C53';
 const FELT_LO = '#111925';
 
-const LOGO = loadAll().LOGO_SVG?.logo;
-if (!LOGO) throw new Error('LOGO_SVG not found in src/content/icons/logo.ts');
+const mark = path.join(root, 'docs', 'assets', 'launcher-mark-1024.png');
+const markPng = fs.readFileSync(mark);
+if (markPng.readUInt32BE(16) !== 1024 || markPng.readUInt32BE(20) !== 1024) throw new Error('launcher mark must be 1024x1024');
+const logoData = `data:image/png;base64,${markPng.toString('base64')}`;
 
 const DENS = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
 const splashOnly = process.argv.includes('--splash-only');
@@ -51,8 +52,7 @@ if (!pw) throw new Error('playwright not found');
 const browser = await pw.chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 
-const logoBox = (px, extra = '') =>
-  `<div style="width:${px}px;height:${px}px;${extra}">${LOGO.replace('<svg ', '<svg style="width:100%;height:100%;display:block" ')}</div>`;
+const logoBox = (px) => `<img alt="" src="${logoData}" style="width:${px}px;height:${px}px;display:block">`;
 const wrap = (body, css = '') =>
   `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:transparent}` +
   `body{display:flex;align-items:center;justify-content:center;overflow:hidden}${css}</style>${body}`;
@@ -117,10 +117,10 @@ const write = (file, buf) => { fs.mkdirSync(path.dirname(file), { recursive: tru
 // ---------- renderers ----------
 // dark felt behind the logo: the yellow swoosh disappears on a gold background
 const iconBg = `radial-gradient(circle at 50% 40%, ${FELT_HI} 0%, ${FELT} 70%)`;
-const foreground = (s) => shot(wrap(logoBox(Math.round(s * 0.62)), `body{width:${s}px;height:${s}px}`), s, s, { transparent: true });
+const foreground = (s) => shot(wrap(logoBox(s), `body{width:${s}px;height:${s}px}`), s, s, { transparent: true });
 const legacy = (s, round) =>
   shot(
-    wrap(logoBox(Math.round(s * (round ? 0.66 : 0.74))),
+    wrap(logoBox(Math.round(s * 1.18)),
       `body{width:${s}px;height:${s}px;background:${iconBg};border-radius:${round ? '50%' : s * 0.2 + 'px'}}`),
     s, s, { transparent: true });
 const splashIcon = () => shot(wrap(logoBox(256), 'body{width:512px;height:512px}'), 512, 512, { transparent: true });
@@ -202,7 +202,7 @@ if (!splashOnly && !process.argv.includes('--no-play')) {
   const assets = path.join(root, 'docs', 'assets');
   // 512x512 full-bleed (Play applies its own rounded mask)
   write(path.join(assets, 'play-icon-512.png'),
-    await shot(wrap(logoBox(392), `body{width:512px;height:512px;background:${iconBg}}`), 512, 512));
+    await shot(wrap(logoBox(604), `body{width:512px;height:512px;background:${iconBg}}`), 512, 512));
 
   const fonts = path.join(root, 'public', 'fonts', 'fonts.css');
   const tmp = path.join(os.tmpdir(), 'lotandroll-feature-graphic.html');
@@ -213,7 +213,7 @@ body{width:1024px;height:500px;overflow:hidden;position:relative;font-family:'Ju
   background:radial-gradient(90% 120% at 28% 45%, ${FELT_HI} 0%, ${FELT} 50%, ${FELT_LO} 100%)}
 .glow{position:absolute;left:-40px;top:20px;width:520px;height:520px;border-radius:50%;
   background:radial-gradient(circle, rgba(242,182,51,.30) 0%, rgba(242,182,51,0) 68%)}
-.logo{position:absolute;left:70px;top:80px;width:340px;height:340px;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
+.logo{position:absolute;left:20px;top:30px;width:440px;height:440px;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
 .txt{position:absolute;left:452px;top:0;height:500px;width:540px;display:flex;flex-direction:column;justify-content:center}
 h1{margin:0;font-weight:400;font-size:168px;line-height:1.05;letter-spacing:2px;color:${GOLD};
   background:linear-gradient(180deg, ${GOLD_HI} 0%, ${GOLD} 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
@@ -223,7 +223,7 @@ h1{margin:0;font-weight:400;font-size:168px;line-height:1.05;letter-spacing:2px;
 .bar{position:absolute;left:0;right:0;bottom:0;height:10px;background:linear-gradient(90deg, #EF5B5B, ${GOLD}, #5CC689, #4A6CF7)}
 </style>
 <div class="glow"></div>
-<div class="logo">${LOGO.replace('<svg ', '<svg style="width:100%;height:100%;display:block" ')}</div>
+<div class="logo">${logoBox(440)}</div>
 <div class="txt"><h1>랏앤롤</h1><div class="en">Lot &amp; Roll</div><div class="tag">한 대의 태블릿, 네 명의 여행자<br>One tablet · 2–4 players</div></div>
 <div class="bar"></div>`);
   const png = stripAlpha(await shot(null, 1024, 500, { file: tmp }));

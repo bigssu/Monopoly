@@ -43,3 +43,15 @@ describe('Android splash assets', () => {
     expect(splash).toContain('<bitmap android:src="@drawable/splash_icon" android:gravity="fill" android:filter="true"');
   });
 });
+
+describe('Android launcher assets', () => {
+  it('uses a 1K source and Android density-sized icons', () => {
+    expect(pngSize(path.join(root, 'docs/assets/launcher-mark-1024.png'))).toEqual([1024, 1024]);
+    expect(pngSize(path.join(root, 'docs/assets/play-icon-512.png'))).toEqual([512, 512]);
+    for (const [density, size] of Object.entries({ mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 })) {
+      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher.png`))).toEqual([size, size]);
+      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher_round.png`))).toEqual([size, size]);
+      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher_foreground.png`))).toEqual([size * 108 / 48, size * 108 / 48]);
+    }
+  });
+});
