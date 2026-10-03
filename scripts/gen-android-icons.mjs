@@ -1,4 +1,4 @@
-// Generates every Android launcher / splash asset and the Play listing graphics from the 1K launcher mark.
+// Generates every Android launcher / splash asset and the Play listing graphics from the vector launcher mark.
 //   node scripts/gen-android-icons.mjs [--no-android] [--no-play] [--splash-only]
 // Needs playwright + Chromium (same lookup as scripts/icon-sheet.mjs). Re-run after changing the mark,
 // then commit android/app/src/main/res/** and docs/assets/*.png.
@@ -26,10 +26,9 @@ const FELT = '#1E2A3A'; // must match capacitor.config.ts / colors.xml (table_bg
 const FELT_HI = '#2B3C53';
 const FELT_LO = '#111925';
 
-const mark = path.join(root, 'docs', 'assets', 'launcher-mark-1024.png');
-const markPng = fs.readFileSync(mark);
-if (markPng.readUInt32BE(16) !== 1024 || markPng.readUInt32BE(20) !== 1024) throw new Error('launcher mark must be 1024x1024');
-const logoData = `data:image/png;base64,${markPng.toString('base64')}`;
+const mark = fs.readFileSync(path.join(root, 'docs', 'assets', 'launcher-mark.svg'));
+if (!mark.includes('viewBox="0 0 256 256"')) throw new Error('launcher mark must use a 256x256 viewBox');
+const logoData = `data:image/svg+xml;base64,${mark.toString('base64')}`;
 
 const DENS = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
 const splashOnly = process.argv.includes('--splash-only');
@@ -160,6 +159,8 @@ function assertSplashSafeZone(png) {
 }
 
 // ---------- Android resources ----------
+write(path.join(root, 'docs', 'assets', 'launcher-mark-256.png'),
+  await shot(wrap(logoBox(256), 'body{width:256px;height:256px}'), 256, 256, { transparent: true }));
 if (!process.argv.includes('--no-android')) {
   if (!fs.existsSync(res)) throw new Error('android/ missing - run `npx cap add android` first');
   if (!splashOnly) {
