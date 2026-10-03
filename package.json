@@ -1,9 +1,9 @@
 {
-  "name": "lot-and-roll",
+  "name": "land-poly",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Lot & Roll (랏앤롤) — pass-and-play property trading board game for one tablet",
+  "description": "Land Poly (랜드폴리) — pass-and-play property trading board game for one tablet",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

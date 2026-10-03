@@ -1,6 +1,6 @@
-# 랏앤롤 (Lot & Roll)
+# Land Poly (랜드폴리)
 
-![Lot & Roll 아이콘 시트](docs/assets/icon-sheet.png)
+![Land Poly 앱 아이콘](docs/assets/launcher-mark-256.png)
 
 **태블릿 한 대를 테이블 한가운데 놓고 2~4명이 둘러앉아 즐기는 20~30분짜리 도시 수집 보드게임.**
 주사위를 굴려 기본 19개, 확장 보드에서는 최대 27개 도시를 사고, 짓고, 인수하세요. 내 차례가 되면 게임판 한가운데의 무대(스테이지)가
@@ -56,7 +56,7 @@ npm run dev          # http://localhost:5173  (가로 태블릿 크기 창 권�
 npm ci
 npm run build
 npx cap sync android
-cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/LotAndRoll-debug.apk
+cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/LandPoly-debug.apk
 ```
 
 JDK 21, Android SDK 36, 릴리스 서명, 버전 관리, Google Play 제출 체크리스트는 **[docs/RELEASE.md](docs/RELEASE.md)** 를 보세요.
@@ -94,13 +94,13 @@ android/      Capacitor Android 프로젝트 (npx cap add android 로 생성)
 - 소스 코드: [MIT](LICENSE), Copyright (c) 2026 bigssu
 - 글꼴: Noto Sans KR, Jua 는 SIL Open Font License 1.1 (각 글꼴 폴더의 `OFL.txt`)
 - 그림(아이콘, 로고, 일러스트)과 소리(Web Audio 합성 효과음)는 모두 이 프로젝트를 위해 직접 만든 오리지널입니다.
-  제3자의 이미지, 상표, 샘플은 포함되어 있지 않습니다. 자세한 내용은 [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md).
+  게임 내부의 그림과 소리는 자체 제작입니다. 앱 아이콘은 사용자 제공 이미지이며 스토어 게시 전 권리 확인이 필요합니다. 자세한 내용은 [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md).
 
 ---
 
 ## English
 
-**Lot & Roll** is a fast (20-30 min), fully offline **pass-and-play** city-collecting board game for one tablet lying flat
+**Land Poly** is a fast (20-30 min), fully offline **pass-and-play** city-collecting board game for one tablet lying flat
 on a table with 2-4 people around it. Roll the dice, buy, build and take over 19 world cities. The central stage rotates to
 face whoever's turn it is, so nobody reads upside-down text. No ads, no accounts, no network, no analytics.
 

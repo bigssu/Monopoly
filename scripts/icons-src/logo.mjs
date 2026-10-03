@@ -1,4 +1,4 @@
-// LOT & ROLL emblem: two dice on a plot-of-land tile with a curved "roll" swoosh. Shapes only, no text.
+// Original title emblem: two dice on a plot-of-land tile with a curved "roll" swoosh. Shapes only, no text.
 import { C, svg, path, circ, rect, sparkle, each } from './lib.mjs';
 const f = (n) => Math.round(n * 100) / 100;
 // isometric die. faces: top, left, right colors. pips: [top,left,right] arrays of [a,b] in [-1,1]

@@ -1,7 +1,7 @@
-# 릴리스 가이드 — 랏앤롤 (Lot & Roll)
+# 릴리스 가이드 — Land Poly (랜드폴리)
 
 Google Play 배포를 위한 빌드, 서명, 버전 관리, Play Console 체크리스트를 정리한 문서입니다.
-앱 ID는 `com.bigssu.lotandroll`, 앱 이름은 `랏앤롤` (영문 `Lot & Roll`)입니다.
+앱 ID는 기존 설치본의 저장 데이터와 업데이트 경로를 유지하기 위해 `com.bigssu.lotandroll`로 두고, 표시 이름은 `Land Poly`로 사용합니다.
 **앱 ID와 `androidScheme`(기본 `https`)은 첫 출시 후 절대 바꾸지 마세요.** 앱 ID를 바꾸면 다른 앱이 되고,
 scheme을 바꾸면 저장 데이터(localStorage)의 origin이 달라져 저장된 게임이 사라진 것처럼 보입니다.
 
@@ -59,9 +59,9 @@ Run 버튼으로 에뮬레이터/실기기에 설치합니다. 가로 전용이�
 cd android
 chmod +x gradlew
 ./gradlew assembleDebug --no-daemon
-# 결과: android/app/build/outputs/apk/debug/LotAndRoll-debug.apk (앱 표시 이름: 랏앤롤)
+# 결과: android/app/build/outputs/apk/debug/LandPoly-debug.apk (앱 표시 이름: Land Poly)
 
-adb install -r app/build/outputs/apk/debug/LotAndRoll-debug.apk
+adb install -r app/build/outputs/apk/debug/LandPoly-debug.apk
 adb shell am start -n com.bigssu.lotandroll/.MainActivity
 ```
 
@@ -157,13 +157,13 @@ android {
 cd android
 ./gradlew bundleRelease assembleRelease --no-daemon
 # AAB: app/build/outputs/bundle/release/app-release.aab
-# APK: app/build/outputs/apk/release/LotAndRoll-release.apk   (keystore.properties 없으면 서명되지 않음)
+# APK: app/build/outputs/apk/release/LandPoly-release.apk   (keystore.properties 없으면 서명되지 않음)
 ```
 
 서명 검증:
 
 ```bash
-$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/LotAndRoll-release.apk
+$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/LandPoly-release.apk
 keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab
 ```
 
@@ -231,7 +231,7 @@ CI에서 서명된 AAB/APK를 받는 방법은 6장을 참고하세요.
 | 워크플로 | 파일 | 트리거 | 하는 일 |
 |---|---|---|---|
 | CI | `.github/workflows/ci.yml` | push, PR | Node 22, `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, Playwright e2e(실패해도 통과) 후 `e2e/__screenshots__` 업로드 |
-| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `lot-and-roll-debug-apk` 아티팩트. 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `lot-and-roll-release-apk` 업로드 |
+| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `land-poly-debug-apk` 아티팩트. 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `land-poly-release-apk` 업로드 |
 
 - `android/` 폴더가 아직 저장소에 없으면 Android 워크플로는 안내 메시지를 출력하고 성공(exit 0)으로 끝납니다.
 - 사용한 액션 태그: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-java@v6`,
@@ -322,7 +322,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.bigssu.lotandroll',
-  appName: '랏앤롤',
+  appName: 'Land Poly',
   webDir: 'dist',
   server: { androidScheme: 'https' },            // 절대 바꾸지 말 것 (localStorage origin)
   android: { allowMixedContent: false, backgroundColor: '#1E2A3A' },
@@ -392,9 +392,9 @@ lint 경고만 납니다).
 
 ### 7.4 아이콘 / 스플래시 / Play 그래픽 (`scripts/gen-android-icons.mjs`)
 
-모든 런처 아이콘과 스플래시는 256×256 viewBox의 `docs/assets/launcher-mark.svg`에서 생성합니다 (Playwright + Chromium 필요).
-256px 확인용 PNG는 `docs/assets/launcher-mark-256.png`이며, Play 등록용 512px 이미지와 Android 밀도별 리소스는 같은 벡터에서 생성합니다.
-아이콘은 두 건물과 정육면체 주사위, 밝은 바탕을 사용합니다. 게임 타이틀 화면은 기존 주사위 로고를 사용합니다.
+모든 런처 아이콘과 스플래시는 사용자 제공 이미지를 256×256으로 축소한 `docs/assets/launcher-mark-256.png`에서 생성합니다 (Playwright + Chromium 필요).
+Play 등록용 512px 이미지와 Android 밀도별 리소스는 이 한 장에서 생성합니다. 게임 타이틀 화면은 기존 주사위 그림을 사용합니다.
+첨부 이미지의 캐릭터와 `GO` 칸은 기존 게임을 연상시키므로 스토어 게시 전 사용 권리와 오인 가능성을 확인해야 합니다.
 
 ```bash
 node scripts/gen-android-icons.mjs              # Android 리소스 + Play 그래픽 모두
@@ -403,8 +403,8 @@ node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽
 
 | 산출물 | 경로 |
 |---|---|
-| 적응형 아이콘 전경 (108dp, 도안 약 63%) | `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_foreground.png` (108/162/216/324/432 px) |
-| 적응형 아이콘 배경 (밝은 아이보리 그라디언트) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
+| 적응형 아이콘 전경 (108dp) | `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher_foreground.png` (108/162/216/324/432 px) |
+| 적응형 아이콘 배경 (흰색) | `android/app/src/main/res/drawable/ic_launcher_background.xml` (스크립트가 생성) |
 | 적응형 아이콘 정의 | `res/mipmap-anydpi-v26/ic_launcher{,_round}.xml` (템플릿 파일을 배경 drawable 참조로 수정, 스크립트는 건드리지 않음) |
 | 구형 아이콘 (API 24-25) | `res/mipmap-*dpi/ic_launcher.png`, `ic_launcher_round.png` (48-192 px) |
 | Android 12+ 스플래시 아이콘 | `res/drawable-nodpi/splash_icon.png` (공용 512×512, 288dp 안전 영역) |
@@ -412,7 +412,7 @@ node scripts/gen-android-icons.mjs --no-android # docs/assets 의 Play 그래픽
 | Play 아이콘 512x512 | `docs/assets/play-icon-512.png` |
 | Play 피처 그래픽 1024x500 (알파 없음) | `docs/assets/feature-graphic-1024x500.png` (Jua 폰트로 렌더링) |
 
-런처 아이콘은 밝은 아이보리 배경에서 남색 건물과 빨간 주사위를 분리한다. 앱 시작 화면은 기존 펠트 배경 위에 밝은 원형 아이콘을 배치한다.
+런처 아이콘은 선택한 원본 이미지를 그대로 사용합니다. 앱 시작 화면에는 펠트 배경 위 중앙 안전 영역에 224px 이미지를 배치합니다.
 
 시작 화면만 다시 만들려면 `node scripts/gen-android-icons.mjs --splash-only --no-play`를 실행합니다.
 Windows에서는 `CHROMIUM_PATH`로 Chrome을 지정합니다. 생성기는 [Android SplashScreen 안전 영역](https://developer.android.com/reference/androidx/core/splashscreen/SplashScreen)을 픽셀 단위로 검사하며, 이전 밀도/방향별 시작 PNG를 제거합니다.
@@ -515,5 +515,5 @@ cd android && ./gradlew clean bundleRelease --no-daemon
 - [ ] `git status` 에 `*.keystore`, `*.jks`, `keystore.properties` 가 없다.
 - [ ] `versionCode` 와 `versionName` 이 올라갔다.
 - [ ] 스토어 문구에 Monopoly / 부루마블 / 모두의마블 등 타사 명칭이 없다 (`docs/research/02-ip-licensing-research.md`).
-- [ ] 상표 사전 조사(KIPRIS, USPTO)를 "Lot & Roll / 랏앤롤" 에 대해 수행했다 (`docs/DESIGN.md` 상단 메모).
+- [ ] "Land Poly / 랜드폴리" 이름의 상표를 조사하고, 사용자 제공 아이콘의 캐릭터·보드 요소에 대한 사용 권리를 확인했다 (`docs/DESIGN.md` C1).
 - [ ] 오픈소스/폰트 고지: `docs/THIRD_PARTY_LICENSES.md` (Noto Sans KR, Jua = SIL OFL 1.1) 를 앱 내 설정 > 라이선스 화면 또는 스토어 소개에서 안내.

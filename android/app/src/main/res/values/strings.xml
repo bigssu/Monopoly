@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">랏앤롤</string>
-    <string name="title_activity_main">랏앤롤</string>
+    <string name="app_name">Land Poly</string>
+    <string name="title_activity_main">Land Poly</string>
     <string name="package_name">com.bigssu.lotandroll</string>
     <string name="custom_url_scheme">com.bigssu.lotandroll</string>
 </resources>

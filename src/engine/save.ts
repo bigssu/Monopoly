@@ -260,7 +260,7 @@ export function deserialize(json: string): GameState {
   }
   if (!object(raw)) fail('Save data is not an object');
   const file = raw as Partial<SaveFile>;
-  if (file.format !== SAVE_FORMAT) fail('Not a Lot & Roll save file');
+  if (file.format !== SAVE_FORMAT) fail('Not a Land Poly save file');
   if (file.version !== SAVE_VERSION) {
     if (typeof file.version === 'number' && file.version > SAVE_VERSION) fail(`Save version ${file.version} is newer than supported (${SAVE_VERSION})`);
     fail('Save file has an unsupported version');

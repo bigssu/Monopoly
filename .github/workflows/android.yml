@@ -93,8 +93,8 @@ jobs:
         if: steps.detect.outputs.has_android == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: lot-and-roll-debug-apk
-          path: android/app/build/outputs/apk/debug/LotAndRoll-debug.apk
+          name: land-poly-debug-apk
+          path: android/app/build/outputs/apk/debug/LandPoly-debug.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -164,8 +164,8 @@ jobs:
       - name: Upload release APK
         uses: actions/upload-artifact@v7
         with:
-          name: lot-and-roll-release-apk
-          path: android/app/build/outputs/apk/release/LotAndRoll-release.apk
+          name: land-poly-release-apk
+          path: android/app/build/outputs/apk/release/LandPoly-release.apk
           if-no-files-found: error
           retention-days: 30
 

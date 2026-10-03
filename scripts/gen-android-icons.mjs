@@ -1,4 +1,4 @@
-// Generates every Android launcher / splash asset and the Play listing graphics from the vector launcher mark.
+// Generates Android launcher / splash assets and Play graphics from the selected 256px icon.
 //   node scripts/gen-android-icons.mjs [--no-android] [--no-play] [--splash-only]
 // Needs playwright + Chromium (same lookup as scripts/icon-sheet.mjs). Re-run after changing the mark,
 // then commit android/app/src/main/res/** and docs/assets/*.png.
@@ -6,8 +6,8 @@
 // Outputs
 //   android/app/src/main/res/mipmap-*dpi/ic_launcher_foreground.png   adaptive foreground (108dp canvas, logo ~62%)
 //   android/app/src/main/res/mipmap-*dpi/ic_launcher{,_round}.png      legacy launcher icons (pre-API 26)
-//   android/app/src/main/res/drawable/ic_launcher_background.xml      adaptive background (warm ivory gradient)
-//   android/app/src/main/res/drawable-nodpi/splash_icon.png             shared 512px splash icon (light disk inside safe zone)
+//   android/app/src/main/res/drawable/ic_launcher_background.xml      adaptive white background
+//   android/app/src/main/res/drawable-nodpi/splash_icon.png             shared 512px splash icon (inside safe zone)
 //   android/app/src/main/res/drawable/splash.xml                        shared splash background + centered icon
 //   docs/assets/play-icon-512.png, docs/assets/feature-graphic-1024x500.png
 import fs from 'node:fs';
@@ -25,12 +25,9 @@ const GOLD_HI = '#FFD968';
 const FELT = '#1E2A3A'; // must match capacitor.config.ts / colors.xml (table_bg)
 const FELT_HI = '#2B3C53';
 const FELT_LO = '#111925';
-const ICON_BG_HI = '#FAF7F1';
-const ICON_BG_LO = '#E8E3DA';
-
-const mark = fs.readFileSync(path.join(root, 'docs', 'assets', 'launcher-mark.svg'));
-if (!mark.includes('viewBox="0 0 256 256"')) throw new Error('launcher mark must use a 256x256 viewBox');
-const logoData = `data:image/svg+xml;base64,${mark.toString('base64')}`;
+const mark = fs.readFileSync(path.join(root, 'docs', 'assets', 'launcher-mark-256.png'));
+if (mark.readUInt32BE(16) !== 256 || mark.readUInt32BE(20) !== 256) throw new Error('launcher icon must be 256x256');
+const logoData = `data:image/png;base64,${mark.toString('base64')}`;
 
 const DENS = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'];
 const splashOnly = process.argv.includes('--splash-only');
@@ -116,16 +113,14 @@ function stripAlpha(png) {
 const write = (file, buf) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, buf); console.log('wrote', path.relative(root, file), `(${buf.length} B)`); };
 
 // ---------- renderers ----------
-// The light launcher background separates the navy buildings from the coral die.
-const iconBg = `radial-gradient(circle at 50% 40%, ${ICON_BG_HI} 0%, ${ICON_BG_LO} 100%)`;
+const iconBg = '#FFFFFF';
 const foreground = (s) => shot(wrap(logoBox(s), `body{width:${s}px;height:${s}px}`), s, s, { transparent: true });
 const legacy = (s, round) =>
   shot(
-    wrap(logoBox(Math.round(s * 1.18)),
+    wrap(logoBox(s),
       `body{width:${s}px;height:${s}px;background:${iconBg};border-radius:${round ? '50%' : s * 0.2 + 'px'}}`),
     s, s, { transparent: true });
-const splashIcon = () => shot(wrap(`<div style="position:absolute;left:112px;top:112px;width:288px;height:288px;border-radius:50%;background:${ICON_BG_HI}"></div><div style="position:relative;z-index:1">${logoBox(256)}</div>`,
-  'body{width:512px;height:512px;position:relative}'), 512, 512, { transparent: true });
+const splashIcon = () => shot(wrap(logoBox(224), 'body{width:512px;height:512px}'), 512, 512, { transparent: true });
 
 function removeObsoleteSplashAssets() {
   for (const relative of obsoleteSplashPaths) {
@@ -168,8 +163,6 @@ function assertSplashSafeZone(png) {
 }
 
 // ---------- Android resources ----------
-write(path.join(root, 'docs', 'assets', 'launcher-mark-256.png'),
-  await shot(wrap(logoBox(256), `body{width:256px;height:256px;background:${iconBg}}`), 256, 256));
 if (!process.argv.includes('--no-android')) {
   if (!fs.existsSync(res)) throw new Error('android/ missing - run `npx cap add android` first');
   if (!splashOnly) {
@@ -183,13 +176,7 @@ if (!process.argv.includes('--no-android')) {
     write(path.join(res, 'drawable', 'ic_launcher_background.xml'),
       Buffer.from(`<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient
-        android:type="radial"
-        android:centerX="0.5"
-        android:centerY="0.4"
-        android:gradientRadius="70%p"
-        android:startColor="${ICON_BG_HI}"
-        android:endColor="${ICON_BG_LO}" />
+    <solid android:color="${iconBg}" />
 </shape>
 `));
   }
@@ -212,10 +199,10 @@ if (!splashOnly && !process.argv.includes('--no-play')) {
   const assets = path.join(root, 'docs', 'assets');
   // 512x512 full-bleed (Play applies its own rounded mask)
   write(path.join(assets, 'play-icon-512.png'),
-    await shot(wrap(logoBox(604), `body{width:512px;height:512px;background:${iconBg}}`), 512, 512));
+    await shot(wrap(logoBox(512), `body{width:512px;height:512px;background:${iconBg}}`), 512, 512));
 
   const fonts = path.join(root, 'public', 'fonts', 'fonts.css');
-  const tmp = path.join(os.tmpdir(), 'lotandroll-feature-graphic.html');
+  const tmp = path.join(os.tmpdir(), 'land-poly-feature-graphic.html');
   fs.writeFileSync(tmp, `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="file://${fonts}">
 <style>
 html,body{margin:0}
@@ -223,9 +210,9 @@ body{width:1024px;height:500px;overflow:hidden;position:relative;font-family:'Ju
   background:radial-gradient(90% 120% at 28% 45%, ${FELT_HI} 0%, ${FELT} 50%, ${FELT_LO} 100%)}
 .glow{position:absolute;left:-40px;top:20px;width:520px;height:520px;border-radius:50%;
   background:radial-gradient(circle, rgba(242,182,51,.30) 0%, rgba(242,182,51,0) 68%)}
-.logo{position:absolute;left:30px;top:50px;width:400px;height:400px;border-radius:44px;background:${iconBg};filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
+.logo{position:absolute;left:30px;top:50px;width:400px;height:400px;border-radius:44px;background:${iconBg};overflow:hidden;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
 .txt{position:absolute;left:452px;top:0;height:500px;width:540px;display:flex;flex-direction:column;justify-content:center}
-h1{margin:0;font-weight:400;font-size:168px;line-height:1.05;letter-spacing:2px;color:${GOLD};
+h1{margin:0;font-weight:400;font-size:108px;line-height:1.05;letter-spacing:1px;color:${GOLD};
   background:linear-gradient(180deg, ${GOLD_HI} 0%, ${GOLD} 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
   filter:drop-shadow(0 6px 0 #B5841A) drop-shadow(0 10px 14px rgba(0,0,0,.4))}
 .en{margin:6px 0 0 6px;font-size:56px;line-height:1;color:#F4F6FA;letter-spacing:1px}
@@ -234,10 +221,10 @@ h1{margin:0;font-weight:400;font-size:168px;line-height:1.05;letter-spacing:2px;
 </style>
 <div class="glow"></div>
 <div class="logo">${logoBox(400)}</div>
-<div class="txt"><h1>랏앤롤</h1><div class="en">Lot &amp; Roll</div><div class="tag">한 대의 태블릿, 네 명의 여행자<br>One tablet · 2–4 players</div></div>
+<div class="txt"><h1>Land Poly</h1><div class="en">랜드폴리</div><div class="tag">한 대의 태블릿, 네 명의 여행자<br>One tablet · 2–4 players</div></div>
 <div class="bar"></div>`);
   const png = stripAlpha(await shot(null, 1024, 500, { file: tmp }));
-  const ok = await page.evaluate(() => document.fonts.check("40px 'Jua'", '랏앤롤'));
+  const ok = await page.evaluate(() => document.fonts.check("40px 'Jua'", '랜드폴리'));
   console.log('Jua loaded for Hangul:', ok);
   write(path.join(assets, 'feature-graphic-1024x500.png'), png);
 }

@@ -45,9 +45,9 @@ describe('Android splash assets', () => {
 });
 
 describe('Android launcher assets', () => {
-  it('uses a 256px source and Android density-sized icons', () => {
-    expect(fs.readFileSync(path.join(root, 'docs/assets/launcher-mark.svg'), 'utf8')).toContain('viewBox="0 0 256 256"');
+  it('uses the selected 256px image and Android density-sized icons', () => {
     expect(pngSize(path.join(root, 'docs/assets/launcher-mark-256.png'))).toEqual([256, 256]);
+    expect(fs.existsSync(path.join(root, 'docs/assets/launcher-mark.svg'))).toBe(false);
     expect(fs.existsSync(path.join(root, 'docs/assets/launcher-mark-1024.png'))).toBe(false);
     expect(pngSize(path.join(root, 'docs/assets/play-icon-512.png'))).toEqual([512, 512]);
     for (const [density, size] of Object.entries({ mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 })) {

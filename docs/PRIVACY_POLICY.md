@@ -1,7 +1,7 @@
 # 개인정보처리방침 / Privacy Policy
 
-**앱 / App:** 랏앤롤 (Lot & Roll) — `com.bigssu.lotandroll`
-**시행일 / Effective date:** 2026-09-29
+**앱 / App:** Land Poly (랜드폴리) — `com.bigssu.lotandroll`
+**시행일 / Effective date:** 2026-10-03
 **개발자 / Developer:** bigssu
 **문의 / Contact:** sungwooksukr@gmail.com
 
@@ -11,7 +11,7 @@
 
 ### 요약
 
-랏앤롤은 **인터넷에 연결하지 않는 오프라인 게임**입니다. 개발자와 제3자는 이 앱을 통해
+Land Poly는 **인터넷에 연결하지 않는 오프라인 게임**입니다. 개발자와 제3자는 이 앱을 통해
 **어떠한 개인정보도 수집, 전송, 판매, 공유하지 않습니다.**
 
 ### 1. 수집하는 정보
@@ -31,7 +31,7 @@
 - 환경 설정 (소리 크기, 음소거, 진동, 언어, 게임 옵션 등)
 
 플레이어 이름은 사용자가 직접 입력한 별명이며, 기기 밖으로 나가지 않습니다.
-이 데이터는 앱을 삭제하거나 기기의 설정 > 앱 > 랏앤롤 > 저장공간에서 데이터를 삭제하면 모두 지워집니다.
+이 데이터는 앱을 삭제하거나 기기의 설정 > 앱 > Land Poly > 저장공간에서 데이터를 삭제하면 모두 지워집니다.
 
 ### 3. 네트워크, 광고, 분석, 제3자
 
@@ -70,7 +70,7 @@
 
 ### Summary
 
-Lot & Roll is a **fully offline game**. The developer and third parties **do not collect, transmit,
+Land Poly is a **fully offline game**. The developer and third parties **do not collect, transmit,
 sell or share any personal data** through this app.
 
 ### 1. Information we collect
@@ -90,7 +90,7 @@ To let you resume a game and keep your preferences, the following is stored **on
 - Preferences (volume, mute, vibration, language, game options)
 
 Player names are nicknames you type yourself and never leave the device. All of this data is removed when you
-uninstall the app or clear its storage (Android Settings > Apps > Lot & Roll > Storage).
+uninstall the app or clear its storage (Android Settings > Apps > Land Poly > Storage).
 
 ### 3. Network, ads, analytics and third parties
 

@@ -1,34 +1,35 @@
-# Google Play 스토어 등록정보 — 랏앤롤 (Lot & Roll)
+# Google Play 스토어 등록정보 — Land Poly (랜드폴리)
 
-Play Console > 스토어 등록정보 > 기본 스토어 등록정보에 그대로 붙여넣을 수 있는 문구와 에셋 목록입니다.
+Play Console 기본 스토어 등록정보를 위한 문구와 에셋 초안입니다.
 기본 언어는 한국어(ko-KR), 추가 언어는 영어(en-US)를 권장합니다.
 글자 수 제한: 앱 이름 30자, 간단한 설명 80자, 자세한 설명 4000자 (공백 포함).
 
 > **IP 주의 (필수)**: 제목, 설명, 태그, 스크린샷, 피처 그래픽 어디에도 Monopoly, 모노폴리, 부루마블/부루마불, 블루마블,
 > 모두의마블, 마블, 황금열쇠, Chance, Community Chest, "Go", "Free Parking", "~ 같은 게임", "~ 대체" 같은 타사 명칭이나 비교 표현을 쓰지 않습니다.
 > 게임 내 기능명 "명소" 를 "랜드마크" 로 바꿔 쓰지 마세요. (`docs/research/02-ip-licensing-research.md` 4.6, `docs/DESIGN.md` C1)
-> 이 문서의 문구는 위 조건을 지켜 작성되었습니다.
+> **게시 전 확인:** 사용자 제공 아이콘의 실크해트·콧수염 캐릭터와 `GO` 칸은 기존 게임을 연상시킵니다.
+> [Google Play 사칭 정책](https://support.google.com/googleplay/android-developer/answer/9888374?hl=en)에 따라 권리와 오인 가능성을 확인하거나 아이콘을 교체한 뒤 제출하세요.
 
 ---
 
 ## 1. 한국어 (ko-KR, 기본)
 
-### 앱 이름 (최대 30자, 14자)
+### 앱 이름 (최대 30자)
 
 ```text
-랏앤롤 - 태블릿 보드게임
+Land Poly - 태블릿 보드게임
 ```
 
-### 간단한 설명 (최대 80자, 57자)
+### 간단한 설명 (최대 80자)
 
 ```text
 태블릿 하나로 2~4명이 둘러앉아 20분 만에 즐기는 세계 도시 보드게임. 광고 없음, 완전 오프라인.
 ```
 
-### 자세한 설명 (최대 4000자, 1223자)
+### 자세한 설명 (최대 4000자)
 
 ```text
-태블릿 한 대를 테이블 한가운데 놓고 둘러앉으세요. 랏앤롤은 최대 4명이 한 화면을 돌려 쓰는 패스 앤 플레이 도시 수집 보드게임입니다. 주사위를 굴려 세계 19개 도시를 사고, 짓고, 뺏고, 한 판을 20~30분 안에 끝냅니다. 인터넷도, 계정도, 광고도 필요 없습니다.
+태블릿 한 대를 테이블 한가운데 놓고 둘러앉으세요. Land Poly는 최대 4명이 한 화면을 돌려 쓰는 패스 앤 플레이 도시 수집 보드게임입니다. 주사위를 굴려 세계 19개 도시를 사고, 짓고, 뺏고, 한 판을 20~30분 안에 끝냅니다. 인터넷도, 계정도, 광고도 필요 없습니다.
 
 ■ 내 차례가 오면 무대가 나를 향해 돌아요
 게임판 한가운데 무대(스테이지)가 지금 차례인 사람 쪽으로 부드럽게 회전합니다. 주사위, 구매 카드, 이벤트 카드가 모두 내 방향으로 바로 서서 나타나니, 거꾸로 된 글씨를 읽을 일이 없어요. 각자의 자리에는 내 방향을 향한 패널이 있어 자금과 보유 도시를 한눈에 볼 수 있습니다.
@@ -54,12 +55,12 @@ Play Console > 스토어 등록정보 > 기본 스토어 등록정보에 그대�
 • 비행기, 캠핑, 카페 등 인터넷이 없는 곳에서 놀 거리가 필요한 분
 
 ■ 광고 없음 / 인앱 결제 없음 / 완전 오프라인
-랏앤롤은 데이터를 수집하지 않습니다. 계정도 로그인도 필요 없고, 게임 저장은 기기 안에만 남습니다.
+Land Poly는 데이터를 수집하지 않습니다. 계정도 로그인도 필요 없고, 게임 저장은 기기 안에만 남습니다.
 
 ■ 태블릿에 최적화
 10~13인치 태블릿에서 가장 멋지게 보이도록 만들었습니다. 가로 화면 전용이며, 작은 태블릿이나 가로 모드의 폰에서도 즐길 수 있어요.
 
-주사위를 굴리고, 도시를 모으고, 마지막에 웃는 사람이 되어 보세요. 랏앤롤과 함께하는 테이블 위의 세계 여행!
+주사위를 굴리고, 도시를 모으고, 마지막에 웃는 사람이 되어 보세요. Land Poly와 함께하는 테이블 위의 세계 여행!
 
 문의: sungwooksukr@gmail.com
 ```
@@ -68,22 +69,22 @@ Play Console > 스토어 등록정보 > 기본 스토어 등록정보에 그대�
 
 ## 2. English (en-US)
 
-### App name (max 30, 29 chars)
+### App name (max 30)
 
 ```text
-Lot & Roll: Tablet Board Game
+Land Poly: Tablet Board Game
 ```
 
-### Short description (max 80, 78 chars)
+### Short description (max 80)
 
 ```text
 One tablet, 2-4 players, 20 minutes. A world-city board game. Offline, no ads.
 ```
 
-### Full description (max 4000, 2145 chars)
+### Full description (max 4000)
 
 ```text
-Put one tablet in the middle of the table and gather around it. Lot & Roll is a pass-and-play city-collecting board game for up to four players sharing a single screen. Roll the dice, buy, build and take over cities across the globe, and finish a game in 20-30 minutes. No internet, no account, no ads.
+Put one tablet in the middle of the table and gather around it. Land Poly is a pass-and-play city-collecting board game for up to four players sharing a single screen. Roll the dice, buy, build and take over cities across the globe, and finish a game in 20-30 minutes. No internet, no account, no ads.
 
 ■ The stage turns to face whoever's turn it is
 The center of the board, the stage, smoothly rotates toward the player who has to act. Dice, purchase cards and event cards always appear right side up for you, so nobody has to read upside-down text. Every seat has its own panel facing that player, showing cash and owned cities at a glance.
@@ -109,7 +110,7 @@ The center of the board, the stage, smoothly rotates toward the player who has t
 • Trips, camping and cafes where there is no signal
 
 ■ No ads. No in-app purchases. Fully offline.
-Lot & Roll collects no data. There is no login, and your saved game stays on your device.
+Land Poly collects no data. There is no login, and your saved game stays on your device.
 
 ■ Made for tablets
 Designed to look its best on 10-13 inch tablets in landscape, and it also runs on smaller tablets and phones in landscape.
@@ -163,7 +164,7 @@ Play 스토어에는 별도 키워드 필드가 없으므로, 아래 단어를 *
 
 | 에셋 | 규격 | 필수 | 비고 |
 |---|---|---|---|
-| 앱 아이콘 | **512 x 512** PNG, 32비트, 최대 1024 KB | 필수 | 둥근 모서리/그림자는 Play가 적용하므로 직접 넣지 않기. `src/content/icons/` 의 LOT & ROLL 엠블럼을 사용 |
+| 앱 아이콘 | **512 x 512** PNG, 32비트, 최대 1024 KB | 필수 | 256px 원본에서 생성한 `docs/assets/play-icon-512.png`. 권리 검토 전에는 제출하지 않기 |
 | 피처 그래픽 | **1024 x 500** JPEG 또는 24비트 PNG (알파 없음) | 필수 | 중요한 요소는 가운데 안전 영역에. 영상 넣을 경우 재생 버튼에 가려짐 |
 | 휴대전화 스크린샷 | 가로 16:9 (예: 1920 x 1080), 최소 2장, 최대 8장 | 필수 | JPEG/24비트 PNG, 한 변 320~3840 px, 긴 변이 짧은 변의 2배 이하 |
 | **7인치 태블릿 스크린샷** | 가로 16:10 (예: 1920 x 1200) 또는 16:9, 최소 4장 권장 (정책상 최소 수는 콘솔에서 확인) | 권장 (대화면 노출) | |
@@ -192,19 +193,9 @@ Play 스토어에는 별도 키워드 필드가 없으므로, 아래 단어를 *
    ```
 
    (ImageMagick 6 이하는 `magick` 대신 `convert` 를 사용)
-3. **피처 그래픽 1024 x 500**: 앱 색상 배경(`#1E2A3A`) 위에 LOT & ROLL 엠블럼(`src/content/icons/` 또는 `docs/assets/icon-sheet.png` 에서 잘라내기)과
-   게임 화면 일부를 배치합니다. HTML 로 만들고 Playwright 로 캡처하면 폰트(Jua)와 색이 앱과 정확히 일치합니다.
-
-   ```js
-   // scripts/feature-graphic.mjs (예시)
-   import { chromium } from '@playwright/test';
-   const b = await chromium.launch();
-   const p = await b.newPage({ viewport: { width: 1024, height: 500 } });
-   await p.goto('file://' + process.cwd() + '/store/feature.html');
-   await p.screenshot({ path: 'store/feature-1024x500.png' });
-   await b.close();
-   ```
-4. **앱 아이콘 512**: 엠블럼 SVG 를 512x512 로 렌더링해 PNG 로 저장 (`npx playwright` 또는 ImageMagick/Inkscape). 배경은 꽉 채운 정사각형으로.
+3. **피처 그래픽 1024 x 500**: `node scripts/gen-android-icons.mjs`가 이름과 아이콘을 넣은
+   `docs/assets/feature-graphic-1024x500.png`를 생성합니다. 아이콘 권리 확인 후 제출하세요.
+4. **앱 아이콘 512**: 같은 스크립트가 선택한 256px PNG를 스토어 규격에 맞게 변환합니다.
 5. **문구 오버레이 (선택)**: 스크린샷 위에 짧은 한 줄 카피를 얹으면 전환율이 오릅니다. 예: "한 대의 태블릿, 네 명의 여행자",
    "내 차례엔 무대가 나를 향해 돌아요", "인수! 내 도시가 되었어요", "광고 없음 · 완전 오프라인".
    (타사 언급 금지, 글자는 Jua/Noto Sans KR 사용 — 둘 다 OFL 이라 상업적 이미지에 사용 가능)
@@ -225,5 +216,5 @@ Play 스토어에는 별도 키워드 필드가 없으므로, 아래 단어를 *
 
 ## 6. 출시 노트 (What's new) 예시
 
-- ko: `첫 출시! 태블릿 하나로 2~4명이 즐기는 세계 도시 보드게임 랏앤롤을 만나보세요.`
-- en: `First release! Enjoy Lot & Roll, a world-city board game for 2-4 players on a single tablet.`
+- ko: `첫 출시! 태블릿 하나로 2~4명이 즐기는 세계 도시 보드게임 Land Poly를 만나보세요.`
+- en: `First release! Enjoy Land Poly, a world-city board game for 2-4 players on a single tablet.`

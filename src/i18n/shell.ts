@@ -21,8 +21,8 @@ const ko: Record<string, string> = {
   'lang.en': 'English',
 
   // title
-  'title.name': '랏앤롤',
-  'title.nameAlt': 'Lot & Roll',
+  'title.name': 'Land Poly',
+  'title.nameAlt': '랜드폴리',
   'title.tagline': '굴리고, 사고, 짓고! 모두 함께 한 판',
   'title.new': '새 게임',
   'title.continue': '이어하기',
@@ -191,8 +191,8 @@ const en: Record<string, string> = {
   'lang.ko': '한국어',
   'lang.en': 'English',
 
-  'title.name': 'Lot & Roll',
-  'title.nameAlt': '랏앤롤',
+  'title.name': 'Land Poly',
+  'title.nameAlt': '랜드폴리',
   'title.tagline': 'Roll, buy, build — one table, one tablet',
   'title.new': 'New Game',
   'title.continue': 'Continue',

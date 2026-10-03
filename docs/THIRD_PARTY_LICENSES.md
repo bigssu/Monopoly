@@ -20,9 +20,10 @@ modified versions.
 
 ## Icons, illustrations, logo and audio
 
-All icons (`src/content/icons/`), the LOT & ROLL emblem, the contact sheet and every sound
+In-game icons (`src/content/icons/`), the title emblem, the contact sheet and every sound
 effect (synthesized at runtime with the Web Audio API) are original works created for this
-project. No third-party artwork, trademarks, samples or raster assets are included.
+project. The launcher icon (`docs/assets/launcher-mark-256.png`) was supplied by the project owner;
+its third-party rights and resemblance to an existing game mascot have not been cleared for store publication.
 Landmark icons are generic, stylized depictions of public architecture and cultural motifs
 and do not reproduce any protected design.
 

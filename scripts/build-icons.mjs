@@ -11,7 +11,7 @@ const jobs = [
   ['tokens', 'TOKEN_ICONS', 'Player tokens (64x64). Main body uses currentColor so the player color tints it.'],
   ['buildings', 'BUILDING_ICONS', 'Buildings, pot, coin, dice faces and card icons (64x64). Accent uses currentColor.'],
   ['ui', 'UI_ICONS', 'Monochrome 24x24 UI icons, 2px stroke, currentColor.'],
-  ['logo', 'LOGO_SVG', 'LOT & ROLL emblem (dice on a land plot with a roll swoosh).'],
+  ['logo', 'LOGO_SVG', 'Title emblem (dice on a land plot with a roll swoosh).'],
 ];
 fs.mkdirSync(out, { recursive: true });
 for (const [file, name, doc] of jobs) {
