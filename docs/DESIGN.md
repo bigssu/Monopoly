@@ -22,7 +22,7 @@ Capacitor; also runs in any modern browser.
 
 | # | Constraint |
 |---|-----------|
-| C1 | Keep in-game names and art independent of Monopoly / 부루마블 / 모두의마블 (see `docs/research/02-ip-licensing-research.md`). Removing the moustache from the supplied launcher image does not resolve its top-hat character and GO board-space resemblance; clear rights and confusion risk before store submission. |
+| C1 | Keep in-game names and art independent of Monopoly / 부루마블 / 모두의마블 (see `docs/research/02-ip-licensing-research.md`). The supplied launcher image now shows a traveler and an arrow-only start space, but its source rights and overall resemblance still need review before store submission. |
 | C2 | 100% offline. No network calls, no analytics, no ads, no accounts. |
 | C3 | Single device, landscape only, tablet-first (primary target 10–13" Android tablets, 4:3 to 16:10). Must still be usable on a 7" tablet and a phone in landscape (min 640×360 CSS px). |
 | C4 | In-game art = inline SVG / CSS authored in this repo. The 256px launcher bitmap is owner-supplied with rights pending verification. Fonts = SIL OFL fonts vendored in `public/fonts`. Audio = synthesized at runtime. |
@@ -134,6 +134,11 @@ The table below defines the unchanged seven-space default. Eight/nine insert one
 `getBoard()` and `getBoardInfo()` supply each game's content, corners, groups, and bounds; `getBoardGeometry()` supplies both
 the Setup preview and playable board. Card destinations, AI, movement, travel, and victory checks use that game profile.
 The 3200-unit SVG canvas and CSS `board / 32` sizing unit remain unchanged.
+Visually, the board is a navy/teal travel-map ring: four special stops are circular waypoints,
+ordinary destinations are separate rounded cards, and group/owner colors appear as small badges
+and seals rather than continuous property bands. Corner indices and cell centers remain unchanged;
+visible circular corners use matching circular hit regions. These changes reduce specific visual similarities;
+they do not establish legal clearance for a store release.
 
 The option is optional in save version 1: an absent value means 7. Saves preserve their board size; unsupported values or
 board-index/array mismatches are rejected. Immutable board profiles permit different-sized simulations to run independently.

@@ -71,30 +71,39 @@ function miniBoardSvg(size: SpacesPerSide): string {
     const y = g.y * scale;
     const w = g.w * scale;
     const hgt = g.h * scale;
-    const side = { S: 'b', W: 'l', N: 't', E: 'r' }[g.edge];
     const corner = g.corner;
-    const fill = corner ? '#F1E9DA' : '#FBF8F2';
-    parts.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${hgt.toFixed(2)}" fill="${fill}" stroke="#DCCFB9" stroke-width=".35"/>`);
     const color = sp.group ? GROUP_COLORS[sp.group] : sp.kind === 'hub' ? HUB_COLOR : null;
-    const B = 2.6;
-    // Icon area (the cell minus its color bar on the inner edge).
-    let ix = x;
-    let iy = y;
-    let iw = w;
-    let ih = hgt;
-    if (color) {
-      const bar =
-        side === 'b' ? [x, y, w, B] : side === 't' ? [x, y + hgt - B, w, B] : side === 'l' ? [x + w - B, y, B, hgt] : [x, y, B, hgt];
-      parts.push(`<rect x="${bar[0]!.toFixed(2)}" y="${bar[1]!.toFixed(2)}" width="${bar[2]!.toFixed(2)}" height="${bar[3]!.toFixed(2)}" fill="${color}"/>`);
-      if (side === 'b') iy += B, (ih -= B);
-      else if (side === 't') ih -= B;
-      else if (side === 'l') iw -= B;
-      else ix += B, (iw -= B);
+    if (corner) {
+      // Circular waypoints make the four special stops read as map destinations, not board corners.
+      const r = Math.min(w, hgt) / 2 - 1.1;
+      const cx = x + w / 2;
+      const cy = y + hgt / 2;
+      const fill = sp.kind === 'start' ? '#EAF8F5' : sp.kind === 'island' ? '#FFF4D7' : '#F4EEFF';
+      parts.push(
+        `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}" stroke="#8BD0C7" stroke-width=".6"/>`,
+        `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${Math.max(r - 2.1, 1).toFixed(2)}" fill="none" stroke="#0A3847" stroke-width=".45" stroke-dasharray="1.3 1.1" opacity=".42"/>`,
+      );
+      const s = Math.min(w, hgt) * 0.62;
+      parts.push(nest(safeIcon(sp.iconId), cx - s / 2, cy - s / 2, s));
+      continue;
     }
-    const s = Math.min(iw, ih) * (corner ? 0.86 : 0.84);
-    parts.push(nest(safeIcon(sp.iconId), ix + (iw - s) / 2, iy + (ih - s) / 2, s));
+
+    // Separate destination cards preserve the route while avoiding a continuous colour strip.
+    const inset = 0.7;
+    const cw = w - inset * 2;
+    const ch = hgt - inset * 2;
+    parts.push(`<rect x="${(x + inset).toFixed(2)}" y="${(y + inset).toFixed(2)}" width="${cw.toFixed(2)}" height="${ch.toFixed(2)}" rx="1.7" fill="#F7FCFC" stroke="#8BD0C7" stroke-width=".35"/>`);
+    if (color) {
+      const badgeW = Math.min(3.6, cw * 0.38);
+      const badgeH = Math.min(1.8, ch * 0.18);
+      parts.push(`<rect x="${(x + inset + 1).toFixed(2)}" y="${(y + inset + 1).toFixed(2)}" width="${badgeW.toFixed(2)}" height="${badgeH.toFixed(2)}" rx="${(badgeH / 2).toFixed(2)}" fill="${color}"/>`);
+    }
+    // Small inset seal keeps each stop legible as a destination at thumbnail scale.
+    parts.push(`<circle cx="${(x + w - 2.2).toFixed(2)}" cy="${(y + hgt - 2.2).toFixed(2)}" r="1.1" fill="#D4E9E6" stroke="#0E5260" stroke-width=".32"/>`);
+    const s = Math.min(cw, ch) * 0.52;
+    parts.push(nest(safeIcon(sp.iconId), x + (w - s) / 2, y + (hgt - s) / 2 + 0.6, s));
   }
-  const svg = `<svg class="mini-board-svg" viewBox="-1 -1 102 102" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="-1" y="-1" width="102" height="102" rx="3" fill="#E9DFCC"/>${parts.join('')}</svg>`;
+  const svg = `<svg class="mini-board-svg" viewBox="-1 -1 102 102" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="-1" y="-1" width="102" height="102" rx="8" fill="#0E5260"/><rect x="13.8" y="13.8" width="72.4" height="72.4" rx="5.5" fill="#0A3847"/>${parts.join('')}</svg>`;
   boardSvgCache.set(size, svg);
   return svg;
 }

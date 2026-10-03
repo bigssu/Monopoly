@@ -149,23 +149,23 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   const isProp = sp.kind === 'city' || sp.kind === 'hub';
   const owner = v.owner !== null ? players[v.owner] : undefined;
   const oc = owner ? playerColor(owner.colorId) : null;
-  const barH = isProp ? 86 : 40;
   const parts: string[] = [];
   parts.push(
-    `<rect class="sp-bg" x="${m}" y="${m}" width="${w - 2 * m}" height="${hgt - 2 * m}" rx="24" fill="${oc ? oc.tint : '#FFFDF8'}"/>`,
+    `<rect class="sp-bg" x="${m}" y="${m}" width="${w - 2 * m}" height="${hgt - 2 * m}" rx="30" fill="${oc ? oc.tint : '#F7FCFC'}"/>`,
   );
-  // Owner band behind the name (outer edge) — readable from across the table.
+  // Ownership is an inset seal, leaving every stop as its own map card instead of one
+  // continuous colour strip around the board.
   if (oc) {
     parts.push(
-      `<path d="M${m} 258 H${w - m} V${hgt - m - 24} Q${w - m} ${hgt - m} ${w - m - 24} ${hgt - m} H${m + 24} Q${m} ${hgt - m} ${m} ${hgt - m - 24} Z" fill="${oc.hex}"/>`,
+      `<circle class="sp-owner-seal" cx="${w - 40}" cy="${hgt - 40}" r="23" fill="${oc.hex}"/>`,
     );
   }
-  // Group color bar on the inner edge.
+  // A compact category badge makes adjacent destinations read as separate cards.
   parts.push(
-    `<path d="M${m} ${m + barH} V${m + 24} Q${m} ${m} ${m + 24} ${m} H${w - m - 24} Q${w - m} ${m} ${w - m} ${m + 24} V${m + barH} Z" fill="${bar}"/>`,
+    `<rect class="sp-group-badge" x="${m + 16}" y="${m + 16}" width="74" height="52" rx="26" fill="${bar}"/>`,
   );
   if (isProp && v.level === 0) {
-    parts.push(textEl('sp-price', w / 2, m + 69, 72, fmtMoney(sp.price ?? 0)));
+    parts.push(textEl('sp-price', w / 2, m + 67, 70, fmtMoney(sp.price ?? 0)));
   }
   // Landmark icon.
   const iconSize = isProp ? 152 : 176;
@@ -175,9 +175,9 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   const name = loc(sp.short);
   const fit = fitLabel(name, w - 40, 92);
   parts.push(textLines(fit.lines, fit.size, w / 2, fit.lines.length === 1 ? 388 : 386, oc ? 'sp-name on-owner' : 'sp-name'));
-  // Buildings sit on a white pill over the inner bar, roofs tinted in the owner's color.
+  // Buildings sit above the category badge, roofs tinted in the owner's colour.
   if (v.level >= 1 && oc) {
-    parts.push(`<rect x="${m + 12}" y="${m + 8}" width="${w - 2 * m - 24}" height="${barH - 14}" rx="${(barH - 14) / 2}" fill="#fff" opacity=".94"/>`);
+    parts.push(`<rect x="${m + 104}" y="${m + 14}" width="${w - 2 * m - 120}" height="60" rx="30" fill="#fff" opacity=".94"/>`);
   }
   // Level icons in one group (`sp-lvl`): the fx pop / "under construction" dim target (Board.popIcon).
   if (v.level >= 1 && v.level <= 3) {
@@ -212,21 +212,24 @@ function cornerMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView): string {
   const s = g.lw;
   const parts: string[] = [];
   parts.push(
-    `<rect class="sp-bg" x="7" y="7" width="${s - 14}" height="${s - 14}" rx="34" fill="${CORNER_BG[sp.kind] ?? '#FFFDF8'}"/>`,
+    `<circle class="sp-bg sp-corner-disc" cx="${s / 2}" cy="${s / 2}" r="${s / 2 - 15}" fill="${CORNER_BG[sp.kind] ?? '#E9F8F5'}"/>`,
+    `<circle class="sp-corner-ring" cx="${s / 2}" cy="${s / 2}" r="${s / 2 - 39}" fill="none"/>`,
   );
   parts.push(`<g transform="rotate(${g.rot} ${s / 2} ${s / 2})">`);
   const outer = baseMatrix;
   if (outer) baseMatrix = outer.translate(s / 2, s / 2).rotate(g.rot).translate(-s / 2, -s / 2);
-  parts.push(iconAt(spaceIcon(sp), s / 2 - 118, 64, 236));
+  const hasPot = sp.kind === 'start' && v.pot > 0;
+  const iconSize = hasPot ? 160 : 210;
+  parts.push(iconAt(spaceIcon(sp), s / 2 - iconSize / 2, hasPot ? 128 : 72, iconSize));
   const fit = fitLabel(loc(sp.name), 300, 80);
-  parts.push(textLines(fit.lines, fit.size, s / 2, 378, 'sp-name sp-corner-name'));
+  parts.push(textLines(fit.lines, fit.size, s / 2, 350, 'sp-name sp-corner-name'));
   if (sp.kind === 'start') {
-    parts.push(textEl('sp-sub', s / 2, 440, 44, t('g.board.salary')));
-    if (v.pot > 0) {
+    parts.push(textEl('sp-sub', s / 2, 400, 38, t('g.board.salary')));
+    if (hasPot) {
       parts.push(
-        `<g class="sp-pot"><rect x="${s / 2 - 150}" y="6" width="300" height="74" rx="37" fill="#1B2430" opacity=".86"/>` +
-          iconAt('pot', s / 2 - 144, 10, 66) +
-          `<text x="${s / 2 + 34}" y="58" font-size="46" text-anchor="middle" fill="#FFD66B">${esc(fmtMoney(v.pot))}</text></g>`,
+        `<g class="sp-pot"><rect x="${s / 2 - 124}" y="68" width="248" height="56" rx="28" fill="#1B2430" opacity=".9"/>` +
+          iconAt('pot', s / 2 - 115, 71, 50) +
+          `<text x="${s / 2 + 38}" y="108" font-size="38" text-anchor="middle" fill="#FFD66B">${esc(fmtMoney(v.pot))}</text></g>`,
       );
     }
   }
@@ -252,7 +255,17 @@ const isBare = (v: SpaceView): boolean => v.owner === null && v.level === 0 && !
 /** Invisible hit area of a bare space (taps, picking); the art is in the base image. */
 function hitMarkup(i: number, geom: readonly SpaceGeom[]): string {
   const g = geom[i]!;
+  if (g.corner) {
+    // Keep a generous but visually faithful target: the circular art owns the corner now.
+    return `<circle cx="${g.lw / 2}" cy="${g.lh / 2}" r="${g.lw / 2 - 15}" fill="none" pointer-events="all"/>`;
+  }
   return `<rect x="7" y="7" width="${g.lw - 14}" height="${g.lh - 14}" rx="${g.corner ? 34 : 24}" fill="none" pointer-events="all"/>`;
+}
+
+/** Shared shell for the live SVG and the rasterized bare board. */
+function boardShellMarkup(): string {
+  return `<rect x="0" y="0" width="${VB}" height="${VB}" rx="120" class="board-face"/>` +
+    `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="68" class="board-inner-rim"/>`;
 }
 
 interface BaseStyles {
@@ -260,6 +273,9 @@ interface BaseStyles {
   rim: string;
   bgStroke: string;
   bgStrokeWidth: string;
+  cornerDiscStrokeWidth: string;
+  cornerRing: { stroke: string; strokeWidth: string; strokeDasharray: string };
+  groupBadge: { stroke: string; strokeWidth: string };
   text: Record<string, { font: string; fill: string; spacingEm: number }>;
 }
 
@@ -276,6 +292,9 @@ function readBaseStyles(svgEl: SVGSVGElement): BaseStyles {
     face: mk('rect', 'board-face'),
     rim: mk('rect', 'board-inner-rim'),
     bg: mk('rect', 'sp-bg'),
+    cornerDisc: mk('circle', 'sp-bg sp-corner-disc'),
+    cornerRing: mk('circle', 'sp-corner-ring'),
+    groupBadge: mk('rect', 'sp-group-badge'),
   };
   const textCls = ['sp-name', 'sp-name sp-corner-name', 'sp-price', 'sp-sub'];
   const texts = textCls.map((c) => mk('text', c));
@@ -286,6 +305,16 @@ function readBaseStyles(svgEl: SVGSVGElement): BaseStyles {
     rim: cs(probes.rim).fill,
     bgStroke: bg.stroke,
     bgStrokeWidth: bg.strokeWidth,
+    cornerDiscStrokeWidth: cs(probes.cornerDisc).strokeWidth,
+    cornerRing: {
+      stroke: cs(probes.cornerRing).stroke,
+      strokeWidth: cs(probes.cornerRing).strokeWidth,
+      strokeDasharray: cs(probes.cornerRing).strokeDasharray,
+    },
+    groupBadge: {
+      stroke: cs(probes.groupBadge).stroke,
+      strokeWidth: cs(probes.groupBadge).strokeWidth,
+    },
     text: {},
   };
   textCls.forEach((c, k) => {
@@ -336,9 +365,13 @@ async function rasterizeBase(svgEl: SVGSVGElement, players: readonly Player[], b
   }
   const markup =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB} ${VB}" width="${pw}" height="${pw}">` +
-    `<style>.sp-bg{stroke:${st.bgStroke};stroke-width:${st.bgStrokeWidth}}</style>` +
-    `<rect x="0" y="0" width="${VB}" height="${VB}" rx="70" fill="${st.face}"/>` +
-    `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="40" fill="${st.rim}"/>` +
+    `<style>` +
+      `.sp-bg{stroke:${st.bgStroke};stroke-width:${st.bgStrokeWidth}}` +
+      `.sp-corner-disc{stroke-width:${st.cornerDiscStrokeWidth}}` +
+      `.sp-corner-ring{stroke:${st.cornerRing.stroke};stroke-width:${st.cornerRing.strokeWidth};stroke-dasharray:${st.cornerRing.strokeDasharray}}` +
+      `.sp-group-badge{stroke:${st.groupBadge.stroke};stroke-width:${st.groupBadge.strokeWidth}}` +
+    `</style>` +
+    boardShellMarkup().replace('class="board-face"', `fill="${st.face}"`).replace('class="board-inner-rim"', `fill="${st.rim}"`) +
     groups.join('') +
     '</svg>';
   const svgUrl = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml' }));
@@ -431,8 +464,7 @@ export class Board {
     this.svgEl.setAttribute('class', 'board-svg');
     this.svgEl.innerHTML =
       `<defs><radialGradient id="lr-glow"><stop offset="0" stop-color="#FFE27A" stop-opacity=".95"/><stop offset="1" stop-color="#FFE27A" stop-opacity="0"/></radialGradient></defs>` +
-      `<rect x="0" y="0" width="${VB}" height="${VB}" rx="70" class="board-face"/>` +
-      `<rect x="${INNER.x - 10}" y="${INNER.y - 10}" width="${INNER.size + 20}" height="${INNER.size + 20}" rx="40" class="board-inner-rim"/>`;
+      boardShellMarkup();
     this.defsEl = this.svgEl.querySelector('defs')!;
     for (let i = 0; i < this.board.length; i++) {
       const grp = document.createElementNS(NS, 'g');
@@ -602,7 +634,10 @@ export class Board {
         this.rings.delete(i);
         if (v.ring) {
           const g = this.geom[i]!;
-          const el = this.mark(i, 'bm-ring', `<rect x="10" y="10" width="${g.lw - 20}" height="${g.lh - 20}" rx="22" stroke="${v.ring}"/>`);
+          const art = g.corner
+            ? `<circle cx="${g.lw / 2}" cy="${g.lh / 2}" r="${g.lw / 2 - 16}" stroke="${v.ring}"/>`
+            : `<rect x="10" y="10" width="${g.lw - 20}" height="${g.lh - 20}" rx="28" stroke="${v.ring}"/>`;
+          const el = this.mark(i, 'bm-ring', art);
           el.dataset.color = v.ring;
           this.rings.set(i, el);
         }
@@ -693,7 +728,10 @@ export class Board {
   private outline(i: number, cls: string, w: number): HTMLElement {
     const g = this.geom[i]!;
     const m = 7 - w / 2;
-    return this.mark(i, cls, `<rect x="${m}" y="${m}" width="${g.lw - 2 * m}" height="${g.lh - 2 * m}" rx="${(g.corner ? 34 : 24) + w / 2}"/>`);
+    const art = g.corner
+      ? `<circle cx="${g.lw / 2}" cy="${g.lh / 2}" r="${g.lw / 2 - m}"/>`
+      : `<rect x="${m}" y="${m}" width="${g.lw - 2 * m}" height="${g.lh - 2 * m}" rx="${30 + w / 2}"/>`;
+    return this.mark(i, cls, art);
   }
 
   /** Highlight a set of spaces as tappable choices; `null` clears. */
@@ -713,7 +751,9 @@ export class Board {
         for (let i = 0; i < this.board.length; i++) {
           if (this.pickSet.has(i)) continue;
           const g = this.geom[i]!;
-          veil.push(`<rect transform="${spaceTransform(i, this.geom)}" width="${g.lw}" height="${g.lh}"/>`);
+          veil.push(g.corner
+            ? `<circle transform="${spaceTransform(i, this.geom)}" cx="${g.lw / 2}" cy="${g.lh / 2}" r="${g.lw / 2 - 7}"/>`
+            : `<rect transform="${spaceTransform(i, this.geom)}" width="${g.lw}" height="${g.lh}" rx="30"/>`);
         }
         const dim = h('div', { class: 'bm-dim' });
         dim.innerHTML = `<svg viewBox="0 0 ${VB} ${VB}" aria-hidden="true">${veil.join('')}</svg>`;

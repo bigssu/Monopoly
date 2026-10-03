@@ -46,6 +46,26 @@ for (const spacesPerSide of [7, 8, 9] as const) {
   });
 }
 
+test('circular corner only opens when its visible waypoint is tapped', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/?dev=1');
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
+  await page.evaluate(() => {
+    const hook = window.__lotAndRoll!;
+    hook.setAnimSpeed(0);
+    hook.setPromptTimer(0);
+    hook.startGame(hook.demoSettings(4, false), 11);
+  });
+  await expect(page.locator('.board-base')).toBeVisible();
+  const hit = page.locator('.board-svg > .sp[data-i="0"] circle[pointer-events="all"]');
+  const rect = await hit.boundingBox();
+  expect(rect).not.toBeNull();
+  await page.mouse.click(rect!.x + 8, rect!.y + 8);
+  await expect(page.locator('.info-card')).toHaveCount(0);
+  await hit.click();
+  await expect(page.locator('.info-card .pc-title')).toHaveText('출발');
+});
+
 test('nine-space board keeps every ownership chip inside small four-player panels', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 450 });
   await page.goto('/?dev=1');

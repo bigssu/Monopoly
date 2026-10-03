@@ -473,13 +473,17 @@
   width: 53cqmin;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  border-radius: 2cqmin;
-  box-shadow: 0 1.2cqmin 0 #C9BBA2, 0 3cqmin 6cqmin rgba(0, 0, 0, .45);
+  border-radius: 5cqmin;
+  background: #0B3D4B;
+  box-shadow:
+    0 0 0 .65cqmin #36A9A0,
+    0 0 0 1.1cqmin #082B37,
+    0 2.3cqmin 5cqmin rgba(0, 0, 0, .46);
   animation: board-in 520ms var(--ease-spring) backwards;
 }
 .setup-table:not(.is-intro) .mini-board { animation: none; }
 @keyframes board-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.85) rotate(-6deg); } }
-.mini-board-svg { width: 100%; height: 100%; border-radius: 2cqmin; }
+.mini-board-svg { width: 100%; height: 100%; border-radius: 4.3cqmin; }
 .mini-board-center {
   position: absolute;
   inset: 13.5%;
@@ -488,12 +492,13 @@
   align-items: center;
   justify-content: center;
   gap: .6cqmin;
-  border-radius: 1cqmin;
-  background: radial-gradient(circle at 50% 42%, #FFFDF6 0%, #F6EEDD 70%, #EFE3CB 100%);
+  border-radius: 3cqmin;
+  background: radial-gradient(circle at 50% 42%, #F7FCFC 0%, #E6F3F0 72%, #D4E9E6 100%);
+  box-shadow: inset 0 0 0 .5cqmin rgba(139, 208, 199, .55);
 }
 .mini-board-logo { width: 46%; filter: drop-shadow(0 1cqmin 1.2cqmin rgba(60, 40, 10, .25)); animation: logo-float 3.8s var(--ease-in-out) infinite; }
 .mini-board-logo > svg { width: 100%; height: 100%; }
-.mini-board-count { font-size: 4.2cqmin; color: #7A5343; }
+.mini-board-count { font-size: 4.2cqmin; color: #0A5260; }
 
 /* Props lying on the table corners. */
 .table-prop { position: absolute; width: 9cqmin; aspect-ratio: 1; filter: drop-shadow(0 1cqmin 1cqmin rgba(0, 0, 0, .45)); pointer-events: none; }

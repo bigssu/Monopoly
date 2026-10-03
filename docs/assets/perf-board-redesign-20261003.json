@@ -1,0 +1,81 @@
+{
+ "cpuThrottle": "4x",
+ "dpr": 2,
+ "viewport": [
+  1600,
+  1000
+ ],
+ "chromium": "154.0.8037.58",
+ "boot": {
+  "medianTitleMountedMs": 102,
+  "medianTitlePaintedMs": 174,
+  "runs": [
+   {
+    "titleMountedMs": 109,
+    "titlePaintedMs": 200
+   },
+   {
+    "titleMountedMs": 102,
+    "titlePaintedMs": 174
+   },
+   {
+    "titleMountedMs": 101,
+    "titlePaintedMs": 166
+   }
+  ]
+ },
+ "layers": {
+  "seconds": 10,
+  "medianLayers": 12,
+  "peakLayers": 19,
+  "peakLayerMemoryMB": 89.4,
+  "paintsPerSec": 16.9,
+  "rasterPerSec": 17.8,
+  "layoutMaxMs": 6.3
+ },
+ "mount": {
+  "layoutMaxMs": 54.4,
+  "runs": [
+   51.6,
+   54.4,
+   54.9
+  ]
+ },
+ "gates": [
+  {
+   "name": "C  mount layout <= 100 ms (4x)",
+   "pass": true,
+   "value": "54.4 ms"
+  },
+  {
+   "name": "C  peak layers <= 20 (4x play)",
+   "pass": true,
+   "value": "19 (median 12)"
+  },
+  {
+   "name": "C  median layers <= 25",
+   "pass": true,
+   "value": "12"
+  },
+  {
+   "name": "C  peak layer memory <= 100 MB",
+   "pass": true,
+   "value": "89.4 MB"
+  },
+  {
+   "name": "C  Paint <= 20/s (4x play)",
+   "pass": true,
+   "value": "16.9/s"
+  },
+  {
+   "name": "C  no forced layout > 50 ms during play",
+   "pass": true,
+   "value": "max Layout 6.3 ms"
+  },
+  {
+   "name": "C  boot to Title painted <= 1500 ms (4x)",
+   "pass": true,
+   "value": "174 ms"
+  }
+ ]
+}
