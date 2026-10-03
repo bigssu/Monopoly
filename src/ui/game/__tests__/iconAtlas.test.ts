@@ -44,10 +44,10 @@ describe('icon atlas queue', () => {
     ]);
 
     expect(drawImage).toHaveBeenCalledTimes(1);
-    expect(atlasSvg('city-manila', 0, 0, 10, 'icon')!.def).toContain('width="512" height="512"');
+    expect(atlasSvg('city-manila', 0, 0, 10, 'icon')!.def).toContain('width="1024" height="1024"');
   });
 
-  it('keeps concurrent requests together at their largest cell size', async () => {
+  it('keeps concurrent requests together in the fixed game atlas', async () => {
     const { iconAtlasInfo, prepareIconAtlas } = await import('../iconAtlas');
     await Promise.all([
       prepareIconAtlas([{ id: 'city-manila' }], 48),
@@ -55,7 +55,32 @@ describe('icon atlas queue', () => {
     ]);
 
     expect(drawImage).toHaveBeenCalledTimes(1);
-    expect(iconAtlasInfo()).toMatchObject({ cell: 96, icons: 2 });
+    expect(iconAtlasInfo()).toMatchObject({ cell: 128, cols: 8, rows: 8, width: 1024, height: 1024, icons: 2 });
+  });
+
+  it('does not rebuild or retain PNGs when the same game set is prepared across viewport sizes', async () => {
+    const { iconAtlasInfo, prepareIconAtlas } = await import('../iconAtlas');
+    const entries = [{ id: 'city-manila' }, { id: 'city-hanoi' }, { id: 'coin' }];
+
+    for (const cellPx of [32, 64, 128, 192, 256]) await prepareIconAtlas(entries, cellPx);
+
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+    expect(iconAtlasInfo()).toMatchObject({ cell: 128, cols: 8, rows: 8, width: 1024, height: 1024, icons: 3 });
+  });
+
+  it('prepares the CPU-four board 7, 8, and 9 icon sets in one bounded atlas', async () => {
+    const [{ getBoard }, { spaceIcon }, { iconAtlasInfo, prepareIconAtlas }] = await Promise.all([
+      import('@/content/board'),
+      import('../util'),
+      import('../iconAtlas'),
+    ]);
+    const entries = [7, 8, 9].flatMap((side) => getBoard(side as 7 | 8 | 9).map((space) => ({ id: spaceIcon(space) })));
+
+    await Promise.all([prepareIconAtlas(entries, 64), prepareIconAtlas(entries, 256)]);
+
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(iconAtlasInfo()).toMatchObject({ width: 1024, height: 1024 });
   });
 
   it('caps a full atlas at 1024px without rebuilding the same capped request', async () => {

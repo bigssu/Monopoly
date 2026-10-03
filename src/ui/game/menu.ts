@@ -7,6 +7,7 @@ import { sfx } from '@/ui/audio/sfx';
 import { haptic, haptics } from '@/ui/audio/haptics';
 import { prefs } from '@/ui/shell/prefs';
 import { anim } from '@/ui/fx/time';
+import { FocusTrap } from '@/ui/shell/focus';
 import { h, iconEl } from './util';
 
 export interface MenuHandlers {
@@ -24,12 +25,13 @@ export class GameMenu {
   private sheet: HTMLElement;
   private open = false;
   private lastToggle = 0;
+  private trap: FocusTrap | null = null;
 
   constructor(private hnd: MenuHandlers) {
     this.button = h('button', { class: 'menu-btn', type: 'button', 'aria-label': t('g.menu') });
     this.button.append(iconEl('menu', 'ico'));
     this.button.addEventListener('click', () => this.toggle());
-    this.sheet = h('div', { class: 'menu-sheet', role: 'dialog', 'aria-modal': 'true' });
+    this.sheet = h('div', { class: 'menu-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('g.menu') });
     this.overlay = h('div', { class: 'menu-overlay' }, this.sheet);
     this.overlay.addEventListener('click', (e) => {
       if (e.target === this.overlay) this.close();
@@ -55,6 +57,11 @@ export class GameMenu {
     sfx.play('tap');
     this.renderMain();
     this.overlay.classList.add('is-open');
+    const trap = new FocusTrap(this.sheet);
+    this.trap = trap;
+    requestAnimationFrame(() => {
+      if (this.open && this.trap === trap) trap.activate();
+    });
     this.hnd.onOpen();
     void anim(this.sheet, [{ transform: 'translateY(-12px) scale(.96)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
       duration: 220,
@@ -66,7 +73,10 @@ export class GameMenu {
     if (!this.open) return;
     this.open = false;
     this.overlay.classList.remove('is-open');
+    this.trap?.dispose();
+    this.trap = null;
     this.hnd.onClose();
+    if (this.button.isConnected) this.button.focus();
   }
 
   private item(icon: string, label: string, onClick: () => void, cls = ''): HTMLButtonElement {
@@ -134,6 +144,7 @@ export class GameMenu {
       this.item('close', t('g.menu.resign'), () => this.renderConfirm(), 'is-danger'),
       this.item('play', t('g.menu.resume'), () => this.close(), 'is-primary'),
     );
+    if (this.open) this.trap?.activate();
   }
 
   private renderConfirm(): void {
@@ -147,6 +158,7 @@ export class GameMenu {
       }, 'is-danger'),
       this.item('chevron-left', t('g.menu.back'), () => this.renderMain()),
     );
+    this.trap?.activate();
   }
 
   private closeBtn(): HTMLButtonElement {

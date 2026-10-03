@@ -3,6 +3,48 @@
 랏앤롤(Lot & Roll)의 렌더링·배터리 성능 작업 문서. 목표는 제품 책임자의 수용 기준 A–D:
 **(A) 30 fps 상한**, **(B) 유휴 시 부하 0**, **(C) 레이어/페인트 위생과 프레임 예산**, **(D) `npm run perf` 게이트**.
 
+## 리뷰 후 수정 및 검증 (2026-10-03)
+
+저가 Android 태블릿 기준으로 리뷰에서 발견한 7개 문제를 수정했다.
+
+| 문제 | 수정 및 회귀 검사 |
+|---|---|
+| 늦은 네이티브 저장 복원이 최신 저장/삭제를 덮어씀 | 키별 변경 버전을 확인해 대기 중 로컬 변경과 삭제를 보존; 지연된 Preferences 응답 5개 회귀 검사 |
+| 손상된 저장 데이터 수용 | 설정·플레이어·소유권·단계별 금액/대상/행동 조건 검증; 실제 reducer 상태와 기존 v1 저장 호환성 검사 |
+| 리사이즈마다 아이콘 PNG가 누적됨 | 게임 아이콘 아틀라스를 1024²로 고정; 반복 리사이즈 후 보드+아이콘 blob PNG 2장 유지, 게임 종료 후 0장 |
+| 첫 FX 실행 시 강제 레이아웃 | 이미 계산한 보드·스테이지·좌석 영역 재사용, 불필요한 visualViewport 접근 제거; 첫 FX의 DOM 영역 재측정 0회 |
+| 작은 가로 화면에서 좌석 편집기 잘림 | 회전한 E/W 편집기를 화면 중앙에 배치하고 높이에 맞춰 폭 제한; 640×360·800×450·1280×800에서 모든 좌석 검사 |
+| 가격/소유 타일 이름의 낮은 명도 대비 | 검정 텍스트와 더 큰 가격 글자 사용; 모든 그룹/플레이어 색에서 대비 4.5:1 이상 검사 |
+| 모달 뒤 버튼에 키보드 포커스 이동 | 배경 inert, Tab 순환, 중첩 모달/메뉴 닫기 시 포커스 복원; 빠른 메뉴 열기/닫기 회귀 검사 |
+
+검증: 단위 테스트 **347개**, TypeScript 검사와 웹 빌드 통과. 관련 브라우저 회귀 검사 **22개** 통과 후,
+마지막 저장 검증 및 포커스 테스트 보완을 반영해 단위 테스트 전체와 브라우저 핵심 **11개**를 다시 통과했다.
+
+Android도 최종 웹 번들로 `cap sync android` 후 `clean assembleDebug`에 성공했다.
+`android/app/build/outputs/apk/debug/app-debug.apk`는 **8,564,140 B**, 패키지 `com.bigssu.lotandroll`,
+minSdk 24 / targetSdk 36이며 Debug v2 서명을 검증했다. APK 안의 JS·CSS·FX 워커가 `dist`와 바이트 단위로
+동일하고 `docs`·`.omx`·`node_modules`는 포함되지 않는다. SHA-256:
+`B807DCE218EB8E39B6A3251F82A1ED21CE574E90BDEF517AC97401CCDB52D52E`.
+빌드 시 SDK XML 버전 경고가 있었지만 성공했으며, 실제 기기 설치·실행 검증은 별도다.
+
+최종 성능 측정은 Windows Chrome 154, 1600×1000, DPR 2, CPU 4×에서 실행했다.
+게임 진입의 최대 Layout 중앙값은 리뷰 당시 **154.1 → 52.4 ms**(최종 3회: 52.3 / 52.4 / 64 ms),
+Title 표시 중앙값은 **176 ms**다. 20초 플레이에서 긴 태스크는 0개, 15초 레이어 측정에서 피크 19개,
+레이어 메모리 추정 피크 89.4 MB, Paint 14.5회/초, 최대 Layout 10.1 ms다.
+
+선택한 `boot,mount,play,layers` 게이트는 **8/9 통과**했다. p99 ≤20 ms는 **33.5 ms로 미달**이며,
+같은 환경의 빈 페이지도 p99 33.7 ms였다. 게이트를 완화하지 않았으며 이 측정으로 실제 Android의
+GPU 메모리, 발열 또는 프레임 속도를 보장하지 않는다. 원시 트레이스는 저장소 밖에 두고 요약만
+[`assets/perf-review-fixes-20261003.json`](assets/perf-review-fixes-20261003.json)에 보관한다.
+
+Windows 재현 명령(별도 터미널에서 `npm run preview -- --host 127.0.0.1 --port 4179` 실행):
+
+```powershell
+$env:CHROMIUM_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+$env:PLAYWRIGHT_MODULE = (Resolve-Path node_modules\playwright\index.mjs).Path
+node scripts/perf.mjs --url http://127.0.0.1:4179 --phases boot,mount,play,layers --seconds 20 --layer-seconds 15
+```
+
 ## 0. 보급형 Android 태블릿 기준 (2026-10-01)
 
 현재 게임 텍스처는 **2의 거듭제곱 크기**, 일반 아틀라스 **1K 이하**, 글자가 포함된 보드만 **최대 2K 1장**이다.

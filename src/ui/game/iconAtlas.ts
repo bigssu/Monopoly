@@ -5,7 +5,7 @@
  * every referenced symbol into a `<use>` shadow tree: a buy card with ~10 icons still styled,
  * laid out and painted ~290 SVG shapes in the frame it appeared (4x CPU throttle trace). This
  * module draws the icons the game creates per action (city/hub art, tinted tokens and buildings)
- * once into ONE PNG, cell by cell, at device resolution; an icon is then a single element
+ * once into one bounded 1024px PNG, cell by cell; an icon is then a single element
  * showing its cell (`<i class="ic-bm">` with a background position, or an SVG `<image>` clipped
  * to the cell on the board). Until the atlas is ready (and for icons not in it) callers fall
  * back to the sprite.
@@ -24,7 +24,9 @@ const TINTED = new Set(ICON_IDS.filter((id) => iconMarkup(id).includes('currentC
 /** Transparent gutter around each cell (px): keeps filtering from bleeding neighbours in. */
 const GUTTER = 2;
 const MAX_TEXTURE = 1024;
-const MIN_TEXTURE = 512;
+const ATLAS_CELL = 128;
+const ATLAS_COLS = MAX_TEXTURE / ATLAS_CELL;
+const ATLAS_CAPACITY = ATLAS_COLS * ATLAS_COLS;
 
 interface Atlas {
   /** Increments per build (pattern ids of different atlases never collide). */
@@ -41,7 +43,6 @@ let atlas: Atlas | null = null;
 let serial = 0;
 let building: Promise<void> | null = null;
 const requested = new Map<string, AtlasEntry>();
-let requestedCell = 0;
 let generation = 0;
 const liveUrls = new Set<string>();
 const retiredUrls = new Set<string>();
@@ -49,12 +50,18 @@ let retireObserver: MutationObserver | null = null;
 
 const keyOf = (id: string, tint?: string): string => (TINTED.has(id) ? `${id}|${(tint ?? '').toLowerCase()}` : id);
 
-function atlasLayout(count: number, requestedCell: number): { cell: number; cols: number; rows: number; width: number; height: number } {
-  const cols = Math.max(2, Math.ceil(Math.sqrt(count)));
-  const rows = Math.max(2, Math.ceil(count / cols));
-  const cell = Math.min(requestedCell, Math.floor(MAX_TEXTURE / Math.max(cols, rows)));
-  const texture = (n: number): number => Math.max(MIN_TEXTURE, 2 ** Math.ceil(Math.log2(n)));
-  return { cell, cols, rows, width: texture(cols * cell), height: texture(rows * cell) };
+function atlasLayout(count: number): { cell: number; cols: number; rows: number; width: number; height: number } {
+  // A game's complete icon set normally fits in these 64 cells. Always allocate it at the
+  // highest bounded resolution, rather than following viewport/DPR changes and retaining every
+  // prior PNG until the game exits.
+  if (count <= ATLAS_CAPACITY) {
+    return { cell: ATLAS_CELL, cols: ATLAS_COLS, rows: ATLAS_COLS, width: MAX_TEXTURE, height: MAX_TEXTURE };
+  }
+  // An unexpected entry can still be added. Keep that atlas bounded; this path is not used by
+  // prepareGameIcons, which supplies its known entry set before any board icons are rendered.
+  const side = Math.ceil(Math.sqrt(count));
+  const cell = Math.max(32, Math.floor(MAX_TEXTURE / side));
+  return { cell, cols: side, rows: Math.ceil(count / side), width: MAX_TEXTURE, height: MAX_TEXTURE };
 }
 
 function wantedAtlas(): { entries: Map<string, AtlasEntry>; layout: ReturnType<typeof atlasLayout> } {
@@ -66,7 +73,7 @@ function wantedAtlas(): { entries: Map<string, AtlasEntry>; layout: ReturnType<t
     }
   }
   for (const [k, e] of requested) entries.set(k, e);
-  return { entries, layout: atlasLayout(entries.size, requestedCell) };
+  return { entries, layout: atlasLayout(entries.size) };
 }
 
 function revokeRetired(): void {
@@ -97,7 +104,6 @@ export function disposeIconAtlas(): void {
   generation++;
   building = null;
   requested.clear();
-  requestedCell = 0;
   if (atlas) liveUrls.add(atlas.url);
   atlas = null;
   for (const url of liveUrls) retiredUrls.add(url);
@@ -170,12 +176,13 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Make sure the atlas holds `entries` with cells of at least `cellPx` device pixels (rebuilds when
- * something is missing or cells are too small; the old atlas stays in use until the new one is
- * decoded). Resolves when done; never rejects (on failure icons keep using the sprite).
+ * Make sure the atlas holds `entries`. `cellPx` remains part of the caller API but does not resize
+ * a game's atlas: a fixed 1024px atlas is prepared once, before board/card icons are rendered.
+ * A newly requested icon may rebuild it; the old atlas stays in use until the new one is decoded.
+ * Resolves when done; never rejects (on failure icons keep using the sprite).
  */
 export function prepareIconAtlas(entries: readonly AtlasEntry[], cellPx: number): Promise<void> {
-  const cell = Math.max(32, Math.min(256, Math.ceil(cellPx)));
+  void cellPx;
   for (const e of entries) {
     if (!ICON_IDS.includes(e.id)) continue;
     if (TINTED.has(e.id) && !e.tint) continue;
@@ -184,9 +191,8 @@ export function prepareIconAtlas(entries: readonly AtlasEntry[], cellPx: number)
       requested.set(k, { id: e.id, tint: TINTED.has(e.id) ? e.tint!.toLowerCase() : undefined });
     }
   }
-  requestedCell = Math.max(requestedCell, cell);
   const want = wantedAtlas();
-  const missing = !atlas || atlas.cell < want.layout.cell || atlas.width !== want.layout.width || atlas.height !== want.layout.height || [...want.entries.keys()].some((k) => !atlas!.index.has(k));
+  const missing = !atlas || atlas.cell !== want.layout.cell || atlas.cols !== want.layout.cols || atlas.rows !== want.layout.rows || [...want.entries.keys()].some((k) => !atlas!.index.has(k));
   if (!missing || typeof document === 'undefined') return building ?? Promise.resolve();
   const prev = building ?? Promise.resolve();
   const buildGeneration = generation;
@@ -194,7 +200,7 @@ export function prepareIconAtlas(entries: readonly AtlasEntry[], cellPx: number)
     .then(() => {
       if (buildGeneration !== generation) return;
       const want = wantedAtlas();
-      if (atlas && atlas.cell >= want.layout.cell && atlas.width === want.layout.width && atlas.height === want.layout.height && [...want.entries.keys()].every((k) => atlas!.index.has(k))) return;
+      if (atlas && atlas.cell === want.layout.cell && atlas.cols === want.layout.cols && atlas.rows === want.layout.rows && [...want.entries.keys()].every((k) => atlas!.index.has(k))) return;
       return build([...want.entries], want.layout, buildGeneration);
     })
     .catch((e: unknown) => console.warn('[icons] atlas failed', e));

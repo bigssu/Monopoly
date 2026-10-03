@@ -4,12 +4,29 @@
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { button, h } from './dom';
+import { FocusTrap } from './focus';
 
 interface OpenDialog {
   el: HTMLElement;
+  trap: FocusTrap;
   close: () => void;
 }
 const stack: OpenDialog[] = [];
+const priorInert = new Map<HTMLElement, boolean>();
+let nextDialogTitleId = 0;
+
+function syncInert(): void {
+  const top = stack[stack.length - 1]?.el;
+  if (!top) {
+    for (const [el, inert] of priorInert) if (el.isConnected) el.inert = inert;
+    priorInert.clear();
+    return;
+  }
+  for (const child of [...document.body.children] as HTMLElement[]) {
+    if (!priorInert.has(child)) priorInert.set(child, child.inert);
+    child.inert = child !== top;
+  }
+}
 
 /** Close the top-most dialog (hardware back). Returns true if one was open. */
 export function closeTopDialog(): boolean {
@@ -21,31 +38,52 @@ export function closeTopDialog(): boolean {
 
 export function openDialog(
   build: (close: () => void) => HTMLElement,
-  opts: { top?: boolean; dismissable?: boolean; onClose?: () => void; cls?: string } = {},
+  opts: { top?: boolean; dismissable?: boolean; onClose?: () => void; cls?: string; label?: string } = {},
 ): () => void {
+  const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const backdrop = h('div', { class: `dlg-backdrop ${opts.top ? 'is-top' : ''} ${opts.cls ?? ''}`.trim() });
   let closed = false;
-  const entry: OpenDialog = { el: backdrop, close: () => close() };
+  let entry!: OpenDialog;
   const close = () => {
     if (closed) return;
     closed = true;
     const i = stack.indexOf(entry);
     if (i >= 0) stack.splice(i, 1);
+    entry.trap.dispose();
     backdrop.classList.add('is-closing');
     setTimeout(() => backdrop.remove(), 160);
+    syncInert();
     opts.onClose?.();
+    const parent = stack[stack.length - 1];
+    if (parent) parent.trap.activate(invoker);
+    else {
+      setTimeout(() => {
+        if (invoker?.isConnected) invoker.focus();
+      });
+    }
   };
   const panel = build(close);
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
+  const heading = panel.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6');
+  if (heading) {
+    heading.id ||= `dlg-title-${++nextDialogTitleId}`;
+    panel.setAttribute('aria-labelledby', heading.id);
+  } else {
+    panel.setAttribute('aria-label', opts.label ?? t('shell.close'));
+  }
   backdrop.append(panel);
   if (opts.dismissable !== false) {
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) close();
     });
   }
+  const trap = new FocusTrap(panel);
+  entry = { el: backdrop, trap, close };
   stack.push(entry);
   document.body.append(backdrop);
+  syncInert();
+  requestAnimationFrame(() => trap.activate());
   return close;
 }
 

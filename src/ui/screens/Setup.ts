@@ -323,6 +323,7 @@ registerScreen('setup', (root) => {
     renderPanel();
     closeEditor = openDialog(() => rot, {
       cls: 'seat-editor-backdrop',
+      label: t('setup.edit'),
       onClose: () => {
         closeEditor = null;
       },

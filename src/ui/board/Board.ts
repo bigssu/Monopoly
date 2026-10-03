@@ -165,7 +165,7 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
     `<path d="M${m} ${m + barH} V${m + 24} Q${m} ${m} ${m + 24} ${m} H${w - m - 24} Q${w - m} ${m} ${w - m} ${m + 24} V${m + barH} Z" fill="${bar}"/>`,
   );
   if (isProp && v.level === 0) {
-    parts.push(textEl('sp-price', w / 2, m + 62, 54, fmtMoney(sp.price ?? 0)));
+    parts.push(textEl('sp-price', w / 2, m + 69, 72, fmtMoney(sp.price ?? 0)));
   }
   // Landmark icon.
   const iconSize = isProp ? 152 : 176;

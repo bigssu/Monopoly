@@ -5,6 +5,7 @@
 import { getBoard, type GameState, type PlayerId, type Seat, type SpacesPerSide } from '@/engine';
 import { t } from '@/i18n';
 import { Board } from '@/ui/board/Board';
+import { INNER, VB } from '@/ui/board/geometry';
 import { Stage } from '@/ui/stage/Stage';
 import { spaceInfo } from '@/ui/stage/prompts';
 import { PlayerPanel } from '@/ui/panels/PlayerPanel';
@@ -151,6 +152,14 @@ export class GameView {
     this.stopFx();
     this.rects.clear();
     const L = computeLayout(W, H, new Set(this.seats));
+    // These viewport-relative boxes are already known from the layout. Reading them back from
+    // the DOM during the first turn's FX forces the freshly mounted board through layout again.
+    const b = L.board;
+    const inset = (b.w * INNER.x) / VB;
+    const inner = (b.w * INNER.size) / VB;
+    this.rects.set('layer', new DOMRect(0, 0, W, H));
+    this.rects.set('board', new DOMRect(b.x, b.y, b.w, b.h));
+    this.rects.set('stage', new DOMRect(b.x + inset, b.y + inset, inner, inner));
     const was = this.layout?.portrait ?? false;
     this.layout = L;
     this.root.classList.toggle('is-portrait', L.portrait);
@@ -158,12 +167,13 @@ export class GameView {
     setBoardVar(L.board.w);
     placeRect(this.board.el, L.board);
     this.board.setSize(L.board.w);
-    // Icon bitmaps sized for the largest card icon (.pc-icon: 2.6 board units of board/32).
+    // Reuse the game's fixed 1K icon atlas across viewport and DPR changes.
     void prepareGameIcons(this.state.players, (L.board.w / 32) * 2.8, getBoard((this.state.settings.spacesPerSide ?? 7) as SpacesPerSide));
     for (const p of this.state.players) {
       const box = L.seats[p.seat];
       const panel = this.panels.get(p.id)!;
       if (box) {
+        this.rects.set(`p${p.id}`, new DOMRect(box.x, box.y, box.w, box.h));
         placeSeat(panel.el, box);
         panel.setBox(box.innerW, box.innerH);
       }

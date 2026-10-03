@@ -1,0 +1,124 @@
+{
+ "cpuThrottle": "4x",
+ "dpr": 2,
+ "viewport": [
+  1600,
+  1000
+ ],
+ "chromium": "154.0.8037.58",
+ "boot": {
+  "medianTitleMountedMs": 105,
+  "medianTitlePaintedMs": 176,
+  "runs": [
+   {
+    "titleMountedMs": 115,
+    "titlePaintedMs": 311
+   },
+   {
+    "titleMountedMs": 105,
+    "titlePaintedMs": 176
+   },
+   {
+    "titleMountedMs": 103,
+    "titlePaintedMs": 176
+   }
+  ]
+ },
+ "play": {
+  "seconds": 20,
+  "turns": 3,
+  "round": 1,
+  "heapMB": [
+   4.8,
+   3.4
+  ],
+  "domNodes": [
+   1622,
+   1666
+  ],
+  "frameTimes": {
+   "frames": 627,
+   "p50": 32.6,
+   "p95": 33.1,
+   "p99": 33.5,
+   "max": 36,
+   "over20": 619,
+   "over33": 1,
+   "over33raw": 12,
+   "over50": 0,
+   "longTasks": 0,
+   "longTaskMax": 0
+  }
+ },
+ "floor": {
+  "frames": 612,
+  "p99": 33.7,
+  "max": 56,
+  "over20": 611,
+  "over33": 4
+ },
+ "layers": {
+  "seconds": 15,
+  "medianLayers": 12,
+  "peakLayers": 19,
+  "peakLayerMemoryMB": 89.4,
+  "paintsPerSec": 14.5,
+  "rasterPerSec": 15.9,
+  "layoutMaxMs": 10.1
+ },
+ "mount": {
+  "layoutMaxMs": 52.4,
+  "runs": [
+   52.3,
+   52.4,
+   64
+  ]
+ },
+ "gates": [
+  {
+   "name": "C  frame p99 <= 20 ms (4x, after the first 2 s)",
+   "pass": false,
+   "value": "33.5 ms"
+  },
+  {
+   "name": "C  frames > 33 ms <= empty-page floor + 3 (4x)",
+   "pass": true,
+   "value": "1 frames > 2 vsyncs (floor 4; max 36 ms; raw > 33.4 ms: 12; > 20 ms: 619)"
+  },
+  {
+   "name": "C  mount layout <= 100 ms (4x)",
+   "pass": true,
+   "value": "52.4 ms"
+  },
+  {
+   "name": "C  peak layers <= 20 (4x play)",
+   "pass": true,
+   "value": "19 (median 12)"
+  },
+  {
+   "name": "C  median layers <= 25",
+   "pass": true,
+   "value": "12"
+  },
+  {
+   "name": "C  peak layer memory <= 100 MB",
+   "pass": true,
+   "value": "89.4 MB"
+  },
+  {
+   "name": "C  Paint <= 20/s (4x play)",
+   "pass": true,
+   "value": "14.5/s"
+  },
+  {
+   "name": "C  no forced layout > 50 ms during play",
+   "pass": true,
+   "value": "max Layout 10.1 ms"
+  },
+  {
+   "name": "C  boot to Title painted <= 1500 ms (4x)",
+   "pass": true,
+   "value": "176 ms"
+  }
+ ]
+}

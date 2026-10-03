@@ -132,8 +132,8 @@ export const TINT: { ink?: string; ink3?: string } = {};
 
 /**
  * Build the icon atlas for a game: all space art, the players' tokens in their colors, and the
- * buildings in the player / theme colors they are shown in. `iconPx` = the largest icon size in
- * CSS px (the atlas cells are that times the device pixel ratio).
+ * buildings in the player / theme colors they are shown in. The legacy `iconPx` hint is retained
+ * for callers; the atlas now uses a fixed 1024px texture independent of viewport size and DPR.
  */
 export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, iconPx: number, board?: readonly SpaceDef[]): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();

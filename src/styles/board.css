@@ -48,12 +48,12 @@
   fill: var(--ink);
   letter-spacing: -0.01em;
 }
-.sp-name.on-owner { fill: #fff; }
+.sp-name.on-owner { fill: #000; }
 .sp-corner-name { fill: var(--ink); }
 .sp-price {
   font-family: var(--font-num);
   font-weight: 800;
-  fill: #fff;
+  fill: #000;
   letter-spacing: 0.01em;
 }
 .sp-sub { font-family: var(--font-body); font-weight: 800; fill: var(--ink-2); }

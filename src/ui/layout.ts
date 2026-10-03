@@ -141,10 +141,10 @@ export function watchViewport(fn: (W: number, H: number) => void): () => void {
   let raf = 0;
   const run = (): void => {
     raf = 0;
-    const vv = window.visualViewport;
-    const W = Math.round(vv?.width ?? window.innerWidth);
-    const H = Math.round(vv?.height ?? window.innerHeight);
-    fn(window.innerWidth || W, window.innerHeight || H);
+    // visualViewport access can force layout; the game uses innerWidth/Height when available.
+    const W = window.innerWidth || Math.round(window.visualViewport?.width ?? 0);
+    const H = window.innerHeight || Math.round(window.visualViewport?.height ?? 0);
+    fn(W, H);
   };
   const schedule = (): void => {
     if (!raf) raf = requestAnimationFrame(run);

@@ -735,7 +735,12 @@
 
 /* Seat editor (rotated toward its seat) */
 .seat-editor-backdrop { place-items: center; }
-.seat-editor-rot { transform: rotate(var(--rot)); }
+.seat-editor-rot {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(var(--rot));
+}
 .seat-editor {
   --pc: #E8564F; --pc-dark: #B33A34; --pc-tint: #FDE8E7;
   width: 33em;
@@ -815,6 +820,25 @@
 .se-color-holder > svg { width: 100%; height: 100%; }
 @keyframes pick-pop { 40% { transform: scale(1.1); } }
 .se-ctrl .seg-opt { font-size: 1em; }
+
+/* A rotated editor's width becomes its visual height for the east and west seats.
+   Keep that axis inside short landscape viewports without reducing the touch targets. */
+@media (max-height: 420px) {
+  .seat-editor {
+    box-sizing: border-box;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .seat-editor-rot.seat-E .seat-editor,
+  .seat-editor-rot.seat-W .seat-editor {
+    width: min(33em, calc(100vh - 32px));
+    max-height: none;
+    overflow-y: visible;
+  }
+  .seat-editor-rot.seat-E .se-colors,
+  .seat-editor-rot.seat-W .se-colors { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 
 /* =========================================================================================
    Rules

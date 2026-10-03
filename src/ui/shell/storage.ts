@@ -10,6 +10,7 @@ import { isNative, nativePreferences } from './capacitor';
 
 const memory = new Map<string, string>();
 const pending = new Map<string, string | null>();
+const revisions = new Map<string, number>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function ls(): Storage | null {
@@ -34,6 +35,7 @@ export function kvGet(key: string): string | null {
 }
 
 export function kvSet(key: string, value: string, opts: { debounceMs?: number } = {}): void {
+  revisions.set(key, (revisions.get(key) ?? 0) + 1);
   memory.set(key, value);
   const s = ls();
   if (s) {
@@ -47,6 +49,7 @@ export function kvSet(key: string, value: string, opts: { debounceMs?: number } 
 }
 
 export function kvRemove(key: string): void {
+  revisions.set(key, (revisions.get(key) ?? 0) + 1);
   memory.delete(key);
   const s = ls();
   if (s) {
@@ -87,14 +90,27 @@ export async function kvFlush(): Promise<void> {
 /** Restore keys that localStorage lost from the native store (boot, device only). */
 export async function kvHydrate(keys: string[]): Promise<void> {
   if (!isNative()) return;
+  // Capture this before waiting for the bridge: a newer write or removal must win over
+  // an older native value that is still being read.
+  const snapshots = new Map(keys.map((key) => [key, { missing: kvGet(key) === null, revision: revisions.get(key) ?? 0 }]));
   const prefs = await nativePreferences();
   if (!prefs) return;
   await Promise.all(
     keys.map(async (key) => {
-      if (kvGet(key) !== null) return;
+      const snapshot = snapshots.get(key);
+      if (
+        !snapshot?.missing ||
+        snapshot.revision !== (revisions.get(key) ?? 0) ||
+        kvGet(key) !== null
+      ) return;
       try {
         const { value } = await prefs.get({ key });
-        if (value !== null && value !== undefined) {
+        if (
+          value !== null &&
+          value !== undefined &&
+          snapshot.revision === (revisions.get(key) ?? 0) &&
+          kvGet(key) === null
+        ) {
           memory.set(key, value);
           const s = ls();
           try {
