@@ -418,6 +418,9 @@
   0%, 100% { opacity: 0; }
   35% { opacity: 1; }
 }
+.native-webview .stage-rot,
+.native-webview .st-prompt { will-change: auto; }
+.native-webview .roll-btn::before { content: none; animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .roll-btn::before { animation: none; }
 }

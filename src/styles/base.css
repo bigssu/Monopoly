@@ -115,6 +115,10 @@ h1, h2, h3, h4, .display, .num {
 /* Cloned nodes would restart their entry animations; freeze them in their final state. */
 .screen-ghost * { animation: none !important; transition: none !important; }
 
+/* Native WebView avoids the two full-screen compositor surfaces used by the web cross-fade. */
+.native-webview .screen,
+.native-webview .screen-ghost { animation: none; }
+
 @keyframes screen-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
 @keyframes screen-out { from { opacity: 1; } to { opacity: 0; transform: scale(1.015); } }
 

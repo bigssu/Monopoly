@@ -57,6 +57,7 @@
   pointer-events: none;
 }
 @keyframes lr-turnglow { 50% { opacity: 0.2; } }
+.native-webview .pp.is-turn:not(.is-cpu) .pp-card::before { animation: none; }
 
 .pp-head { display: flex; align-items: center; gap: 4cqmin; min-width: 0; }
 .pp-tokwrap { position: relative; flex: none; }

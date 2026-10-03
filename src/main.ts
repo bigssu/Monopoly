@@ -1,5 +1,5 @@
 /**
- * Lot & Roll — app boot: styles, strings, screens, audio/haptics, preferences, native bridges.
+ * Land Poly — app boot: styles, strings, screens, audio/haptics, preferences, native bridges.
  */
 import '@/styles/index.css';
 import '@/i18n/shell';
@@ -78,6 +78,9 @@ function hideSplash(): void {
 }
 
 async function boot(): Promise<void> {
+  // Android WebView can lose large persistent compositor layers on some GPUs. Keep the
+  // native-only compatibility styles in place before the first screen is mounted.
+  document.documentElement.classList.toggle('native-webview', isNative());
   // Device: restore anything the WebView evicted from localStorage (bounded wait).
   await withTimeout(kvHydrate([PREFS_KEY, SAVE_KEY, SAVE_BACKUP_KEY]), 800);
   prefs.reload();

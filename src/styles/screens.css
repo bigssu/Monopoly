@@ -200,6 +200,8 @@
   padding: max(12px, var(--safe-t)) max(12px, var(--safe-r)) max(12px, var(--safe-b)) max(12px, var(--safe-l));
   animation: screen-in var(--t-med) var(--ease-out) backwards;
 }
+.native-webview .rules-overlay,
+.native-webview .settings-overlay { animation: none; }
 
 /* Screen headers (rules/settings) */
 .shell-head, .rules-head, .settings-head {
@@ -326,6 +328,10 @@
 @keyframes logo-float { 50% { transform: translateY(-5%) rotate(-2deg); } }
 @keyframes shadow-breathe { 50% { transform: scale(.78); opacity: .6; } }
 @keyframes glow-pulse { 50% { opacity: .65; transform: scale(1.06); } }
+.native-webview .floaty,
+.native-webview .title-logo,
+.native-webview .title-logo-glow,
+.native-webview .title-logo-shadow { animation: none; }
 
 .title-words { display: flex; flex-direction: column; align-items: center; animation: words-in 600ms var(--ease-out) 120ms backwards; }
 @keyframes words-in { from { opacity: 0; transform: translateY(.8em); } }
