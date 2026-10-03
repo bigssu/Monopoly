@@ -13,12 +13,11 @@
   inset: 0;
   border-radius: calc(var(--u) * 0.6);
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 60%),
-    repeating-conic-gradient(from 0deg at 50% 50%, rgba(160, 113, 91, 0.045) 0deg 7.5deg, rgba(0, 0, 0, 0) 7.5deg 15deg),
-    #F7F0E1;
+    radial-gradient(circle at 50% 48%, rgba(81, 168, 160, 0.16), transparent 66%),
+    #0A3847;
   box-shadow:
-    inset 0 0 0 calc(var(--u) * 0.1) rgba(140, 111, 78, 0.28),
-    inset 0 calc(var(--u) * 0.25) calc(var(--u) * 1.4) rgba(120, 90, 60, 0.16);
+    inset 0 0 0 calc(var(--u) * 0.1) rgba(139, 208, 199, 0.22),
+    inset 0 calc(var(--u) * 0.25) calc(var(--u) * 1.4) rgba(2, 24, 33, 0.35);
 }
 
 .stage-rot {
@@ -74,7 +73,7 @@
   font-size: max(11px, calc(var(--u) * 0.58));
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #A08868;
+  color: #BCDAD6;
 }
 
 .st-rank {
@@ -83,10 +82,10 @@
   gap: calc(var(--u) * 0.3);
   padding: calc(var(--u) * 0.15) calc(var(--u) * 0.4);
   border-radius: var(--r-pill);
-  background: rgba(27, 36, 48, 0.08);
+  background: rgba(255, 255, 255, 0.1);
 }
 .st-rank.is-on { display: flex; }
-.st-rank .rk { display: inline-flex; align-items: center; gap: calc(var(--u) * 0.12); font-weight: 900; color: var(--ink-2); }
+.st-rank .rk { display: inline-flex; align-items: center; gap: calc(var(--u) * 0.12); font-weight: 900; color: #D9EAE8; }
 .st-rank .rk-tok { width: calc(var(--u) * 0.95); height: calc(var(--u) * 0.95); min-width: 16px; min-height: 16px; }
 .stage.has-big .st-rank { display: none; }
 
@@ -191,7 +190,7 @@
 .st-thinking {
   display: none;
   font-weight: 800;
-  color: var(--ink-3);
+  color: #C9DFDB;
 }
 .st-thinking.is-on { display: block; }
 @keyframes lr-blink { 50% { opacity: 0.4; } }
@@ -418,13 +417,11 @@
   0%, 100% { opacity: 0; }
   35% { opacity: 1; }
 }
-.native-webview .stage-rot,
-.native-webview .st-prompt { will-change: auto; }
 .native-webview .roll-btn::before { content: none; animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .roll-btn::before { animation: none; }
 }
-.roll-hint { font-size: max(12px, calc(var(--u) * 0.55)); color: #A08868; font-weight: 700; }
+.roll-hint { font-size: max(12px, calc(var(--u) * 0.55)); color: #BCDAD6; font-weight: 700; }
 .pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -0.6); top: auto; bottom: calc(var(--u) * 2.6); }
 
 /* Lists (festival / upgrade / debt) */

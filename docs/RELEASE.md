@@ -66,6 +66,11 @@ adb shell am start -n com.bigssu.lotandroll/.MainActivity
 ```
 
 웹 코드를 고칠 때마다 `npm run build && npx cap sync android` 를 다시 실행해야 앱에 반영됩니다.
+기기별 흰 화면 진단에는 `./gradlew clean assembleDebug -PsoftwareWebView=true`로 WebView
+소프트웨어 레이어 APK를 만들 수 있습니다. 일반 빌드는 이 옵션 없이 하드웨어 경로를 사용합니다.
+두 빌드 모두 Gradle 출력 이름이 `LandPoly-debug.apk`이므로, 소프트웨어판을
+`LandPoly-software-debug.apk`로 복사해 보관한 뒤 일반판을 빌드하세요.
+두 APK는 같은 앱 ID와 Debug 서명이므로 설치 전에 필요한 진행 상황을 저장하세요.
 
 ---
 

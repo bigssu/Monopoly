@@ -11,7 +11,7 @@ test('native WebView mode avoids full-screen navigation layers', async ({ page }
   await expect(page.locator('.screen-ghost')).toHaveCount(0);
 });
 
-test('native WebView mode keeps Roll usable without persistent stage layers', async ({ page }) => {
+test('native WebView mode keeps Roll usable without its repeating pulse', async ({ page }) => {
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   await page.evaluate(() => {
@@ -23,8 +23,7 @@ test('native WebView mode keeps Roll usable without persistent stage layers', as
   });
   const roll = page.locator('.roll-btn');
   await expect(roll).toBeVisible();
-  await expect(page.locator('.stage-rot')).toHaveCSS('will-change', 'auto');
-  await expect(page.locator('.st-prompt')).toHaveCSS('will-change', 'auto');
+  await expect(page.locator('.stage-bg')).toHaveCSS('background-color', 'rgb(10, 56, 71)');
   expect(await roll.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');
   const panel = page.locator('.pp.is-turn:not(.is-cpu) .pp-card').first();
   expect(await panel.evaluate((el) => getComputedStyle(el, '::before').animationName)).toBe('none');

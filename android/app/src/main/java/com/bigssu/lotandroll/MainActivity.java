@@ -27,14 +27,22 @@ public class MainActivity extends BridgeActivity {
   public void onCreate(Bundle savedInstanceState) {
     registerPlugin(FrameRatePlugin.class);
     super.onCreate(savedInstanceState);
-    // Match the felt behind web content, including frames before WebView has painted.
-    if (getBridge() != null && getBridge().getWebView() != null) {
-      getBridge().getWebView().setBackgroundColor(getColor(R.color.table_bg));
-    }
     WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     hideSystemBars();
     requestLowRefreshRate();
+  }
+
+  @Override
+  protected void load() {
+    // The WebView is inflated before BridgeActivity calls load(). A debug build can select
+    // software View drawing to isolate device-specific compositor corruption.
+    View webView = findViewById(com.getcapacitor.android.R.id.webview);
+    if (webView != null) {
+      if (BuildConfig.SOFTWARE_WEBVIEW) webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+      webView.setBackgroundColor(getColor(R.color.table_bg));
+    }
+    super.load();
   }
 
   @Override
