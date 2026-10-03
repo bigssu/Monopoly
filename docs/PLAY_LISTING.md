@@ -7,8 +7,9 @@ Play Console 기본 스토어 등록정보를 위한 문구와 에셋 초안입�
 > **IP 주의 (필수)**: 제목, 설명, 태그, 스크린샷, 피처 그래픽 어디에도 Monopoly, 모노폴리, 부루마블/부루마불, 블루마블,
 > 모두의마블, 마블, 황금열쇠, Chance, Community Chest, "Go", "Free Parking", "~ 같은 게임", "~ 대체" 같은 타사 명칭이나 비교 표현을 쓰지 않습니다.
 > 게임 내 기능명 "명소" 를 "랜드마크" 로 바꿔 쓰지 마세요. (`docs/research/02-ip-licensing-research.md` 4.6, `docs/DESIGN.md` C1)
-> **게시 전 확인:** 사용자 제공 아이콘의 실크해트·콧수염 캐릭터와 `GO` 칸은 기존 게임을 연상시킵니다.
+> **게시 전 확인:** 콧수염을 지운 뒤에도 아이콘의 실크해트·정장 캐릭터와 `GO` 칸은 기존 게임을 연상시킵니다.
 > [Google Play 사칭 정책](https://support.google.com/googleplay/android-developer/answer/9888374?hl=en)에 따라 권리와 오인 가능성을 확인하거나 아이콘을 교체한 뒤 제출하세요.
+> [지식재산권 정책](https://support.google.com/googleplay/android-developer/answer/9888072?hl=en)은 저작물 일부를 수정해도 위반이 될 수 있다고 설명합니다. 원본 이미지의 사용 권리도 확인해야 합니다.
 
 ---
 

@@ -22,7 +22,7 @@ Capacitor; also runs in any modern browser.
 
 | # | Constraint |
 |---|-----------|
-| C1 | Keep in-game names and art independent of Monopoly / 부루마블 / 모두의마블 (see `docs/research/02-ip-licensing-research.md`). The owner-supplied launcher image depicts a top-hat tycoon and a GO board space; clear its rights and risk of confusing store users before submission. |
+| C1 | Keep in-game names and art independent of Monopoly / 부루마블 / 모두의마블 (see `docs/research/02-ip-licensing-research.md`). Removing the moustache from the supplied launcher image does not resolve its top-hat character and GO board-space resemblance; clear rights and confusion risk before store submission. |
 | C2 | 100% offline. No network calls, no analytics, no ads, no accounts. |
 | C3 | Single device, landscape only, tablet-first (primary target 10–13" Android tablets, 4:3 to 16:10). Must still be usable on a 7" tablet and a phone in landscape (min 640×360 CSS px). |
 | C4 | In-game art = inline SVG / CSS authored in this repo. The 256px launcher bitmap is owner-supplied with rights pending verification. Fonts = SIL OFL fonts vendored in `public/fonts`. Audio = synthesized at runtime. |
