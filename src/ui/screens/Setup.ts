@@ -125,8 +125,15 @@ registerScreen('setup', (root) => {
   root.append(screen);
 
   function renderAll(): void {
+    const active = document.activeElement instanceof HTMLElement && screen.contains(document.activeElement)
+      ? document.activeElement.closest<HTMLElement>('[data-focus-key]')?.dataset.focusKey
+      : undefined;
     screen.innerHTML = '';
     screen.append(h('div', { class: 'setup-body safe-pad' }, renderTable(), renderSide()));
+    if (active) {
+      const target = screen.querySelector<HTMLElement>(`[data-focus-key="${active}"]`);
+      (target?.querySelector<HTMLElement>('[aria-checked="true"]') ?? target)?.focus();
+    }
     intro = false;
   }
 
@@ -169,7 +176,7 @@ registerScreen('setup', (root) => {
     if (!s.on) {
       const join = h(
         'button',
-        { type: 'button', class: 'seat-card seat-join', 'aria-label': `${t('setup.join')} · ${t('setup.seatOf', { seat: t(`setup.seat.${seat}`) })}` },
+        { type: 'button', class: 'seat-card seat-join', 'aria-label': `${t('setup.join')} · ${t('setup.seatOf', { seat: t(`setup.seat.${seat}`) })}`, 'data-focus-key': `seat-${seat}` },
         h('span', { class: 'seat-join-plus' }, ico('plus')),
         h('span', { class: 'seat-join-text' }, h('span', { class: 'seat-join-title display' }, t('setup.join')), h('span', { class: 'seat-join-sub' }, t('setup.seatOf', { seat: t(`setup.seat.${seat}`) }))),
       );
@@ -189,6 +196,7 @@ registerScreen('setup', (root) => {
         class: 'seat-card seat-player',
         ...colorVars(s.colorId),
         'aria-label': `${seatName(draft, seat)} · ${t('setup.edit')}`,
+        'data-focus-key': `seat-${seat}`,
       },
       tokenAvatar(s.tokenId, s.colorId, 'seat-avatar'),
       h(
@@ -232,7 +240,7 @@ registerScreen('setup', (root) => {
 
       const nameBtn = h(
         'button',
-        { type: 'button', class: 'se-name', 'aria-label': t('setup.rename') },
+        { type: 'button', class: 'se-name', 'aria-label': t('setup.rename'), 'data-focus-key': 'name' },
         h('span', { class: 'se-name-text display' }, seatName(draft, seat)),
         h('span', { class: 'se-name-hint' }, t('setup.rename')),
       );
@@ -249,6 +257,7 @@ registerScreen('setup', (root) => {
         save();
         renderPanel();
         renderAll();
+        panel.querySelector<HTMLElement>('[data-focus-key="name"]')?.focus();
       });
       const done = h('button', { type: 'button', class: 'btn btn-primary se-done' }, ico('check'), t('shell.done'));
       onTap(done, () => closeEditor?.());
@@ -264,6 +273,7 @@ registerScreen('setup', (root) => {
           'aria-checked': String(s.tokenId === id),
           'aria-label': id,
           'data-token': id,
+          tabindex: s.tokenId === id ? '0' : '-1',
         });
         b.innerHTML = icon(id);
         if (holder) b.append(h('span', { class: 'se-taken', ...colorVars(draft.seats[holder].colorId) }));
@@ -272,6 +282,7 @@ registerScreen('setup', (root) => {
           save();
           renderPanel();
           renderAll();
+          panel.querySelector<HTMLButtonElement>(`[data-token="${id}"]`)?.focus();
         }, { haptic: 'tick' });
         tokens.append(b);
       }
@@ -287,6 +298,7 @@ registerScreen('setup', (root) => {
           'aria-checked': String(s.colorId === c.id),
           'aria-label': c.id,
           'data-color': c.id,
+          tabindex: s.colorId === c.id ? '0' : '-1',
           ...colorVars(c.id),
         });
         if (s.colorId === c.id) b.append(ico('check', 'se-color-check'));
@@ -300,9 +312,24 @@ registerScreen('setup', (root) => {
           save();
           renderPanel();
           renderAll();
+          panel.querySelector<HTMLButtonElement>(`[data-color="${c.id}"]`)?.focus();
         }, { haptic: 'tick' });
         colors.append(b);
       }
+
+      const addRadioKeys = (group: HTMLElement) => {
+        const buttons = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+        buttons.forEach((button, i) => button.addEventListener('keydown', (event) => {
+          const keys: Record<string, number> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1, Home: -Infinity, End: Infinity };
+          if (!(event.key in keys)) return;
+          event.preventDefault();
+          const step = keys[event.key]!;
+          const next = step === -Infinity ? 0 : step === Infinity ? buttons.length - 1 : (i + step + buttons.length) % buttons.length;
+          buttons[next]!.click();
+        }));
+      };
+      addRadioKeys(tokens);
+      addRadioKeys(colors);
 
       const ctrl = segmented<Controller>(
         [
@@ -316,7 +343,7 @@ registerScreen('setup', (root) => {
           save();
           renderAll();
         },
-        { label: t('setup.controller'), cls: 'se-ctrl' },
+        { label: t('setup.controller'), cls: 'se-ctrl', focusKey: 'controller' },
       );
 
       panel.append(
@@ -370,7 +397,7 @@ registerScreen('setup', (root) => {
             save();
             renderAll();
           },
-          { label: t('setup.spacesPerSide') },
+          { label: t('setup.spacesPerSide'), focusKey: 'spaces' },
         ),
       ),
       row(
@@ -383,7 +410,7 @@ registerScreen('setup', (root) => {
             draft.roundLimit = v;
             save();
           },
-          { label: t('setup.rounds'), cls: 'seg-rounds' },
+          { label: t('setup.rounds'), cls: 'seg-rounds', focusKey: 'rounds' },
         ),
       ),
       row(
@@ -396,7 +423,7 @@ registerScreen('setup', (root) => {
             draft.startCash = v;
             save();
           },
-          { label: t('setup.cash') },
+          { label: t('setup.cash'), focusKey: 'cash' },
         ),
       ),
       row(
@@ -410,7 +437,7 @@ registerScreen('setup', (root) => {
             prefs.set({ promptTimer: v });
             save();
           },
-          { label: t('setup.timer') },
+          { label: t('setup.timer'), focusKey: 'timer' },
         ),
       ),
       h(
@@ -455,7 +482,7 @@ registerScreen('setup', (root) => {
     }, { sound: null, haptic: 'medium' });
     const start = h(
       'button',
-      { type: 'button', class: 'btn btn-primary btn-xl setup-start', 'data-action': 'start', 'aria-disabled': String(!!problem) },
+      { type: 'button', class: 'btn btn-primary btn-xl setup-start', 'data-action': 'start', disabled: !!problem, 'aria-describedby': 'setup-start-note' },
       ico('play'),
       h('span', null, t('setup.start')),
     );
@@ -494,7 +521,7 @@ registerScreen('setup', (root) => {
       head,
       opts,
       order,
-      h('div', { class: 'setup-foot' }, h('p', { class: 'setup-note' }, ico('rotate'), problem ? t(problem) : t('setup.randomStart')), addAi, start),
+      h('div', { class: 'setup-foot' }, h('p', { class: 'setup-note', id: 'setup-start-note', role: 'status' }, ico('rotate'), problem ? t(problem) : t('setup.randomStart')), addAi, start),
     );
   }
 

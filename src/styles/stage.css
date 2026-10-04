@@ -670,7 +670,7 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
   border-top: calc(var(--u) * 0.32) solid var(--accent, var(--ink-3));
   box-shadow: var(--sh-3);
 }
-.info-close { text-align: center; color: var(--ink-3); font-size: 0.85em; font-weight: 700; }
+.info-close { align-self: center; min-width: 48px; min-height: 48px; padding: 0 .8em; border-radius: var(--r-sm); text-align: center; color: var(--ink-2); font-size: 0.85em; font-weight: 700; background: var(--bg-panel-dim); }
 
 /* Non-blocking notices under the turn banner (auto-pick when the soft timer runs out). */
 .st-notices { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 0.2); }

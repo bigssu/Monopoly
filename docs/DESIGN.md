@@ -4,9 +4,9 @@
 > `com.bigssu.lotandroll` so installed games and saves retain their identity. Name and supplied
 > launcher-art rights still need clearance before a store release.
 
-> Status: v1 (authored by the planning model). This is the single source of truth for all
-> implementation agents. If something here conflicts with code, fix the code (or update this
-> doc *and* say why in the commit message).
+> Status: v1 game rules and content specification. Root [`DESIGN.md`](../DESIGN.md) governs current
+> UI/UX, accessibility, and responsive decisions. When either document conflicts with verified
+> implementation, update the relevant contract and explain the change in the commit.
 
 ## 0. One-paragraph pitch
 

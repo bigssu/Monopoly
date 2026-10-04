@@ -742,7 +742,7 @@
 }
 .setup-note .ico { width: 1.1em; height: 1.1em; color: var(--gold); }
 .setup-start { width: 100%; }
-.setup-start[aria-disabled='true'] { filter: saturate(.3) brightness(.85); }
+.setup-start:disabled { filter: saturate(.3) brightness(.85); }
 
 /* Seat editor (rotated toward its seat) */
 .seat-editor-backdrop { place-items: center; }

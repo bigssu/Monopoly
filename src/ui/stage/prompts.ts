@@ -603,7 +603,7 @@ export function buildPromptFor(ctx: PromptCtx): PromptResult | null {
 
 export function spaceInfo(state: GameState, i: number): HTMLElement {
   const sp = boardOf(state).board[i]!;
-  const el = h('div', { class: 'info-card' });
+  const el = h('div', { class: 'info-card', role: 'dialog', 'aria-label': loc(sp.name), tabindex: '-1' });
   const accent = groupColor(sp);
   if (accent) el.style.setProperty('--accent', accent);
   el.append(
@@ -642,6 +642,6 @@ export function spaceInfo(state: GameState, i: number): HTMLElement {
   } else {
     el.append(h('div', { class: 'pc-note', text: t(`g.info.${sp.kind}`, { pot: state.pot.toLocaleString() }) }));
   }
-  el.append(h('div', { class: 'info-close', text: t('g.tapToClose') }));
+  el.append(h('button', { class: 'info-close', type: 'button', 'data-action': 'close-info', text: t('shell.close') }));
   return el;
 }

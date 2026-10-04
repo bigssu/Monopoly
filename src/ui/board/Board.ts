@@ -448,6 +448,7 @@ export class Board {
   private baseTimer = 0;
   private sized = false;
   private lastVs: GameState | null = null;
+  private a11yLang = '';
   private disposed = false;
   private readonly size: SpacesPerSide;
   private readonly board: readonly SpaceDef[];
@@ -475,16 +476,20 @@ export class Board {
       this.groups.push(grp);
       this.sigs.push('');
     }
+    this.updateSpaceAccessibility();
     this.svgEl.addEventListener('click', (e) => {
       const g = (e.target as Element).closest?.('g.sp');
       if (!g) return;
       const i = Number(g.getAttribute('data-i'));
-      if (this.pickHandler && this.pickSet.has(i)) {
-        sfx.play('tap');
-        this.pickHandler(i);
-        return;
-      }
-      this.onTap(i);
+      (g as SVGGElement).focus();
+      this.activateSpace(i);
+    });
+    this.svgEl.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const g = (e.target as Element).closest?.('g.sp');
+      if (!g) return;
+      e.preventDefault();
+      this.activateSpace(Number(g.getAttribute('data-i')));
     });
     this.stageHost = h('div', { class: 'stage-host' });
     this.marks = h('div', { class: 'board-marks' });
@@ -508,6 +513,31 @@ export class Board {
       for (const tk of this.tokens.values()) this.setTokenXY(tk, tk.x, tk.y);
     }
     this.ensureBase();
+  }
+
+  /** Make the visually-rasterized board ring keyboard and screen-reader accessible. */
+  private updateSpaceAccessibility(force = false): void {
+    const lang = getLang();
+    if (!force && lang === this.a11yLang) return;
+    this.a11yLang = lang;
+    for (let i = 0; i < this.board.length; i++) {
+      const grp = this.groups[i]!;
+      grp.setAttribute('tabindex', '0');
+      grp.setAttribute('role', 'button');
+      const picking = !!this.pickHandler && this.pickSet.has(i);
+      if (picking) grp.removeAttribute('aria-haspopup');
+      else grp.setAttribute('aria-haspopup', 'dialog');
+      grp.setAttribute('aria-label', t(picking ? 'g.board.pick' : 'g.board.info', { name: loc(this.board[i]!.name) }));
+    }
+  }
+
+  private activateSpace(i: number): void {
+    if (this.pickHandler && this.pickSet.has(i)) {
+      sfx.play('tap');
+      this.pickHandler(i);
+      return;
+    }
+    this.onTap(i);
   }
 
   dispose(): void {
@@ -597,6 +627,7 @@ export class Board {
 
   render(vs: GameState): void {
     this.lastVs = vs;
+    this.updateSpaceAccessibility();
     const based = !!this.baseImg;
     const rings = new Map<number, string>();
     for (const w of oneAwayWarnings(vs)) {
@@ -740,6 +771,7 @@ export class Board {
     this.pickHandler = options ? (onPick ?? null) : null;
     this.el.classList.toggle('is-picking', !!options);
     this.groups.forEach((g, i) => g.classList.toggle('is-pick', this.pickSet.has(i)));
+    this.updateSpaceAccessibility(true);
     for (const el of this.pickEls) el.remove();
     this.pickEls = [];
     if (options) {

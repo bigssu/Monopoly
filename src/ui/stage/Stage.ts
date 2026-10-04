@@ -39,6 +39,7 @@ export class Stage {
   private stopFit: (() => void) | null = null;
   private fitRo: ResizeObserver | null = null;
   private cardDone: (() => void) | null = null;
+  private infoInvoker: HTMLElement | SVGElement | null = null;
 
   constructor() {
     this.dice = new Dice();
@@ -56,6 +57,12 @@ export class Stage {
     this.rot = h('div', { class: 'stage-rot' }, top, this.rankStrip, diceWrap, this.promptSlot, this.toastLayer, this.popLayer);
     this.el = h('div', { class: 'stage' }, h('div', { class: 'stage-bg' }), this.rot);
     this.popLayer.addEventListener('click', () => this.hideInfo());
+    this.popLayer.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.hideInfo();
+      }
+    });
   }
 
   get currentSeat(): Seat {
@@ -320,11 +327,15 @@ export class Stage {
     card.remove();
   }
 
-  /** Space info popover (tap anywhere to close). */
+  /** Space info dialog. Backdrop, close control, and Escape all return focus to the board space. */
   showInfo(content: HTMLElement): void {
+    const active = document.activeElement;
+    this.infoInvoker = active instanceof HTMLElement || active instanceof SVGElement ? active : null;
     this.popLayer.innerHTML = '';
     this.popLayer.append(content);
     this.popLayer.classList.add('is-on');
+    this.promptSlot.inert = true;
+    content.focus({ preventScroll: true });
     void anim(content, [{ transform: 'scale(.85)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
       duration: 220,
       easing: 'cubic-bezier(.34,1.56,.64,1)',
@@ -334,6 +345,10 @@ export class Stage {
   hideInfo(): void {
     this.popLayer.classList.remove('is-on');
     this.popLayer.innerHTML = '';
+    this.promptSlot.inert = false;
+    const invoker = this.infoInvoker;
+    this.infoInvoker = null;
+    if (invoker?.isConnected) invoker.focus({ preventScroll: true });
   }
 
   /** Paid-toll card: payer → owner, auto-dismisses. */

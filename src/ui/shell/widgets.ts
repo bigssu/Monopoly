@@ -16,13 +16,24 @@ export function segmented<T>(
   options: SegOption<T>[],
   current: T,
   onChange: (v: T) => void,
-  opts: { label?: string; cls?: string } = {},
+  opts: { label?: string; cls?: string; focusKey?: string } = {},
 ): HTMLElement {
-  const root = h('div', { class: `seg ${opts.cls ?? ''}`.trim(), role: 'radiogroup', 'aria-label': opts.label });
+  const root = h('div', { class: `seg ${opts.cls ?? ''}`.trim(), role: 'radiogroup', 'aria-label': opts.label, 'data-focus-key': opts.focusKey });
   root.style.setProperty('--n', String(options.length));
   const idx = Math.max(0, options.findIndex((o) => o.value === current));
   root.style.setProperty('--i', String(idx));
   root.append(h('span', { class: 'seg-thumb', 'aria-hidden': 'true' }));
+  const select = (i: number, focus = false) => {
+    if (i === Number(root.style.getPropertyValue('--i'))) return;
+    root.style.setProperty('--i', String(i));
+    root.querySelectorAll<HTMLButtonElement>('.seg-opt').forEach((x, j) => {
+      const checked = j === i;
+      x.setAttribute('aria-checked', String(checked));
+      x.tabIndex = checked ? 0 : -1;
+      if (checked && focus) x.focus();
+    });
+    onChange(options[i]!.value);
+  };
   options.forEach((o, i) => {
     const b = h(
       'button',
@@ -32,15 +43,21 @@ export function segmented<T>(
         role: 'radio',
         'aria-checked': String(i === idx),
         'aria-label': o.aria,
+        tabindex: i === idx ? '0' : '-1',
       },
       o.label,
     );
     onTap(b, () => {
-      if (root.style.getPropertyValue('--i') === String(i)) return;
-      root.style.setProperty('--i', String(i));
-      root.querySelectorAll('.seg-opt').forEach((x, j) => x.setAttribute('aria-checked', String(j === i)));
-      onChange(o.value);
+      select(i);
     }, { haptic: 'tick' });
+    b.addEventListener('keydown', (event) => {
+      const keys: Record<string, number> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1, Home: -Infinity, End: Infinity };
+      if (!(event.key in keys)) return;
+      event.preventDefault();
+      const step = keys[event.key]!;
+      const next = step === -Infinity ? 0 : step === Infinity ? options.length - 1 : (i + step + options.length) % options.length;
+      select(next, true);
+    });
     root.append(b);
   });
   return root;

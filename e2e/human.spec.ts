@@ -543,7 +543,8 @@ test.describe('human play (clicking real controls)', () => {
     await boot(page);
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(0);
-      window.__lotAndRoll!.setPromptTimer(2);
+      // Leave ample time for loadState and the first prompt to settle before simulating pause.
+      window.__lotAndRoll!.setPromptTimer(30);
     });
     await loadCrafted(page, { players: 2 }, `s.testHooks = { diceQueue: [[1, 3], [2, 4], [3, 5]] };`);
     const setHidden = (hidden: boolean) =>
@@ -555,6 +556,7 @@ test.describe('human play (clicking real controls)', () => {
 
     // App in the background: the 2 s timer must not roll for the absent player…
     await setHidden(true);
+    await page.evaluate(() => window.__lotAndRoll!.setPromptTimer(2));
     await page.waitForTimeout(3000);
     expect((await getState(page)).lastDice).toBeNull();
     // …and runs again (fresh ring) once the app is back.

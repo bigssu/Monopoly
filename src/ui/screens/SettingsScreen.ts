@@ -59,6 +59,9 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
   host.append(wrap);
 
   const render = () => {
+    const active = document.activeElement instanceof HTMLElement && wrap.contains(document.activeElement)
+      ? document.activeElement.closest<HTMLElement>('[data-focus-key]')?.dataset.focusKey
+      : undefined;
     const p = prefs.get();
     wrap.innerHTML = '';
 
@@ -69,7 +72,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       ],
       getLang(),
       (v) => prefs.set({ lang: v }),
-      { label: t('settings.language') },
+      { label: t('settings.language'), focusKey: 'language' },
     );
 
     const volume = h('input', {
@@ -110,14 +113,14 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       ],
       p.fxQuality,
       (v) => prefs.set({ fxQuality: v }),
-      { label: t('settings.fx') },
+      { label: t('settings.fx'), focusKey: 'effects' },
     );
 
     const timer = segmented(
       [0, 15, 30].map((v) => ({ value: v as 0 | 15 | 30, label: v === 0 ? t('setup.timerOff') : t('setup.seconds', { n: v }) })),
       p.promptTimer,
       (v) => prefs.set({ promptTimer: v }),
-      { label: t('settings.timer') },
+      { label: t('settings.timer'), focusKey: 'timer' },
     );
 
     const general = h(
@@ -175,6 +178,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       h('header', { class: 'settings-head' }, iconButton('chevron-left', t('shell.back'), onClose), h('h1', { class: 'settings-title' }, ico('settings'), t('settings.title'))),
       h('div', { class: 'settings-body' }, h('div', { class: 'settings-col' }, general), h('div', { class: 'settings-col' }, data, about)),
     );
+    if (active) wrap.querySelector<HTMLElement>(`[data-focus-key="${active}"] [aria-checked="true"]`)?.focus();
   };
 
   render();

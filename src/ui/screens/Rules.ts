@@ -236,6 +236,7 @@ export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0
   host.append(wrap);
 
   const render = () => {
+    const active = document.activeElement instanceof HTMLElement && wrap.contains(document.activeElement) ? document.activeElement.dataset.focusKey : undefined;
     wrap.innerHTML = '';
     const counter = h('span', { class: 'rules-counter num' });
     const head = h(
@@ -246,15 +247,24 @@ export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0
       counter,
     );
     const track = h('div', { class: 'rules-track' });
-    PAGES.forEach((p, i) => track.append(h('section', { class: 'rp', 'data-page': p.id, 'aria-hidden': 'true', '--p': String(i) }, p.build())));
+    PAGES.forEach((p, i) => track.append(h('section', { class: 'rp', role: 'tabpanel', id: `rules-panel-${p.id}`, 'aria-labelledby': `rules-tab-${p.id}`, 'data-page': p.id, 'aria-hidden': 'true', inert: true, '--p': String(i) }, p.build())));
     const viewport = h('div', { class: 'rules-viewport' }, track);
 
     const prev = h('button', { type: 'button', class: 'btn btn-ghost rules-prev', 'data-action': 'prev' }, ico('chevron-left'), h('span', null, t('rules.prev')));
     const next = h('button', { type: 'button', class: 'btn btn-primary rules-next', 'data-action': 'next' });
     const dots = h('div', { class: 'rules-dots', role: 'tablist' });
     PAGES.forEach((p, i) => {
-      const d = h('button', { type: 'button', class: 'rules-dot', role: 'tab', 'aria-label': t('rules.page', { n: i + 1, total: PAGES.length }), 'data-page': p.id });
+      const d = h('button', { type: 'button', class: 'rules-dot', role: 'tab', id: `rules-tab-${p.id}`, 'aria-controls': `rules-panel-${p.id}`, 'aria-label': t('rules.page', { n: i + 1, total: PAGES.length }), 'data-page': p.id, 'data-focus-key': `tab-${p.id}` });
       onTap(d, () => setPage(i), { haptic: 'tick' });
+      d.addEventListener('keydown', (event) => {
+        const keys: Record<string, number> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1, Home: -Infinity, End: Infinity };
+        if (!(event.key in keys)) return;
+        event.preventDefault();
+        const step = keys[event.key]!;
+        const nextPage = step === -Infinity ? 0 : step === Infinity ? PAGES.length - 1 : (i + step + PAGES.length) % PAGES.length;
+        setPage(nextPage);
+        dots.querySelectorAll<HTMLButtonElement>('.rules-dot')[nextPage]!.focus();
+      });
       dots.append(d);
     });
 
@@ -266,9 +276,14 @@ export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0
       track.style.transform = `translate3d(${-page * 100}%,0,0)`;
       track.querySelectorAll('.rp').forEach((el, j) => {
         el.setAttribute('aria-hidden', String(j !== page));
+        el.toggleAttribute('inert', j !== page);
         el.classList.toggle('is-active', j === page);
       });
-      dots.querySelectorAll('.rules-dot').forEach((el, j) => el.setAttribute('aria-selected', String(j === page)));
+      dots.querySelectorAll<HTMLButtonElement>('.rules-dot').forEach((el, j) => {
+        const selected = j === page;
+        el.setAttribute('aria-selected', String(selected));
+        el.tabIndex = selected ? 0 : -1;
+      });
       counter.textContent = t('rules.page', { n: page + 1, total: PAGES.length });
       prev.disabled = page === 0;
       const last = page === PAGES.length - 1;
@@ -322,9 +337,12 @@ export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0
 
     wrap.append(head, viewport, h('footer', { class: 'rules-foot' }, prev, dots, next));
     setPage(page);
+    if (active) wrap.querySelector<HTMLElement>(`[data-focus-key="${active}"]`)?.focus();
   };
 
   const onKey = (e: KeyboardEvent) => {
+    if (!(e.target instanceof Node) || !wrap.contains(e.target)) return;
+    if ((e.target as HTMLElement).closest('[role="tablist"]')) return;
     if (e.key === 'ArrowRight') wrap.querySelector<HTMLButtonElement>('.rules-next')?.click();
     if (e.key === 'ArrowLeft') wrap.querySelector<HTMLButtonElement>('.rules-prev:not(:disabled)')?.click();
   };
