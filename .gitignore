@@ -36,3 +36,7 @@ Thumbs.db
 *.log
 npm-debug.log*
 android/keystore.properties
+
+# Generator raw caches (scripts/dealer, scripts/sound)
+scripts/dealer/.cache/
+scripts/sound/.cache/
