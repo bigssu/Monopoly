@@ -49,6 +49,20 @@ android {
         variant.outputs.all { output ->
             output.outputFileName = "LandPoly-${variant.buildType.name}.apk"
         }
+        // Optional, per machine: copy every built APK to a folder named by the Gradle property
+        // `landPolyApkCopyDir` (set it in ~/.gradle/gradle.properties; never committed).
+        def copyDir = project.findProperty('landPolyApkCopyDir')
+        if (copyDir) {
+            variant.assembleProvider.configure { task ->
+                task.doLast {
+                    project.copy {
+                        from(variant.outputs.collect { it.outputFile })
+                        into(copyDir)
+                    }
+                    logger.lifecycle("APK copied to ${copyDir}")
+                }
+            }
+        }
     }
 }
 
