@@ -100,7 +100,13 @@ async function raw(dir, id, prompt, make) {
   return mp3;
 }
 
-const ffmpeg = (a) => execFileSync('ffmpeg', ['-v', 'error', '-y', ...a]);
+// Byte-identical output for identical input; write to a temp file, then rename (no partial files).
+const EXACT = ['-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-serial_offset', '1'];
+const ffmpeg = (a) => {
+  const dest = a[a.length - 1];
+  execFileSync('ffmpeg', ['-v', 'error', '-y', ...a.slice(0, -1), ...EXACT, `${dest}.tmp.ogg`]);
+  renameSync(`${dest}.tmp.ogg`, dest);
+};
 
 /** Peak level of a file in dBFS (ffmpeg volumedetect reports on stderr). */
 function peakDb(file) {

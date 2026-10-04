@@ -37,7 +37,11 @@ const lines = JSON.parse(json);
 mkdirSync(CACHE, { recursive: true });
 mkdirSync(OUT, { recursive: true });
 
-const todo = lines.filter((l) => force || !existsSync(join(CACHE, `${l.id}.mp3`)) || readFileSync(join(CACHE, `${l.id}.txt`), 'utf8') !== l.ko);
+const cachedText = (id) => {
+  const f = join(CACHE, `${id}.txt`);
+  return existsSync(f) ? readFileSync(f, 'utf8') : null;
+};
+const todo = lines.filter((l) => force || !existsSync(join(CACHE, `${l.id}.mp3`)) || cachedText(l.id) !== l.ko);
 console.log(`${lines.length} lines, ${todo.length} to generate (${todo.reduce((a, l) => a + l.ko.length, 0)} chars)`);
 if (dry) process.exit(0);
 
@@ -74,13 +78,26 @@ await Promise.all(
 if (todo.length) process.stdout.write('\n');
 
 // Transcode every line (cheap) so encoder settings stay uniform; trim leading/trailing silence.
-const TRIM = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.08,areverse';
+// Trim leading/trailing silence, then even out loudness so every line sits at the same level.
+const TRIM = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.08,areverse,loudnorm=I=-18:TP=-1.5:LRA=11';
+/** Encoder settings; part of the stamp so a settings change re-encodes everything once. */
+const ENCODE = ['-ac', '1', '-ar', '24000', '-c:a', 'libopus', '-b:a', '20k', '-application', 'voip'];
+// Byte-identical output for identical input: no encoder/version metadata, no random stream serial.
+const EXACT = ['-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-serial_offset', '1'];
+const STAMP_OF = (l) => `${l.ko}
+${TRIM}
+${ENCODE.join(' ')}`;
 const manifest = {};
 let bytes = 0;
 for (const l of lines) {
   const out = join(OUT, `${l.id}.ogg`);
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(CACHE, `${l.id}.mp3`), '-af', TRIM, '-ac', '1', '-ar', '24000', '-c:a', 'libopus', '-b:a', '20k', '-application', 'voip', `${out}.tmp.ogg`]);
-  renameSync(`${out}.tmp.ogg`, out);
+  const stamp = join(CACHE, `${l.id}.stamp`);
+  // Re-encode only when the raw or the settings changed (keeps the shipped files byte-stable).
+  if (!existsSync(out) || !existsSync(stamp) || readFileSync(stamp, 'utf8') !== STAMP_OF(l)) {
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(CACHE, `${l.id}.mp3`), '-af', TRIM, ...ENCODE, ...EXACT, `${out}.tmp.ogg`]);
+    renameSync(`${out}.tmp.ogg`, out);
+    writeFileSync(stamp, STAMP_OF(l));
+  }
   const sec = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out], { encoding: 'utf8' }).trim());
   manifest[l.id] = Math.round(sec * 1000);
   bytes += readFileSync(out).length;
