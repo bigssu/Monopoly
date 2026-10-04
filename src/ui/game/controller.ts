@@ -19,7 +19,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, D, endSkip, frame, gamePace, instant, onFrame, skip } from '@/ui/fx/time';
+import { animSpeed, endSkip, frame, gamePace, instant, onFrame, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -205,7 +205,8 @@ export class GameController {
     if (p.isCpu) {
       stage.setThinking(s.phase.kind !== 'preRoll');
       const base = s.phase.kind === 'preRoll' ? 600 + Math.random() * 300 : 700 + Math.random() * 400;
-      const delay = instant() || animSpeed() === 0 ? 0 : D(base * gamePace());
+      // Not `D()`: under reduced motion the CPU still takes its time, so its turn can be followed.
+      const delay = animSpeed() === 0 ? 0 : (base * gamePace()) / animSpeed();
       const snapshot = s;
       // A plain timeout, not a grid one: the CPU policy and `reduce` stay out of the animation
       // frame (dispatch's deferPlay puts the first DOM change on the next grid frame instead).

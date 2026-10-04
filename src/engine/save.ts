@@ -127,7 +127,9 @@ function validatePhase(value: unknown, boardSize: number, propertyIndices: reado
         (value.highBid === null || integer(value.highBid, 0)) && (value.highBidderId === null || playerId(value.highBidderId, playerCount)) &&
         integer(value.minBid, 0) && integer(value.increment, 1);
     case 'doubleUp':
-      return prompt() && integer(value.stake, 1) && integer(value.wins, 0) && value.wins < ECONOMY.doubleUpMaxWins;
+      return prompt() && integer(value.stake, 1) && integer(value.wins, 0) && value.wins < ECONOMY.doubleUpMaxWins && integer(value.shown, 1) && value.shown <= 6;
+    case 'target':
+      return prompt() && value.card === 'typhoon' && options(value.options, boardSize) && value.options.length > 0 && value.options.every((index) => cityIndices.includes(index));
     case 'cardChoice':
       return prompt() && Array.isArray(value.options) && value.options.length === 2 && value.options[0] !== value.options[1] &&
         value.options.every((id) => CARDS.some((c) => c.id === id));
@@ -149,6 +151,16 @@ function sameNumbers(a: readonly number[], b: readonly number[]): boolean {
 }
 
 /** Validate phase values against the loaded state before the reducer can consume them. */
+/** The state a pending toll was priced in: hub growth counts the visit right after pricing it. */
+function pricedState(state: GameState, idx: number): GameState {
+  const v = state.hubVisits?.[idx];
+  if (!v) return state;
+  const hubVisits = { ...state.hubVisits };
+  if (v.n > 1) hubVisits[idx] = { ...v, n: v.n - 1 };
+  else delete hubVisits[idx];
+  return { ...state, hubVisits };
+}
+
 function validatePhaseContext(value: unknown, state: GameState): boolean {
   const phase = value as GameState['phase'];
   if (phase.kind === 'gameOver') return state.extraRoll === false;
@@ -190,6 +202,12 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
     case 'doubleUp':
       return currentPrompt && ruleFlags(state.settings).doubleUp && player.position === getBoardInfo(size).startIndex &&
         phase.stake === ECONOMY.salary * 2 ** phase.wins;
+    case 'target':
+      // Every option is an opponent's city that a typhoon can still lower.
+      return currentPrompt && ruleFlags(state.settings).targeting && phase.options.every((index) => {
+        const pr = property(index);
+        return pr.owner !== null && pr.owner !== phase.playerId && pr.level >= 1 && pr.level < ECONOMY.maxLevel;
+      });
     case 'cardChoice':
       return currentPrompt && ruleFlags(state.settings).cardChoice && getBoardInfo(size).eventIndices.includes(player.position);
     case 'useCard': {
@@ -228,7 +246,7 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
       if (phase.reason !== 'toll') return phase.toll === undefined && phase.then.kind === 'endLanding';
       if (!phase.toll || phase.then.kind !== 'takeoverCheck' || phase.then.spaceIndex !== phase.toll.spaceIndex) return false;
       const tollProperty = property(phase.toll.spaceIndex);
-      return player.position === phase.toll.spaceIndex && tollProperty.owner === phase.toll.ownerId && phase.toll.baseToll === tollOf(state, phase.toll.spaceIndex) &&
+      return player.position === phase.toll.spaceIndex && tollProperty.owner === phase.toll.ownerId && phase.toll.baseToll === tollOf(pricedState(state, phase.toll.spaceIndex), phase.toll.spaceIndex) &&
         phase.toll.festival === (state.festival === phase.toll.spaceIndex) && phase.payments.length === 1 &&
         phase.payments[0]!.to === phase.toll.ownerId && phase.payments[0]!.amount === phase.toll.baseToll * phase.toll.multiplier;
     }
@@ -268,6 +286,7 @@ function playerId(value: unknown, count: number): value is number {
 
 /** Optional rule-level state (olympics level, hub growth steps). */
 function validateRuleState(state: JsonObject, boardSize: number): boolean {
+  if (state.endsAfterRound !== undefined && !boolean(state.endsAfterRound)) return false;
   if (state.festivalLevel !== undefined && !(integer(state.festivalLevel, 1) && state.festivalLevel <= ECONOMY.olympicsMultipliers.length)) return false;
   // Result-screen statistics: plain non-negative counters / asset rows.
   if (state.stats !== undefined && !(Array.isArray(state.stats) && state.stats.every((p) => object(p) && Object.values(p).every((v) => integer(v, 0))))) return false;

@@ -187,6 +187,49 @@ const PAGES: Page[] = [
     },
   },
   {
+    id: 'levels',
+    build: () => {
+      const items: [string, string, 'normal' | 'advanced'][] = [
+        ['timer', 'late', 'normal'],
+        ['space-event', 'cards', 'normal'],
+        ['cards-shield', 'keep', 'normal'],
+        ['festival-marker', 'olympics', 'normal'],
+        ['corner-festival', 'target', 'normal'],
+        ['pot', 'finish', 'normal'],
+        ['hub-rail', 'hubs', 'advanced'],
+        ['dice-face-6', 'mini', 'advanced'],
+      ];
+      return h(
+        'div',
+        { class: 'rp-card is-grid' },
+        h(
+          'div',
+          { class: 'rp-grid-head' },
+          h('span', { class: 'rp-num num' }, '6'),
+          h('h2', { class: 'rp-title' }, t('rules.levels.title')),
+          h('p', { class: 'rp-grid-sub' }, t('rules.levels.body')),
+        ),
+        h(
+          'div',
+          { class: 'rp-grid g4' },
+          items.map(([iconId, key, level], i) =>
+            h(
+              'div',
+              { class: `rp-tile is-level is-${level}`, '--i': String(i) },
+              svgIcon(iconId, 'rp-tile-ico'),
+              h(
+                'div',
+                { class: 'rp-tile-text' },
+                h('h3', { class: 'rp-tile-title' }, t(`rules.levels.${key}`), h('em', { class: 'rp-level' }, t(`rules.levels.${level}`))),
+                h('p', { class: 'rp-tile-desc' }, t(`rules.levels.${key}.d`)),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  },
+  {
     id: 'win',
     build: () => {
       const chips = (colors: string[], cls: string) =>
@@ -205,7 +248,7 @@ const PAGES: Page[] = [
         h(
           'div',
           { class: 'rp-grid-head' },
-          h('span', { class: 'rp-num num' }, '6'),
+          h('span', { class: 'rp-num num' }, '7'),
           h('h2', { class: 'rp-title' }, t('rules.win.title')),
           h('p', { class: 'rp-grid-sub' }, t('rules.win.body')),
         ),

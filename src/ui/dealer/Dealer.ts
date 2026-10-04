@@ -6,7 +6,7 @@
  */
 import { getLang } from '@/i18n';
 import { playVoice, stopVoice } from '@/ui/audio/voice';
-import { gamePace, instant, onFrame } from '@/ui/fx/time';
+import { animSpeed, gamePace, onFrame, reducedMotion } from '@/ui/fx/time';
 import { h } from '@/ui/game/util';
 import { DEALER_SPRITES, type DealerExpr, type DealerLine } from './lines';
 
@@ -79,7 +79,7 @@ export class Dealer {
   }
 
   say(line: DealerLine): void {
-    if (instant()) return;
+    if (animSpeed() === 0) return;
     if (this.current && line.priority <= this.current.priority) return;
     const token = ++this.token;
     this.clear();
@@ -109,6 +109,11 @@ export class Dealer {
     } else this.silent(line, token);
   }
 
+  /** A new decision opened: drop a lingering lower-priority reaction so it does not talk over it. */
+  dropBelow(priority: number): void {
+    if (this.current && this.current.priority < priority) this.hush();
+  }
+
   /** Stop talking now (game screen leaving, menu, game over cleanup). */
   hush(): void {
     this.token++;
@@ -133,6 +138,7 @@ export class Dealer {
 
   /** Expression first, then the mouth flaps (talk-a / talk-b) until the voice ends. */
   private flapAfter(expr: DealerExpr, token: number): void {
+    if (reducedMotion()) return; // a still expression; the bubble carries the line
     let start = -1;
     let frame = -1;
     this.stopFlap = onFrame((now) => {

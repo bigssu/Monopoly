@@ -76,7 +76,7 @@ async function waitIdle(page: Page, stats?: { cards: number }): Promise<void> {
 const LABEL: Partial<Record<Action['type'], RegExp>> = {
   Roll: /굴리기|더블 노리기|Roll|Go for doubles/,
   Buy: /구매|Buy/,
-  Pass: /패스|그냥 굴리기|포기|Pass|Just roll|Drop out/,
+  Pass: /패스|그냥 굴리기|그냥 내기|포기|Pass|Just roll|Just pay|Drop out/,
   Build: /건설|Build|Landmark/,
   Takeover: /인수|Take over/,
   PayBail: /보석금|Pay bail/,
@@ -320,11 +320,12 @@ test.describe('human play (clicking real controls)', () => {
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${SHOTS}/human-bankrupt-panel-1600x1000.png` });
 
-    // Now end a game: first-bankruptcy mode, land broke on a landmark.
+    // Now end a game: first-bankruptcy mode, land broke on a landmark (easy rules end at once;
+    // normal plays the round out first).
     await page.evaluate((x) => window.__lotAndRoll!.setAnimSpeed(x), FAST);
     await loadCrafted(
       page,
-      {},
+      { settings: { rules: 'easy' } },
       `const me = s.players[s.current];
        me.position = 12; me.cash = 10;
        s.properties[17] = { owner: (s.current + 1) % 4, level: 4 };
@@ -365,7 +366,7 @@ test.describe('human play (clicking real controls)', () => {
     // Game over again → 타이틀로.
     await loadCrafted(
       page,
-      {},
+      { settings: { rules: 'easy' } },
       `const me = s.players[s.current];
        me.position = 12; me.cash = 10;
        s.properties[17] = { owner: (s.current + 1) % 4, level: 4 };

@@ -336,3 +336,6 @@ h1, h2, h3, h4, .display, .num {
     transition-duration: 1ms !important;
   }
 }
+
+/* Korean wraps between words, never inside one ("음/성"). */
+:root:lang(ko) body { word-break: keep-all; overflow-wrap: anywhere; }

@@ -232,8 +232,11 @@ export type Phase =
       buyerId?: PlayerId;
       price?: number;
     }
-  /** Double-up (rules = advanced): `stake` on the line after `wins` right guesses; Pass = stop. */
-  | { kind: 'doubleUp'; playerId: PlayerId; stake: number; wins: number }
+  /** Double-up (rules = advanced): `stake` on the line after `wins` right guesses; guess whether the
+   * next die beats `shown` (higher / lower; a tie loses); Pass = stop. */
+  | { kind: 'doubleUp'; playerId: PlayerId; stake: number; wins: number; shown: number }
+  /** Targeting (rules ≥ normal): choose the opponent city an attack card hits. */
+  | { kind: 'target'; playerId: PlayerId; card: 'typhoon'; options: number[] }
   | { kind: 'gameOver'; result: GameResult };
 
 export interface TollInfo {
@@ -280,6 +283,8 @@ export interface GameState {
   properties: (PropertyState | null)[];
   /** City index holding the (single) festival marker. */
   festival: number | null;
+  /** A first bankruptcy (rules ≥ normal): the game ends when this round completes. */
+  endsAfterRound?: boolean;
   /** Olympics (rules ≥ normal): times the festival was held on that city in a row, 1..3. */
   festivalLevel?: number;
   /** Per-player game statistics for the result screen awards (collected in reducer `emit`). */
@@ -327,7 +332,8 @@ export type Action =
   | { type: 'SellProperty'; playerId: PlayerId; spaceIndex: number }
   | { type: 'ChooseCard'; playerId: PlayerId; cardId: CardId }
   | { type: 'UseCard'; playerId: PlayerId }
-  | { type: 'DoubleUpGuess'; playerId: PlayerId; parity: 'odd' | 'even' }
+  | { type: 'DoubleUpGuess'; playerId: PlayerId; guess: 'high' | 'low' }
+  | { type: 'ChooseTarget'; playerId: PlayerId; spaceIndex: number }
   /** Decline the current prompt (buy/build/takeover/festival/freeUpgrade/travel/auction). */
   | { type: 'Pass'; playerId: PlayerId };
 
@@ -412,8 +418,10 @@ export type GameEvent =
   | { type: 'TakenOver'; buyerId: PlayerId; sellerId: PlayerId; spaceIndex: number; price: number }
   | { type: 'TakeoverBlocked'; buyerId: PlayerId; ownerId: PlayerId; spaceIndex: number }
   | { type: 'CardsOffered'; playerId: PlayerId; options: [CardId, CardId] }
-  | { type: 'DoubleUpOffered'; playerId: PlayerId; stake: number }
-  | { type: 'DoubleUpRolled'; playerId: PlayerId; die: number; parity: 'odd' | 'even'; win: boolean; stake: number }
+  | { type: 'DoubleUpOffered'; playerId: PlayerId; stake: number; shown: number }
+  | { type: 'DoubleUpRolled'; playerId: PlayerId; shown: number; die: number; guess: 'high' | 'low'; win: boolean; stake: number }
+  /** A first bankruptcy with rules ≥ normal: the game ends when this round completes. */
+  | { type: 'FinalRoundCalled'; playerId: PlayerId; round: number }
   | { type: 'CardDrawn'; playerId: PlayerId; cardId: CardId }
   | { type: 'CardKept'; playerId: PlayerId; card: KeepableCardId }
   | { type: 'CardUsed'; playerId: PlayerId; card: KeepableCardId }

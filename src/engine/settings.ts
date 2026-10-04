@@ -59,13 +59,24 @@ export interface RuleFlags {
   hubGrowth: boolean;
   doubleUp: boolean;
   diceGauge: boolean;
+  /** Attack cards (typhoon) target a city the player chooses. */
+  targeting: boolean;
+  /** A first bankruptcy ends the game when the round completes, not at once. */
+  finishRound: boolean;
+  /** Later seats start with a little more cash (turn-order advantage). */
+  seatBonus: boolean;
+  /** One of the two offered event cards is face down. */
+  hiddenCard: boolean;
 }
 
 export function ruleFlags(settings: Pick<Settings, 'rules'>): RuleFlags {
   const level = settings.rules ?? 'easy';
   const normal = level !== 'easy';
   const advanced = level === 'advanced';
-  return { lateToll: normal, cardChoice: normal, manualCards: normal, olympics: normal, hubGrowth: advanced, doubleUp: advanced, diceGauge: advanced };
+  return {
+    lateToll: normal, cardChoice: normal, manualCards: normal, olympics: normal, targeting: normal, finishRound: normal, seatBonus: normal, hiddenCard: normal,
+    hubGrowth: advanced, doubleUp: advanced, diceGauge: advanced,
+  };
 }
 
 export const ROUND_LIMIT_OPTIONS: readonly (number | null)[] = [10, 15, 20, 30, null];

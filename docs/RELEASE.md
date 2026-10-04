@@ -522,3 +522,15 @@ cd android && ./gradlew clean bundleRelease --no-daemon
 - [ ] 스토어 문구에 Monopoly / 부루마블 / 모두의마블 등 타사 명칭이 없다 (`docs/research/02-ip-licensing-research.md`).
 - [ ] "Land Poly / 랜드폴리" 이름의 상표를 조사하고, 사용자 제공 아이콘의 캐릭터·보드 요소에 대한 사용 권리를 확인했다 (`docs/DESIGN.md` C1).
 - [ ] 오픈소스/폰트 고지: `docs/THIRD_PARTY_LICENSES.md` (Noto Sans KR, Jua = SIL OFL 1.1) 를 앱 내 설정 > 라이선스 화면 또는 스토어 소개에서 안내.
+
+
+## 생성 자산과 출시 전 확인 (2026-10-04)
+
+딜러 음성(`public/voice`), 효과음(`public/sfx`), 배경음악(`public/music`), 딜러 스프라이트(`public/dealer`)는 웹 빌드에 포함되어 `npx cap sync android`로 앱에 들어갑니다. 2026-10-04 디버그 APK(13.2 MB)에서 음성 239개(매니페스트 포함)·효과음 37개·딜러 13개·음악 4개가 `assets/public` 아래에 있는 것을 확인했습니다.
+
+재생성: `node scripts/dealer/gen-voice.mjs`, `node scripts/dealer/gen-sprites.mjs`, `node scripts/sound/gen-sound.mjs` (키는 환경변수 `ELEVENLABS_API_KEY`, `GOOGLE_API_KEY`). 같은 입력이면 같은 바이트가 나오고 바뀐 줄만 다시 만듭니다.
+
+스토어 출시 전 소유자가 직접 확인할 것:
+- [ ] 런처 아이콘 원본 이미지의 권리(딜러 스프라이트가 이 그림을 참조해 만들어져 같은 권리를 이어받음).
+- [ ] ElevenLabs 유료 플랜(상업 이용) 활성 상태와 약관 사본 보관.
+- [ ] 실기기(저사양 태블릿)에서 음성·음악 재생, 메모리, 발열 확인.

@@ -1,6 +1,7 @@
 /**
- * Synthesized sound effects (Web Audio, zero assets). Implemented by the shell agent;
- * the game-screen agent only calls `sfx.play(name)`.
+ * Sound effects facade: the game only calls `sfx.play(name)`. main.ts installs the SynthSfx engine
+ * (audio/synth.ts), which plays the generated samples in public/sfx and falls back to its Web Audio
+ * synthesizer for any name without a sample.
  */
 export type SfxName =
   | 'tap' | 'dice-shake' | 'dice-land' | 'doubles' | 'hop' | 'pass-start' | 'cash-in' | 'cash-out'
@@ -17,7 +18,7 @@ export interface Sfx {
   setVolume(v: number): void;
 }
 
-/** Placeholder implementation — replaced by the shell agent (keep this export shape). */
+/** Silent until main.ts installs the real engine (tests run without one). */
 let impl: Sfx = {
   play() {},
   unlock() {},

@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { getBoardInfo } from '../board';
 import { ECONOMY } from '../economy';
-import { gaugeRoll, reduce } from '../reducer';
+import { createGame, gaugeRoll, reduce } from '../reducer';
+import { chooseAction } from '../ai';
 import { createRng, rollDice, seedToState } from '../rng';
 import { festivalMultiplier, hubStep, lateTollMultiplier, round10, tollOf } from '../rules';
 import { deserialize, serialize } from '../save';
@@ -252,16 +253,20 @@ describe('B6 double-up', () => {
     expect(deserialize(serialize(r.state)).phase).toEqual(r.state.phase);
   });
 
-  it('a right guess doubles what is on the line, a wrong one loses it', () => {
+  it('a right higher/lower guess doubles what is on the line, a wrong one (or a tie) loses it', () => {
     const offer = act(onStart(), roll(0)).state;
-    for (const parity of ['odd', 'even'] as const) {
+    const shown = (offer.phase as { shown: number }).shown;
+    expect(shown).toBeGreaterThanOrEqual(1);
+    for (const guess of ['high', 'low'] as const) {
       const cash = offer.players[0]!.cash;
-      const r = act(offer, { type: 'DoubleUpGuess', playerId: 0, parity });
+      const r = act(offer, { type: 'DoubleUpGuess', playerId: 0, guess });
       const rolled = ofType(r.events, 'DoubleUpRolled')[0]!;
-      expect(rolled.win).toBe((rolled.die % 2 === 1 ? 'odd' : 'even') === parity);
+      expect(rolled.shown).toBe(shown);
+      expect(rolled.win).toBe(guess === 'high' ? rolled.die > shown : rolled.die < shown);
       if (rolled.win) {
         expect(r.state.players[0]!.cash).toBe(cash + ECONOMY.salary);
-        expect(r.state.phase).toMatchObject({ kind: 'doubleUp', stake: ECONOMY.salary * 2, wins: 1 });
+        // The rolled die is the next one to beat.
+        expect(r.state.phase).toMatchObject({ kind: 'doubleUp', stake: ECONOMY.salary * 2, wins: 1, shown: rolled.die });
       } else {
         expect(r.state.players[0]!.cash).toBe(cash - ECONOMY.salary);
         expect(r.state.phase.kind).not.toBe('doubleUp');
@@ -271,10 +276,10 @@ describe('B6 double-up', () => {
 
   it('stops after the third right guess; Pass banks it', () => {
     const offer = edit(act(onStart(), roll(0)).state, (st) => {
-      st.phase = { kind: 'doubleUp', playerId: 0, stake: ECONOMY.salary * 4, wins: 2 };
+      st.phase = { kind: 'doubleUp', playerId: 0, stake: ECONOMY.salary * 4, wins: 2, shown: 3 };
     });
-    for (const parity of ['odd', 'even'] as const) {
-      const r = act(offer, { type: 'DoubleUpGuess', playerId: 0, parity });
+    for (const guess of ['high', 'low'] as const) {
+      const r = act(offer, { type: 'DoubleUpGuess', playerId: 0, guess });
       expect(r.state.phase.kind).not.toBe('doubleUp');
     }
     expect(act(offer, { type: 'Pass', playerId: 0 }).state.phase.kind).not.toBe('doubleUp');
@@ -316,5 +321,78 @@ describe('game statistics', () => {
     expect(r.finalState.history!.length).toBe(r.finalState.round);
     const back = deserialize(serialize(r.finalState));
     expect(back.stats).toEqual(st);
+  });
+});
+
+describe('wave 1: interaction, endings, fairness', () => {
+  const ev = getBoardInfo(7).eventIndices[0]!;
+
+  it('typhoon: the player picks the opponent city it hits', () => {
+    const s = edit(game({ rules: 'normal' }), (st) => {
+      own(st, 31, 1, 2);
+      own(st, 22, 1, 1);
+      setupLanding(st, 0, ev, 5);
+      queueCards(st, 'typhoon', 'fine');
+    });
+    const pick = act(act(s, roll(0)).state, { type: 'ChooseCard', playerId: 0, cardId: 'typhoon' }).state;
+    expect(pick.phase).toMatchObject({ kind: 'target', playerId: 0, card: 'typhoon' });
+    expect((pick.phase as { options: number[] }).options.sort()).toEqual([22, 31]);
+    expect(deserialize(serialize(pick)).phase).toEqual(pick.phase);
+    const hit = act(pick, { type: 'ChooseTarget', playerId: 0, spaceIndex: 31 });
+    expect(hit.state.properties[31]!.level).toBe(1);
+    expect(hit.state.properties[22]!.level).toBe(1);
+  });
+
+  it('a first bankruptcy finishes the round before the game ends (normal); easy ends at once', () => {
+    const bust = (rules: 'easy' | 'normal') =>
+      edit(game({ rules, n: 3 }), (st) => {
+        own(st, 31, 2, 3);
+        st.players[0]!.cash = 10;
+        setupLanding(st, 0, 31, 5);
+      });
+    const easy = act(bust('easy'), roll(0)).state;
+    expect(easy.phase.kind).toBe('gameOver');
+    const normal = act(bust('normal'), roll(0));
+    expect(ofType(normal.events, 'FinalRoundCalled')).toHaveLength(1);
+    expect(normal.state.phase.kind).not.toBe('gameOver');
+    expect(normal.state.endsAfterRound).toBe(true);
+    // Seats 1 and 2 still play this round; the game ends when it wraps.
+    let s = normal.state;
+    for (let k = 0; k < 40 && s.phase.kind !== 'gameOver'; k++) s = act(s, chooseAction(s, s.phase.playerId)).state;
+    expect(s.phase.kind).toBe('gameOver');
+    expect(s.round).toBe(normal.state.round);
+  });
+
+  it('later seats start with a little more cash on normal', () => {
+    const cash = (rules: 'easy' | 'normal') => createGame({ ...defaultSettings({ players: defaultPlayers(4) }), rules }, 1).players.map((p) => p.cash);
+    expect(cash('easy')).toEqual([3000, 3000, 3000, 3000]);
+    expect(cash('normal')).toEqual([3000, 3200, 3400, 3600]);
+  });
+
+  it('with a face-down card the CPU never peeks at it', () => {
+    const offered = (hidden: CardId) =>
+      act(edit(game({ rules: 'normal' }), (st) => {
+        setupLanding(st, 0, ev, 5);
+        queueCards(st, 'tax-refund', hidden);
+      }), roll(0)).state;
+    // The same known card leads to the same choice whatever is face down.
+    expect(chooseAction(offered('lottery'), 0)).toEqual(chooseAction(offered('to-island'), 0));
+  });
+
+  it('a save taken while a grown hub toll is owed loads again', () => {
+    // Hub growth counts the visit right after pricing; the save check must price it the same way.
+    const base = defaultSettings();
+    const settings = {
+      ...base, spacesPerSide: 7 as const, rules: 'advanced' as const, roundLimit: null, auction: true, takeover: false, buildAnywhere: false, endOnFirstBankruptcy: true, startCash: 2000,
+      players: [{ ...base.players[0]!, isCpu: false }, { ...base.players[1]!, isCpu: true }],
+    };
+    let s = createGame(settings, 2);
+    for (let i = 0; i <= 100; i++) {
+      const ph = s.phase;
+      if (ph.kind === 'gameOver') break;
+      s = reduce(s, chooseAction(s, ph.playerId)).state;
+    }
+    expect(s.phase.kind).toBe('debt');
+    expect(() => deserialize(serialize(s))).not.toThrow();
   });
 });

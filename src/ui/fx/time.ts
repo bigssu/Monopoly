@@ -162,7 +162,8 @@ export function wait(ms: number): Promise<void> {
 
 /** Awaitable hold that honours pace, speed, skip and the frame budget. */
 export function sleep(ms: number): Promise<void> {
-  const d = D(ms * pace);
+  // Not `D()`: under reduced motion the motion is gone but the beat stays, so a turn still reads.
+  const d = speed === 0 ? 0 : (ms * pace) / rate();
   if (d <= 0) return Promise.resolve();
   return new Promise((resolve) => {
     const s: Sleeper = { id: 0 as unknown as ReturnType<typeof setTimeout>, end: clockNow() + d, resolve, stopTick: null };

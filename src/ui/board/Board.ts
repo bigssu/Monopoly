@@ -7,7 +7,7 @@ import { playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, animSpeed, D, gridTimeout, instant, isSkipping, onFrame } from '@/ui/fx/time';
+import { anim, animSpeed, D, gridTimeout, instant, isSkipping, onFrame, wait } from '@/ui/fx/time';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
 import { DEPTH, INNER, VB, getBoardGeometry, tokenSpot, type SpaceGeom } from './geometry';
@@ -169,7 +169,8 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
     `<rect class="sp-group-badge" x="${m + 16}" y="${m + 16}" width="74" height="52" rx="26" fill="${bar}"/>`,
   );
   if (isProp && v.level === 0) {
-    parts.push(textEl('sp-price', w / 2, m + 67, 70, fmtMoney(sp.price ?? 0)));
+    const price = fmtMoney(sp.price ?? 0);
+    parts.push(textEl('sp-price', w / 2, m + 67, price.length >= 5 ? 54 : 70, price));
   }
   // Landmark icon.
   const iconSize = isProp ? 152 : 176;
@@ -1028,7 +1029,12 @@ export class Board {
       tk.pos = idx;
       sfx.play('hop', { pitch: backward ? 1 - n * 0.03 : 1 + n * 0.045 });
       haptic('tick');
-      if (instant()) continue;
+      if (instant()) {
+        // Reduced motion: no tween, but one beat per space so the move can be followed.
+        await wait(per);
+        onLand?.(n);
+        continue;
+      }
       const d = per;
       await Promise.all([
         anim(tk.root, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }], {

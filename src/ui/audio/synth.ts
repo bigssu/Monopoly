@@ -1,5 +1,5 @@
 /**
- * Web Audio synthesizer implementing every `SfxName` (zero audio assets).
+ * Sound engine for every `SfxName`: generated samples when loaded, a Web Audio synthesizer otherwise.
  *
  * Graph: voice → per-play gain → sfx bus (ducked under the dealer) → master (volume/mute) → soft
  * compressor → destination. The dealer's voice (audio/voice.ts) plays straight into the master;

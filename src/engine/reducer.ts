@@ -178,7 +178,7 @@ export function createGame(settings: Settings, seed: number): GameState {
     seat: ps.seat,
     isCpu: ps.isCpu,
     cpuLevel: ps.cpuLevel,
-    cash: settings.startCash,
+    cash: settings.startCash + (ruleFlags(settings).seatBonus ? (ECONOMY.seatBonus[i] ?? 0) : 0),
     position: board.startIndex,
     islandTurns: 0,
     bankrupt: false,
@@ -205,8 +205,8 @@ export function createGame(settings: Settings, seed: number): GameState {
     remoteBuildUsed: false,
     bankruptOrder: [],
     stats: players.map(emptyStats),
-    // Round 1 starts here (no RoundStarted from the reducer): everyone starts with the start cash.
-    history: [players.map(() => settings.startCash)],
+    // Round 1 starts here (no RoundStarted from the reducer): the start cash of every seat.
+    history: [players.map((p) => p.cash)],
   };
 }
 
@@ -409,6 +409,14 @@ function goBankrupt(ctx: Ctx, pid: PlayerId, payments: Payment[]): void {
   p.consecutiveDoubles = 0;
   checkVictory(ctx);
   if (s.settings.endOnFirstBankruptcy) {
+    if (ruleFlags(s.settings).finishRound) {
+      // The round plays out (everyone gets their turn), then the richest wins.
+      if (!s.endsAfterRound) {
+        s.endsAfterRound = true;
+        emit(ctx, { type: 'FinalRoundCalled', playerId: pid, round: s.round });
+      }
+      return;
+    }
     const r = ranking(s);
     finish(ctx, { winnerId: r[0]!.playerId, victory: 'bankruptcy' });
   }
@@ -490,6 +498,7 @@ function endTurn(ctx: Ctx): void {
     if (!player(ctx, next).bankrupt) break;
   }
   if (next <= cur) {
+    if (s.endsAfterRound) finish(ctx, { winnerId: ranking(s)[0]!.playerId, victory: 'bankruptcy' });
     if (s.settings.roundLimit !== null && s.round >= s.settings.roundLimit) finishOnRoundLimit(ctx);
     s.round += 1;
     emit(ctx, { type: 'RoundStarted', round: s.round });
@@ -602,8 +611,9 @@ function land(ctx: Ctx, pid: PlayerId, opts: LandOpts = {}): void {
       }
       receivePot(ctx, pid);
       if (ruleFlags(s.settings).doubleUp) {
-        emit(ctx, { type: 'DoubleUpOffered', playerId: pid, stake: ECONOMY.salary });
-        return setPhase(ctx, { kind: 'doubleUp', playerId: pid, stake: ECONOMY.salary, wins: 0 });
+        const shown = ctx.rng.int(6) + 1;
+        emit(ctx, { type: 'DoubleUpOffered', playerId: pid, stake: ECONOMY.salary, shown });
+        return setPhase(ctx, { kind: 'doubleUp', playerId: pid, stake: ECONOMY.salary, wins: 0, shown });
       }
       return endLanding(ctx);
     case 'city':
@@ -731,6 +741,13 @@ function takeoverCheck(ctx: Ctx, pid: PlayerId, idx: number): void {
 export function festivalOptions(s: GameState, pid: PlayerId): number[] {
   const olympics = ruleFlags(s.settings).olympics && (s.festivalLevel ?? 1) < ECONOMY.olympicsMultipliers.length;
   return ownedCities(s, pid).filter((i) => i !== s.festival || olympics);
+}
+
+function typhoonHit(ctx: Ctx, idx: number): void {
+  const pr = propertyAt(ctx.s, idx);
+  pr.level = (pr.level - 1) as Level;
+  emit(ctx, { type: 'Demolished', spaceIndex: idx, ownerId: pr.owner!, level: pr.level, cause: 'typhoon' });
+  return endLanding(ctx);
 }
 
 function blockTakeover(ctx: Ctx, buyerId: PlayerId, ownerId: PlayerId, idx: number): void {
@@ -946,11 +963,9 @@ function drawCard(ctx: Ctx, pid: PlayerId, chosen?: CardId): void {
         return pr.owner !== null && pr.owner !== pid && pr.level >= 1 && pr.level < ECONOMY.maxLevel;
       });
       if (candidates.length === 0) return noEffect(ctx, pid, cardId);
-      const idx = pick(ctx, candidates);
-      const pr = propertyAt(s, idx);
-      pr.level = (pr.level - 1) as Level;
-      emit(ctx, { type: 'Demolished', spaceIndex: idx, ownerId: pr.owner!, level: pr.level, cause: 'typhoon' });
-      return endLanding(ctx);
+      // Targeting: the player aims the storm (table talk: "who gets hit?").
+      if (ruleFlags(s.settings).targeting) return setPhase(ctx, { kind: 'target', playerId: pid, card: 'typhoon', options: candidates });
+      return typhoonHit(ctx, pick(ctx, candidates));
     }
     case 'festivalInvite': {
       const options = ownedCities(s, pid).filter((i) => i !== s.festival);
@@ -1043,7 +1058,9 @@ export function legalActions(state: GameState): Action[] {
     case 'cardChoice':
       return ph.options.map((cardId): Action => ({ type: 'ChooseCard', playerId: pid, cardId }));
     case 'doubleUp':
-      return [{ type: 'DoubleUpGuess', playerId: pid, parity: 'odd' }, { type: 'DoubleUpGuess', playerId: pid, parity: 'even' }, pass];
+      return [{ type: 'DoubleUpGuess', playerId: pid, guess: 'high' }, { type: 'DoubleUpGuess', playerId: pid, guess: 'low' }, pass];
+    case 'target':
+      return ph.options.map((i): Action => ({ type: 'ChooseTarget', playerId: pid, spaceIndex: i }));
     case 'useCard':
       return [{ type: 'UseCard', playerId: pid }, pass];
   }
@@ -1072,6 +1089,8 @@ export function defaultAction(state: GameState): Action | null {
     }
     case 'cardChoice':
       return { type: 'ChooseCard', playerId: pid, cardId: ph.options[0] };
+    case 'target':
+      return { type: 'ChooseTarget', playerId: pid, spaceIndex: ph.options[0]! };
     case 'useCard':
       // Safe: keep the Toll Pass for a bigger toll; never lose land by letting a shield sleep.
       return ph.card === 'shield' ? { type: 'UseCard', playerId: pid } : { type: 'Pass', playerId: pid };
@@ -1090,8 +1109,8 @@ export function sameAction(a: Action, b: Action): boolean {
   const bi = 'spaceIndex' in b ? b.spaceIndex : undefined;
   const ac = 'cardId' in a ? a.cardId : undefined;
   const bc = 'cardId' in b ? b.cardId : undefined;
-  const ap = 'parity' in a ? a.parity : undefined;
-  const bp = 'parity' in b ? b.parity : undefined;
+  const ap = 'guess' in a ? a.guess : undefined;
+  const bp = 'guess' in b ? b.guess : undefined;
   return ai === bi && ac === bc && ap === bp;
 }
 
@@ -1218,12 +1237,16 @@ function dispatch(ctx: Ctx, action: Action): void {
       if (action.type === 'ChooseCard') return drawCard(ctx, pid, action.cardId);
       return endLanding(ctx);
 
+    case 'target':
+      if (action.type === 'ChooseTarget') return typhoonHit(ctx, action.spaceIndex);
+      return endLanding(ctx);
+
     case 'doubleUp': {
       if (action.type !== 'DoubleUpGuess') return endLanding(ctx);
-      // Odd/even of one seeded die: right doubles what is on the line, wrong loses it.
+      // Higher or lower than the shown die (a tie loses): right doubles what is on the line.
       const die = ctx.rng.int(6) + 1;
-      const win = (die % 2 === 1 ? 'odd' : 'even') === action.parity;
-      emit(ctx, { type: 'DoubleUpRolled', playerId: pid, die, parity: action.parity, win, stake: ph.stake });
+      const win = action.guess === 'high' ? die > ph.shown : die < ph.shown;
+      emit(ctx, { type: 'DoubleUpRolled', playerId: pid, shown: ph.shown, die, guess: action.guess, win, stake: ph.stake });
       const start = getBoardInfo(s.settings.spacesPerSide ?? 7).startIndex;
       if (!win) {
         pay(ctx, pid, 'bank', Math.min(ph.stake, p.cash), 'salary', start);
@@ -1232,7 +1255,8 @@ function dispatch(ctx: Ctx, action: Action): void {
       receiveFromBank(ctx, pid, ph.stake, 'salary', start);
       const wins = ph.wins + 1;
       if (wins >= ECONOMY.doubleUpMaxWins) return endLanding(ctx);
-      return setPhase(ctx, { kind: 'doubleUp', playerId: pid, stake: ph.stake * 2, wins });
+      // The rolled die is the next one to beat.
+      return setPhase(ctx, { kind: 'doubleUp', playerId: pid, stake: ph.stake * 2, wins, shown: die });
     }
 
     case 'useCard':

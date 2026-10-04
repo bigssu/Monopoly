@@ -42,6 +42,8 @@ export const ECONOMY = {
   hubGrowthMax: 4,
   /** Double-up: right guesses allowed on the salary (×2 each), rules = advanced. */
   doubleUpMaxWins: 3,
+  /** Seat bonus (rules ≥ normal): extra start cash by turn order (sim: seat win spread 16 → 4 pp). */
+  seatBonus: [0, 200, 400, 600],
   /** Dice gauge: chance (at a full pull) of a second roll that keeps the low/high one. */
   diceGaugeBias: 0.35,
 

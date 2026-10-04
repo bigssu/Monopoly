@@ -286,7 +286,7 @@
 }
 
 /* Set grid title + legend: what the squares are (mine / one to go for the set). */
-.pp-sets-h { display: flex; align-items: center; justify-content: center; gap: 0 2.4cqmin; flex-wrap: wrap; font-size: clamp(9px, min(4.4cqw, 3.4cqh), 13px); font-weight: 800; color: var(--ink-3); cursor: pointer; }
+.pp-sets-h { display: flex; align-items: center; justify-content: center; gap: 0 2.4cqmin; flex-wrap: wrap; font-size: clamp(11px, min(4.4cqw, 3.4cqh), 14px); font-weight: 800; color: var(--ink-2); cursor: pointer; }
 .pp-sets-h b { color: var(--ink-2); font-weight: 900; }
 .pp-sets-h span { display: inline-flex; align-items: center; gap: .3em; }
 .pp-sets-h i { width: .9em; height: .9em; border-radius: 26%; }

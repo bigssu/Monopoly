@@ -48,14 +48,14 @@
   position: relative;
   z-index: 1;
   min-width: 0;
-  min-height: 40px;
-  padding: 0 .25em;
+  min-height: 44px;
+  padding: .15em .25em;
   border-radius: 11px;
   font-family: var(--font-display);
   font-size: 1.08em;
-  line-height: 1;
+  line-height: 1.1;
   color: var(--ink-2);
-  white-space: nowrap;
+  white-space: normal;
   transition: color var(--t-fast) linear, transform var(--t-release) var(--ease-spring);
 }
 .seg-opt[aria-checked='true'] { color: var(--gold-ink); }
@@ -1268,3 +1268,7 @@
 
 /* Rule level: what the chosen level turns on, right under its control. */
 .opt-level-note { margin: -.2em 0 .2em; padding: 0 .3em; font-size: .86em; font-weight: 700; line-height: 1.4; color: var(--ink-2); }
+
+/* Rule levels page: a small level tag next to each rule's name. */
+.rp-level { margin-left: .4em; padding: .05em .45em; border-radius: var(--r-pill); font-size: .7em; font-style: normal; font-weight: 800; vertical-align: middle; color: var(--tone-info-ink); background: var(--tone-info-bg); }
+.rp-tile.is-advanced .rp-level { color: var(--tone-gold-ink); background: var(--tone-gold-bg); }

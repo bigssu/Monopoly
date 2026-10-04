@@ -523,3 +523,19 @@ Android `preferredRefreshRate`·절전 모드 토글, `b29a2d4` 30 Hz 계단식 
   틱 밖으로. 최종 `npm run perf -- --full --unique`: **17/18**(p99 16.8 ms 통과, vsync 2회 초과 7프레임·최대 50 ms로 미달, 같은 실행의
   빈 페이지 0). CPU 태스크 변경 후 4회: 2 / 4 / 2 / 1. `docs/assets/perf-render-after.json` 갱신. 전체 Playwright 스위트 통과,
   e2e 스크린샷은 커밋본 유지(4.5).
+
+## Dealer, voice, SFX and music assets (2026-10-04)
+
+Measured on the production build (`npm run build`) and the debug APK (`./gradlew assembleDebug`).
+
+| Item | Size | Runtime |
+|---|---|---|
+| Voice (238 Opus mono ~20 kbps lines) | 1.89 MB | fetched + decoded on first use; LRU of 12 decoded lines (≈ 3 s mono each, ≈ 7 MB worst case) |
+| Music (4 Opus stereo 40 kbps tracks) | 1.36 MB | streamed through one `<audio>` element per track (MediaElementAudioSourceNode), never decoded to PCM — four decoded tracks were ≈ 84 MB |
+| SFX (36 Opus mono samples) | 0.22 MB | decoded at audio unlock (≈ 8 MB float PCM); the synthesizer covers any missing sample |
+| Dealer sprites (13 WebP) | 0.17 MB | decoded with the game; talking frames swap the `<img>` on the 30 Hz clock, no CSS filter on it |
+| Web bundle total | 8.38 MB (was 4.87 MB) | JS 496 KB |
+| Debug APK | 13.2 MB (was 8.6 MB) | — |
+
+Layer budget: the dealer adds no continuous animation (mouth frames only while a line plays) and no
+own compositing layer; the stage stays one layer.

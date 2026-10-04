@@ -65,7 +65,7 @@ function button(label: string, ctx: PromptCtx, action: Action | null, o: BtnOpts
     'data-action': action?.type,
     'data-space': action && 'spaceIndex' in action ? action.spaceIndex : undefined,
     'data-card': action && 'cardId' in action ? action.cardId : undefined,
-    'data-parity': action && 'parity' in action ? action.parity : undefined,
+    'data-guess': action && 'guess' in action ? action.guess : undefined,
   });
   if (o.icon) b.append(iconEl(o.icon, 'ico pbtn-ico'));
   b.append(h('span', { class: 'pbtn-label', text: label }));
@@ -142,7 +142,8 @@ const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide 
 
 function tollLadder(state: GameState, i: number, owner: PlayerId, current: number | null, next: number | null): HTMLElement {
   const sp = boardOf(state).board[i]!;
-  const row = h('div', { class: 'ladder' });
+  const row = h('div', { class: 'ladder', 'aria-label': t('g.ladder') });
+  row.append(h('div', { class: 'ladder-h', text: t('g.ladder') }));
   for (let l = 0; l <= 4; l++) {
     const cell = h(
       'div',
@@ -411,21 +412,24 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
 
 /** Double-up (rules = advanced): odd or even for what is on the line, or bank it. */
 function doubleUpPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'doubleUp' }>): PromptResult {
-  const guess = (parity: 'odd' | 'even'): Action => ({ type: 'DoubleUpGuess', playerId: ph.playerId, parity });
+  const guess = (g: 'high' | 'low'): Action => ({ type: 'DoubleUpGuess', playerId: ph.playerId, guess: g });
+  // Odds shown on the buttons: a judgement call, not a coin flip (a tie loses).
+  const odds = (n: number) => `${Math.round((n / 6) * 100)}%`;
   return {
     el: card(
       'pc-doubleup',
       {
-        icon: 'corner-start',
+        icon: `dice-face-${ph.shown}`,
         kicker: t('g.doubleUp.kicker'),
-        title: t('g.doubleUp.title'),
+        title: t('g.doubleUp.title', { n: ph.shown }),
         body: [
           h('div', { class: 'pc-kvs' }, kv(t('g.doubleUp.stake'), money(ph.stake), 'is-strong'), kv(t('g.doubleUp.win'), money(ph.stake * 2))),
           h('div', { class: 'pc-note', text: t('g.doubleUp.round', { n: ph.wins + 1, max: ECONOMY.doubleUpMaxWins }) }),
         ],
         buttons: [
-          button(t('g.doubleUp.odd'), ctx, guess('odd'), { primary: true, tone: 'gold' }),
-          button(t('g.doubleUp.even'), ctx, guess('even'), { primary: true, tone: 'gold' }),
+          // A guess that cannot win (6 → higher, 1 → lower) is shown but disabled.
+          button(t('g.doubleUp.high'), ctx, guess('high'), { primary: true, tone: 'gold', sub: odds(6 - ph.shown), disabled: ph.shown === 6 }),
+          button(t('g.doubleUp.low'), ctx, guess('low'), { primary: true, tone: 'gold', sub: odds(ph.shown - 1), disabled: ph.shown === 1 }),
           button(t('g.doubleUp.stop'), ctx, { type: 'Pass', playerId: ph.playerId }),
         ],
       },
@@ -443,7 +447,11 @@ function cardChoicePrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'cardChoice
         icon: 'space-event',
         kicker: t('g.cardPick.kicker'),
         title: t('g.cardPick.title'),
-        buttons: ph.options.map((id) => {
+        buttons: ph.options.map((id, k) => {
+          // Rules ≥ normal: the second card is face down — a known card or a gamble.
+          if (k === 1 && ruleFlags(ctx.state.settings).hiddenCard) {
+            return button(t('g.cardPick.hidden'), ctx, { type: 'ChooseCard', playerId: ph.playerId, cardId: id }, { icon: 'space-event', sub: t('g.cardPick.hiddenSub') });
+          }
           const c = getCard(id);
           return button(loc(c.title), ctx, { type: 'ChooseCard', playerId: ph.playerId, cardId: id }, { icon: cardIcon(id), sub: loc(c.description) });
         }),
@@ -533,6 +541,28 @@ function festivalPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'festival' }>
           pickList(ctx, ph.options, (i) => ({ type: 'SetFestival', playerId: pid, spaceIndex: i }), (i) => `${money(tollOf(ctx.state, i))} → ×2`),
         ],
         buttons: [button(t('g.pass'), ctx, { type: 'Pass', playerId: pid })],
+      },
+      ctx,
+    ),
+  };
+}
+
+/** Targeting (rules ≥ normal): aim the typhoon at an opponent's city (list or board tap). */
+function targetPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'target' }>): PromptResult {
+  const pid = ph.playerId;
+  const owner = (i: number) => ctx.state.players[ctx.state.properties[i]!.owner!]!;
+  return {
+    big: true,
+    el: card(
+      'pc-target',
+      {
+        icon: cardIcon('typhoon'),
+        kicker: t('g.target.kicker'),
+        title: t('g.target.title'),
+        body: [
+          h('div', { class: 'pc-note', text: t('g.pick.hint') }),
+          pickList(ctx, ph.options, (i) => ({ type: 'ChooseTarget', playerId: pid, spaceIndex: i }), (i) => `${owner(i).name} · ${money(tollOf(ctx.state, i))}`),
+        ],
       },
       ctx,
     ),
@@ -711,6 +741,8 @@ export function buildPromptFor(ctx: PromptCtx): PromptResult | null {
       return useCardPrompt(ctx, ph);
     case 'doubleUp':
       return doubleUpPrompt(ctx, ph);
+    case 'target':
+      return targetPrompt(ctx, ph);
     case 'gameOver':
       return null;
   }

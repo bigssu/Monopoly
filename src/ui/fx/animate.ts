@@ -28,7 +28,7 @@ import type { GameView } from '@/ui/game/view';
 import { isDevHook, money, spaceIcon } from '@/ui/game/util';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
-import { animSpeed, instant, sleep, turnRest, wait } from './time';
+import { animSpeed, sleep, turnRest, wait } from './time';
 import { BEAT } from './motion';
 import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
@@ -54,7 +54,8 @@ export async function playEvents(
   alive: Alive,
 ): Promise<void> {
   const vs = deepClone(prev);
-  const fast = instant();
+  // Reduced motion still plays the sequence (still frames, same beats); only speed 0 skips it.
+  const fast = animSpeed() === 0;
   const batch: Batch = { tollArrive: null, transfers: 0, prev: null };
   for (const ev of events) {
     if (!alive()) return;
@@ -62,7 +63,10 @@ export async function playEvents(
       if (MARK) performance.mark(`lr:${ev.type}`);
       // Let the dealer finish the last line before the stage turns to the next player (and before
       // he announces that turn), so he is never spun around mid-sentence.
-      if (!fast && ev.type === 'TurnStarted') await view.dealer.whenQuiet();
+      if (!fast && ev.type === 'TurnStarted') {
+        await view.dealer.whenQuiet();
+        if (!alive()) return;
+      }
       if (!fast) view.director.onEvent(ev, vs, 'before');
       await step(view, vs, ev, fast, batch);
       if (!fast) view.director.onEvent(ev, vs, 'after');
@@ -415,6 +419,11 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         view.playSfx('travel');
         await stage.toast(t('g.travel.granted'), 700, 'gold', 'corner-tour');
       }
+      return;
+    case 'FinalRoundCalled':
+      vs.endsAfterRound = true;
+      render(view, vs);
+      if (!fast) await stage.toast(t('g.finalRound'), 1200, 'bad', 'timer');
       return;
     case 'TravelDeclined':
       vs.players[ev.playerId]!.travelPending = false;

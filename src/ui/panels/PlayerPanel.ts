@@ -116,10 +116,12 @@ export class PlayerPanel {
     const pad = Math.max(8, Math.min(w, hgt) * 0.05);
     const wide = w / hgt >= 1.25;
     const tok = Math.max(32, Math.min(104, wide ? Math.min(0.2 * w, 0.3 * hgt) : Math.min(0.3 * w, 0.22 * hgt)));
-    // Leave room for the set grid's title + legend line.
-    const head = Math.max(14, Math.min(w, hgt) * 0.08);
-    const avail = hgt - tok - pad * 3 - head;
     const inner = w - pad * 2;
+    // Leave room for the set grid's title + legend, which wraps on narrow cards: its font follows
+    // panels.css (.pp-sets-h, clamp(11px, min(4.4cqw, 3.4cqh), 14px)) and it is ~17em long.
+    const font = Math.max(11, Math.min(0.044 * w, 0.034 * hgt, 14));
+    const head = Math.ceil((17 * font) / inner) * font * 1.25;
+    const avail = hgt - tok - pad * 3 - head;
     const colsMode = Math.min(inner / this.sets.length, avail / this.maxMembers);
     const rowsMode = Math.min(inner / this.maxMembers, avail / this.sets.length);
     const rows = rowsMode > colsMode * 1.05;

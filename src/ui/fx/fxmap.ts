@@ -199,6 +199,7 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   CardsOffered: () => [],
   DoubleUpOffered: () => [],
   DoubleUpRolled: () => [],
+  FinalRoundCalled: () => [],
   CardDrawn: (ev, c) => {
     const p = c.cardAt?.();
     return [step('cardReveal', { tone: cardTone(ev.cardId), ...(p ? { at: p } : {}) })];

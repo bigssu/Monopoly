@@ -34,7 +34,9 @@ import {
   takeoverPrice,
   tollAtLevel,
   tollOf,
+  totalAssets,
 } from './rules';
+import { ruleFlags } from './settings';
 import type { Action, CardId, GameState, PlayerId } from './types';
 
 /** Average toll a player currently risks when landing on an opponent's property. */
@@ -193,6 +195,8 @@ const CARD_VALUE: Partial<Record<CardId, number>> = {
   charity: -2, fine: -3, repairs: -3, 'to-island': -5,
 };
 
+const CARD_MEAN = Object.values(CARD_VALUE).reduce((a, b) => a + b, 0) / Object.values(CARD_VALUE).length;
+
 /** Choose an action for `playerId` in the current phase. Always legal. */
 export function chooseAction(state: GameState, playerId: PlayerId): Action {
   const ph = state.phase;
@@ -284,11 +288,25 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
       return ph.minBid <= cap && after >= reserveFor(state, playerId) ? { type: 'Bid', playerId } : pass;
     }
 
-    case 'doubleUp':
-      // One brave guess, then bank it.
-      return ph.wins === 0 && !easy ? { type: 'DoubleUpGuess', playerId, parity: 'odd' } : pass;
+    case 'doubleUp': {
+      // Bet only when the odds favour it (shown 1-2 → higher, 5-6 → lower); bank after one win.
+      if (easy || ph.wins > 0 || ph.shown === 3 || ph.shown === 4) return pass;
+      return { type: 'DoubleUpGuess', playerId, guess: ph.shown <= 2 ? 'high' : 'low' };
+    }
+
+    case 'target': {
+      // Hit the richest opponent's most valuable city.
+      const leader = (i: number) => totalAssets(state, state.properties[i]!.owner!);
+      const best = pickBest([...ph.options], (i) => leader(i) * 10 + tollOf(state, i));
+      return { type: 'ChooseTarget', playerId, spaceIndex: best ?? ph.options[0]! };
+    }
 
     case 'cardChoice': {
+      // With a face-down second card the CPU does not peek: the known card vs the deck average.
+      if (ruleFlags(state.settings).hiddenCard) {
+        const known = CARD_VALUE[ph.options[0]] ?? 0;
+        return { type: 'ChooseCard', playerId, cardId: known >= CARD_MEAN ? ph.options[0] : ph.options[1] };
+      }
       const best = pickBest([...ph.options], (id) => CARD_VALUE[id] ?? 0);
       return { type: 'ChooseCard', playerId, cardId: best ?? ph.options[0] };
     }

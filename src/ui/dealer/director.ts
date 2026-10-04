@@ -4,7 +4,8 @@
  * (so the dealer never spoils a result before its animation), the controller calls `onPrompt` when
  * a decision opens (advice = the CPU policy's choice) and the timer hooks.
  *
- * UI only: reads states, never touches the engine RNG or state. The situation pickers are pure.
+ * UI only: reads states, never touches the engine RNG or state. The situation pickers only read the
+ * game state; they update the per-game DealerMemo they are given (first landings, streaks, leader).
  */
 import {
   chooseAction,
@@ -122,6 +123,8 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
       return 'doubleup.offer';
     case 'DoubleUpRolled':
       return ev.win ? 'doubleup.win' : 'doubleup.lose';
+    case 'FinalRoundCalled':
+      return 'final.round';
     case 'TravelGranted':
       return 'travel.granted';
     case 'DebtStarted':
@@ -178,6 +181,8 @@ export function situationForPrompt(s: GameState): string | null {
   switch (ph.kind) {
     case 'preRoll':
       return ruleFlags(s.settings).diceGauge ? 'gauge.hint' : 'roll.nudge';
+    case 'target':
+      return 'target.pick';
     case 'useCard':
       if (ph.card === 'shield') return 'use.shield';
       return chooseAction(s, p.id).type === 'UseCard' ? 'use.pass.yes' : 'use.pass.no';
@@ -213,7 +218,11 @@ export function pickLine(situation: string, setting: DealerSetting, last: Map<st
 
 export interface Speaker {
   say(line: DealerLine): void;
+  dropBelow?(priority: number): void;
 }
+
+/** Advice starts this long after its prompt appears (staging: card first, then the comment). */
+const ADVICE_DELAY_MS = 320;
 
 export class DealerDirector {
   private memo = newMemo();
@@ -231,7 +240,9 @@ export class DealerDirector {
 
   onPrompt(s: GameState): void {
     const id = situationForPrompt(s);
-    if (id) this.speak(id);
+    if (!id) return;
+    this.dealer.dropBelow?.(SITUATIONS[id]?.priority ?? 0);
+    window.setTimeout(() => this.speak(id), ADVICE_DELAY_MS);
   }
 
   /** A player asked what the set grid is: explain it (false when the dealer is off). */

@@ -90,7 +90,7 @@ export const CARDS: readonly CardDef[] = [
     number: 1,
     title: { ko: '출발지로 이동', en: 'Back to Start' },
     description: {
-      ko: '출발 칸으로 이동해 월급을 받습니다. 기부함 적립금도 함께!',
+      ko: '출발 칸으로 가서 월급을 받아요. 기부함 적립금도 함께!',
       en: 'Head back to START: collect your salary plus the donation pot.',
     },
     effect: { kind: 'moveTo', target: 0 },
@@ -101,7 +101,7 @@ export const CARDS: readonly CardDef[] = [
     number: 2,
     title: { ko: '무인도로 이동', en: 'Stranded!' },
     description: {
-      ko: '곧장 무인도로 이동합니다. 출발 칸을 지나도 월급은 없습니다.',
+      ko: '곧장 무인도로 가요. 출발 칸을 지나도 월급은 없어요.',
       en: 'Whisked away to the ISLAND. No salary on the way.',
     },
     effect: { kind: 'goToIsland' },
@@ -112,7 +112,7 @@ export const CARDS: readonly CardDef[] = [
     number: 3,
     title: { ko: '자유여행으로 이동', en: 'Pack Your Bags' },
     description: {
-      ko: '자유여행 칸으로 이동합니다. 다음 턴에 원하는 칸으로 떠날 수 있어요.',
+      ko: '자유여행 칸으로 가요. 다음 턴에 원하는 칸으로 떠날 수 있어요.',
       en: 'Head to TRAVEL. On your next turn you may fly to any space.',
     },
     effect: { kind: 'moveTo', target: 24 },
@@ -123,7 +123,7 @@ export const CARDS: readonly CardDef[] = [
     number: 4,
     title: { ko: '축제로 이동', en: 'Festival Time' },
     description: {
-      ko: '축제 칸으로 이동해 내 도시 하나에 축제를 엽니다.',
+      ko: '축제 칸으로 가서 내 도시 하나에 축제를 열어요.',
       en: 'Head to FESTIVAL and host it in one of your cities.',
     },
     effect: { kind: 'moveTo', target: 16 },
@@ -133,7 +133,7 @@ export const CARDS: readonly CardDef[] = [
     id: 'bank-dividend',
     number: 5,
     title: { ko: '은행 배당', en: 'Bank Dividend' },
-    description: { ko: '은행에서 200을 받습니다.', en: 'The bank pays you 200.' },
+    description: { ko: '은행에서 200을 받아요.', en: 'The bank pays you 200.' },
     effect: { kind: 'money', amount: 200 },
     iconId: 'card-coin',
   },
@@ -141,7 +141,7 @@ export const CARDS: readonly CardDef[] = [
     id: 'lottery',
     number: 6,
     title: { ko: '복권 당첨', en: 'Lottery Win' },
-    description: { ko: '복권에 당첨! 500을 받습니다.', en: 'You won the lottery! Collect 500.' },
+    description: { ko: '복권에 당첨! 500을 받아요.', en: 'You won the lottery! Collect 500.' },
     effect: { kind: 'money', amount: 500 },
     iconId: 'card-coin',
   },
@@ -149,7 +149,7 @@ export const CARDS: readonly CardDef[] = [
     id: 'fine',
     number: 7,
     title: { ko: '벌금', en: 'Speeding Fine' },
-    description: { ko: '벌금 150을 냅니다.', en: 'Pay a fine of 150.' },
+    description: { ko: '벌금 150을 내요.', en: 'Pay a fine of 150.' },
     effect: { kind: 'money', amount: -150 },
     iconId: 'card-pay',
   },
@@ -158,7 +158,7 @@ export const CARDS: readonly CardDef[] = [
     number: 8,
     title: { ko: '건물 수리비', en: 'Repairs' },
     description: {
-      ko: '내 건물 레벨 1당 30을 냅니다. (명소는 4레벨)',
+      ko: '내 건물 레벨 1당 30을 내요. (명소는 4레벨)',
       en: 'Pay 30 for each building level you own (a landmark counts as 4).',
     },
     effect: { kind: 'perBuildingLevel', amount: 30 },
@@ -169,7 +169,7 @@ export const CARDS: readonly CardDef[] = [
     number: 9,
     title: { ko: '생일 축하!', en: 'Happy Birthday!' },
     description: {
-      ko: '모든 플레이어에게 100씩 받습니다.',
+      ko: '모든 플레이어에게 100씩 받아요.',
       en: 'Every other player gives you 100.',
     },
     effect: { kind: 'collectFromEach', amount: 100 },
@@ -180,7 +180,7 @@ export const CARDS: readonly CardDef[] = [
     number: 10,
     title: { ko: '기부', en: 'Generosity' },
     description: {
-      ko: '모든 플레이어에게 50씩 줍니다.',
+      ko: '모든 플레이어에게 50씩 줘요.',
       en: 'Give 50 to every other player.',
     },
     effect: { kind: 'payEach', amount: 50 },
@@ -190,7 +190,7 @@ export const CARDS: readonly CardDef[] = [
     id: 'back-three',
     number: 11,
     title: { ko: '3칸 뒤로', en: 'Three Steps Back' },
-    description: { ko: '3칸 뒤로 이동합니다.', en: 'Move back three spaces.' },
+    description: { ko: '3칸 뒤로 가요.', en: 'Move back three spaces.' },
     effect: { kind: 'moveBack', steps: 3 },
     iconId: 'card-move',
   },
@@ -199,7 +199,7 @@ export const CARDS: readonly CardDef[] = [
     number: 12,
     title: { ko: '가장 가까운 허브로', en: 'Next Hub' },
     description: {
-      ko: '앞으로 가장 가까운 허브로 이동합니다. 주인이 있으면 통행료 2배!',
+      ko: '앞쪽 가장 가까운 허브로 가요. 주인이 있으면 통행료 2배!',
       en: 'Head to the next hub ahead. If an opponent owns it, pay double toll.',
     },
     effect: { kind: 'nearestHub', tollMultiplier: 2 },
@@ -210,7 +210,7 @@ export const CARDS: readonly CardDef[] = [
     number: 13,
     title: { ko: '탈출권', en: 'Escape Pass' },
     description: {
-      ko: '보관했다가 무인도에서 바로 탈출할 때 사용합니다.',
+      ko: '보관했다가 무인도에서 바로 탈출할 때 써요.',
       en: 'Keep this card. Use it to leave the ISLAND immediately.',
     },
     effect: { kind: 'keep', card: 'escape' },
@@ -221,7 +221,7 @@ export const CARDS: readonly CardDef[] = [
     number: 14,
     title: { ko: '통행료 면제권', en: 'Toll Pass' },
     description: {
-      ko: '보관했다가 다음 통행료를 낼 때 자동으로 사용됩니다.',
+      ko: '보관했다가 다음 통행료를 낼 때 써요.',
       en: 'Keep this card. It is used automatically on your next toll.',
     },
     effect: { kind: 'keep', card: 'toll-pass' },
@@ -232,7 +232,7 @@ export const CARDS: readonly CardDef[] = [
     number: 15,
     title: { ko: '수호 방패', en: 'Guard Shield' },
     description: {
-      ko: '보관했다가 내 땅에 대한 인수 시도를 한 번 막아냅니다.',
+      ko: '보관했다가 내 땅을 노리는 인수를 한 번 막아요.',
       en: 'Keep this card. It blocks one takeover attempt on your property.',
     },
     effect: { kind: 'keep', card: 'shield' },
@@ -243,7 +243,7 @@ export const CARDS: readonly CardDef[] = [
     number: 16,
     title: { ko: '복지기금 지급', en: 'Welfare Payout' },
     description: {
-      ko: '기부함에 모인 적립금을 모두 받습니다.',
+      ko: '기부함에 모인 적립금을 모두 받아요.',
       en: 'Collect everything in the donation pot.',
     },
     effect: { kind: 'receivePot' },
@@ -254,7 +254,7 @@ export const CARDS: readonly CardDef[] = [
     number: 17,
     title: { ko: '급행', en: 'Express' },
     description: {
-      ko: '다음 주사위 이동 칸 수가 2배가 됩니다.',
+      ko: '다음 주사위 이동 칸 수가 2배가 돼요.',
       en: 'Your next dice roll moves you double the distance.',
     },
     effect: { kind: 'express' },
@@ -265,7 +265,7 @@ export const CARDS: readonly CardDef[] = [
     number: 18,
     title: { ko: '랜덤 점프', en: 'Random Jump' },
     description: {
-      ko: '무작위 도시로 이동합니다.',
+      ko: '무작위 도시로 순간이동해요.',
       en: 'Jump ahead to a random city.',
     },
     effect: { kind: 'randomCity' },
@@ -275,7 +275,7 @@ export const CARDS: readonly CardDef[] = [
     id: 'tax-refund',
     number: 19,
     title: { ko: '세금 환급', en: 'Tax Refund' },
-    description: { ko: '세금 100을 돌려받습니다.', en: 'Collect a 100 tax refund.' },
+    description: { ko: '세금 100을 돌려받아요.', en: 'Collect a 100 tax refund.' },
     effect: { kind: 'money', amount: 100 },
     iconId: 'card-coin',
   },
@@ -284,7 +284,7 @@ export const CARDS: readonly CardDef[] = [
     number: 20,
     title: { ko: '부자세', en: 'Wealth Tax' },
     description: {
-      ko: '총자산 1위 플레이어가 최하위 플레이어에게 200을 줍니다.',
+      ko: '총자산 1위가 꼴찌에게 200을 줘요.',
       en: 'The richest player (total assets) pays 200 to the poorest.',
     },
     effect: { kind: 'leaderTax', amount: 200 },
@@ -295,7 +295,7 @@ export const CARDS: readonly CardDef[] = [
     number: 21,
     title: { ko: '건물 보너스', en: 'Free Upgrade' },
     description: {
-      ko: '내 도시 한 곳을 골라 무료로 1레벨 업그레이드합니다.',
+      ko: '내 도시 한 곳을 골라 공짜로 1레벨 올려요.',
       en: 'Choose one of your cities and upgrade it one level for free.',
     },
     effect: { kind: 'freeUpgrade' },
@@ -306,7 +306,7 @@ export const CARDS: readonly CardDef[] = [
     number: 22,
     title: { ko: '태풍', en: 'Typhoon' },
     description: {
-      ko: '무작위 상대 도시 한 곳의 건물이 1레벨 낮아집니다. (명소는 안전)',
+      ko: '상대 도시 한 곳의 건물이 1레벨 낮아져요. (명소는 안전)',
       en: "A random opponent's city loses one building level (landmarks are safe).",
     },
     effect: { kind: 'typhoon' },
@@ -317,7 +317,7 @@ export const CARDS: readonly CardDef[] = [
     number: 23,
     title: { ko: '축제 초대', en: 'Festival Invitation' },
     description: {
-      ko: '축제가 내 도시 중 한 곳으로 옮겨집니다.',
+      ko: '축제가 내 도시 중 한 곳으로 옮겨와요.',
       en: 'The festival moves to one of your cities at random.',
     },
     effect: { kind: 'festivalInvite' },
@@ -328,7 +328,7 @@ export const CARDS: readonly CardDef[] = [
     number: 24,
     title: { ko: '세계 일주 완료 보너스', en: 'Round-the-World Bonus' },
     description: {
-      ko: '내가 가진 허브 1곳당 100을 받습니다.',
+      ko: '내가 가진 허브 1곳당 100을 받아요.',
       en: 'Collect 100 for each hub you own.',
     },
     effect: { kind: 'perHub', amount: 100 },

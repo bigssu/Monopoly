@@ -31,6 +31,8 @@ for (const spacesPerSide of [7, 8, 9] as const) {
       return [state.settings.spacesPerSide, state.properties.length];
     })).toEqual([spacesPerSide, total]);
 
+    // The opening (turn banner, dealer greeting) re-renders the stage; open the card after it.
+    await page.waitForFunction(() => !window.__lotAndRoll!.isBusy());
     await page.locator(`.board-svg > .sp[data-i="${total - 1}"]`).click();
     await expect(page.locator('.info-card .pc-title')).toHaveText(getBoard(spacesPerSide)[total - 1]!.name.ko);
     await page.locator('.info-card').click();

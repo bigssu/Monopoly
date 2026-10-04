@@ -267,6 +267,7 @@
 .stage .chip { align-self: flex-start; gap: calc(var(--u) * 0.2); padding: calc(var(--u) * 0.12) calc(var(--u) * 0.45); font-size: 0.9em; }
 
 .ladder { display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(var(--u) * 0.18); }
+.ladder-h { grid-column: 1 / -1; font-size: 0.8em; font-weight: 800; color: var(--ink-2); }
 .ld {
   display: flex;
   flex-direction: column;
@@ -692,16 +693,19 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
    speech bubble opening to the right. No idle loop: the stage is one layer, a loop would repaint it. */
 .dealer {
   position: absolute;
-  left: calc(var(--u) * 0.15);
-  top: calc(var(--u) * 2.6);
-  width: max(64px, calc(var(--u) * 5.2));
-  /* Above prompt cards and card reveals (.st-toasts is 4): the host's line stays readable. */
-  z-index: 5;
+  left: calc(var(--u) * 0.2);
+  /* Below the turn banner and the round line, so the bubble never covers them. */
+  top: calc(var(--u) * 3.7);
+  width: max(64px, calc(var(--u) * 5));
   pointer-events: none;
 }
-.dealer-img { display: block; width: 100%; aspect-ratio: 1; filter: drop-shadow(0 calc(var(--u) * 0.15) calc(var(--u) * 0.2) rgba(0, 0, 0, 0.35)); }
+/* No stacking context on .dealer: the sprite sits under prompt cards (z 2) and the bubble above
+   cards and reveals (.st-toasts z 4), so a card is never hidden and the line stays readable. */
+/* No CSS filter: the talking frames swap the image ~8×/s and a drop-shadow re-rasterised it each time. */
+.dealer-img { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 1; }
 .dealer-bubble {
   position: absolute;
+  z-index: 5;
   left: 86%;
   top: 6%;
   width: max-content;
