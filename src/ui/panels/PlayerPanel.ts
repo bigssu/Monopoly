@@ -14,9 +14,11 @@ import {
   type Player,
   type SpacesPerSide,
 } from '@/engine';
+import { getCard } from '@/content/cards';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
-import { groupColor, h, iconEl, setPlayerVars, signedMoney, svgNode } from '@/ui/game/util';
+import { chip, groupColor, h, iconEl, setPlayerVars, signedMoney, svgNode } from '@/ui/game/util';
+import { EASE } from '@/ui/fx/motion';
 
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
 
@@ -152,10 +154,10 @@ export class PlayerPanel {
     if (badgeKey === this.badgeKey) return;
     this.badgeKey = badgeKey;
     this.badges.innerHTML = '';
-    if (p.islandTurns > 0) this.badges.append(h('span', { class: 'bdg is-island' }, iconEl('corner-island', 'ico bdg-ico'), h('b', { text: String(p.islandTurns) })));
-    if (p.travelPending) this.badges.append(h('span', { class: 'bdg' }, iconEl('corner-tour', 'ico bdg-ico')));
-    if (p.expressPending) this.badges.append(h('span', { class: 'bdg' }, iconEl('hub-rail', 'ico bdg-ico'), h('b', { text: '×2' })));
-    for (const c of p.cards) this.badges.append(h('span', { class: 'bdg is-card' }, iconEl(CARD_ICON[c] ?? 'cards-escape', 'ico bdg-ico')));
+    if (p.islandTurns > 0) this.badges.append(chip({ icon: 'corner-island', text: String(p.islandTurns), tone: 'info', label: t('g.island.stay', { n: p.islandTurns }) }));
+    if (p.travelPending) this.badges.append(chip({ icon: 'corner-tour', label: t('g.kind.travel') }));
+    if (p.expressPending) this.badges.append(chip({ icon: 'hub-rail', text: '×2', label: t('g.express') }));
+    for (const c of p.cards) this.badges.append(chip({ icon: CARD_ICON[c] ?? 'cards-escape', tone: 'gold', cls: 'is-card', label: loc(getCard(c).title) }));
   }
 
   private tweenTo(v: number): void {
@@ -175,7 +177,7 @@ export class PlayerPanel {
     this.cardEl.classList.add(up ? 'flash-up' : 'flash-down');
     // Rim + tint wash: opacity only, on its own pre-painted layer.
     this.wash.classList.toggle('is-down', !up);
-    void anim(this.wash, [{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 1000, easing: 'cubic-bezier(.22,1,.36,1)' });
+    void anim(this.wash, [{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 1000, easing: EASE.settle });
     // Count-up on the shared frame clock, redrawn on every third tick (~10 Hz: each redraw
     // repaints the panel, docs/PERFORMANCE.md) in the gain/loss color, which returns to ink with
     // the final value (formerly a separate 800 ms main-thread color animation: ~24 more repaints).
@@ -211,7 +213,7 @@ export class PlayerPanel {
         { transform: 'translate(-50%, -85%) scale(1)', opacity: 1, offset: 0.65 },
         { transform: 'translate(-50%, -150%) scale(1)', opacity: 0 },
       ],
-      { duration: note ? 1700 : 1300, easing: 'cubic-bezier(.22,1,.36,1)' },
+      { duration: note ? 1700 : 1300, easing: EASE.settle },
     ).then(() => el.remove());
   }
 
@@ -228,7 +230,7 @@ export class PlayerPanel {
         { transform: 'translate(-50%, -85%) scale(1)', opacity: 1, offset: 0.65 },
         { transform: 'translate(-50%, -150%) scale(1)', opacity: 0 },
       ],
-      { duration: 1300, easing: 'cubic-bezier(.22,1,.36,1)' },
+      { duration: 1300, easing: EASE.settle },
     ).then(() => el.remove());
   }
 
@@ -249,7 +251,7 @@ export class PlayerPanel {
         { transform: 'scale(0.99)', offset: 0.7 },
         { transform: 'scale(1)' },
       ],
-      { duration: 520, easing: 'cubic-bezier(.34,1.56,.64,1)' },
+      { duration: 520, easing: EASE.overshoot },
     );
   }
 
@@ -266,7 +268,7 @@ export class PlayerPanel {
         { transform: 'translateY(3%) rotate(-3deg)', offset: 0.7 },
         { transform: 'translateY(2%) rotate(-3deg)' },
       ],
-      { duration: 900, easing: 'ease-out' },
+      { duration: 900, easing: EASE.settle },
     );
   }
 

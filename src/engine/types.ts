@@ -57,7 +57,15 @@ export interface Settings {
   promptTimer: 0 | 15 | 30;
   /** Non-corner spaces on each side. Defaults to the original 7. */
   spacesPerSide?: SpacesPerSide;
+  /**
+   * Rule level (docs/superpowers/specs/2026-10-04-rule-levels-design.md): `easy` = the original
+   * rules, `normal` adds late toll / card choice / manual keep-cards / olympics, `advanced` adds
+   * hub growth / double-up / dice gauge. Missing (older saves) = `easy`.
+   */
+  rules?: RuleLevel;
 }
+
+export type RuleLevel = 'easy' | 'normal' | 'advanced';
 
 // ---------------------------------------------------------------------------
 // State
@@ -208,6 +216,24 @@ export type Phase =
       /** Set when the debt is a toll (TollPaid is emitted on settlement). */
       toll?: TollInfo;
     }
+  /** Card choice (rules ≥ normal): two different cards drawn, ChooseCard one. */
+  | { kind: 'cardChoice'; playerId: PlayerId; options: [CardId, CardId] }
+  /**
+   * Manual keep-cards (rules ≥ normal): UseCard or Pass. `toll-pass`: the payer, about to pay the
+   * toll at `spaceIndex` (×`multiplier`). `shield`: the OWNER of `spaceIndex`, which `buyerId`
+   * is taking over for `price`.
+   */
+  | {
+      kind: 'useCard';
+      playerId: PlayerId;
+      card: 'toll-pass' | 'shield';
+      spaceIndex: number;
+      multiplier?: number;
+      buyerId?: PlayerId;
+      price?: number;
+    }
+  /** Double-up (rules = advanced): `stake` on the line after `wins` right guesses; Pass = stop. */
+  | { kind: 'doubleUp'; playerId: PlayerId; stake: number; wins: number }
   | { kind: 'gameOver'; result: GameResult };
 
 export interface TollInfo {
@@ -222,6 +248,19 @@ export type PhaseKind = Phase['kind'];
 export type PromptPhase = Exclude<Phase, { kind: 'gameOver' }>;
 
 /** Test-only deterministic overrides (never set by the UI). */
+export interface PlayerStats {
+  tollPaid: number;
+  tollEarned: number;
+  /** Largest single toll this player received. */
+  biggestToll: number;
+  takeovers: number;
+  bought: number;
+  built: number;
+  islandVisits: number;
+  doubles: number;
+  cards: number;
+}
+
 export interface TestHooks {
   diceQueue?: Array<[number, number]>;
   cardQueue?: CardId[];
@@ -241,6 +280,14 @@ export interface GameState {
   properties: (PropertyState | null)[];
   /** City index holding the (single) festival marker. */
   festival: number | null;
+  /** Olympics (rules ≥ normal): times the festival was held on that city in a row, 1..3. */
+  festivalLevel?: number;
+  /** Per-player game statistics for the result screen awards (collected in reducer `emit`). */
+  stats?: PlayerStats[];
+  /** Total assets of every player at the start of each round (result screen graph). */
+  history?: number[][];
+  /** Hub growth (rules = advanced): toll steps earned per hub index, with the owner they belong to. */
+  hubVisits?: Record<number, { owner: PlayerId; n: number }>;
   /** Donation pot. */
   pot: number;
   /** 1-based round number. */
@@ -265,7 +312,8 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type Action =
-  | { type: 'Roll'; playerId: PlayerId }
+  /** `gauge` (rules = advanced, 0..1): where the player released the dice gauge (B7). */
+  | { type: 'Roll'; playerId: PlayerId; gauge?: number }
   | { type: 'PayBail'; playerId: PlayerId }
   | { type: 'UseEscapeCard'; playerId: PlayerId }
   | { type: 'ChooseTravel'; playerId: PlayerId; spaceIndex: number }
@@ -277,6 +325,9 @@ export type Action =
   | { type: 'Bid'; playerId: PlayerId }
   | { type: 'SellBuilding'; playerId: PlayerId; spaceIndex: number }
   | { type: 'SellProperty'; playerId: PlayerId; spaceIndex: number }
+  | { type: 'ChooseCard'; playerId: PlayerId; cardId: CardId }
+  | { type: 'UseCard'; playerId: PlayerId }
+  | { type: 'DoubleUpGuess'; playerId: PlayerId; parity: 'odd' | 'even' }
   /** Decline the current prompt (buy/build/takeover/festival/freeUpgrade/travel/auction). */
   | { type: 'Pass'; playerId: PlayerId };
 
@@ -360,6 +411,9 @@ export type GameEvent =
     }
   | { type: 'TakenOver'; buyerId: PlayerId; sellerId: PlayerId; spaceIndex: number; price: number }
   | { type: 'TakeoverBlocked'; buyerId: PlayerId; ownerId: PlayerId; spaceIndex: number }
+  | { type: 'CardsOffered'; playerId: PlayerId; options: [CardId, CardId] }
+  | { type: 'DoubleUpOffered'; playerId: PlayerId; stake: number }
+  | { type: 'DoubleUpRolled'; playerId: PlayerId; die: number; parity: 'odd' | 'even'; win: boolean; stake: number }
   | { type: 'CardDrawn'; playerId: PlayerId; cardId: CardId }
   | { type: 'CardKept'; playerId: PlayerId; card: KeepableCardId }
   | { type: 'CardUsed'; playerId: PlayerId; card: KeepableCardId }

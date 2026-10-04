@@ -19,6 +19,7 @@
  *   timing on the same grid.
  * - `setFrameRate(60)` restores every running animation to its original keyframes/timing.
  */
+import { EASE } from './motion';
 import { quantizedEasing, stepKeyframes } from './quantize';
 
 let speed = 1;
@@ -48,6 +49,31 @@ export function setAnimSpeed(x: number): void {
 
 export function animSpeed(): number {
   return speed;
+}
+
+/**
+ * Game pace (Settings "게임 속도"): stretches the *holds* — `sleep()`, the reading time between
+ * events, toasts, notices and the CPU's think delay — but not motion (`anim`, dice, VFX).
+ * 1 = the original pace, 2 = holds twice as long.
+ */
+let pace = 1;
+export function setPace(x: number): void {
+  pace = Math.max(0.1, x);
+}
+export function gamePace(): number {
+  return pace;
+}
+
+/**
+ * Pause after a turn ends, before the next player (Settings "턴 사이 쉬는 시간"), in ms. A fixed
+ * rest so players register what just happened (Pixar "timing"); honours speed/skip, not pace.
+ */
+let turnRestMs = 0;
+export function setTurnRest(ms: number): void {
+  turnRestMs = Math.max(0, ms);
+}
+export function turnRest(): Promise<void> {
+  return sleep(turnRestMs / pace);
 }
 
 let reducedSetting = false;
@@ -126,9 +152,17 @@ function arm(s: Sleeper, left: number): void {
   }, Math.max(0, left - p));
 }
 
-/** Awaitable delay that honours speed, skip and the frame budget. */
+/**
+ * Choreography wait: lines one animation up with another (a glint at a card's flip apex), so it
+ * honours speed/skip but NOT the game pace — pacing beats use `sleep`.
+ */
+export function wait(ms: number): Promise<void> {
+  return sleep(ms / pace);
+}
+
+/** Awaitable hold that honours pace, speed, skip and the frame budget. */
 export function sleep(ms: number): Promise<void> {
-  const d = D(ms);
+  const d = D(ms * pace);
   if (d <= 0) return Promise.resolve();
   return new Promise((resolve) => {
     const s: Sleeper = { id: 0 as unknown as ReturnType<typeof setTimeout>, end: clockNow() + d, resolve, stopTick: null };
@@ -180,7 +214,8 @@ export type AnimOptions = KeyframeAnimationOptions & {
 export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyframes, opts: AnimOptions): Promise<void> {
   if (instant() || typeof (el as HTMLElement).animate !== 'function') return Promise.resolve();
   const { smooth, ...timing } = opts;
-  const easing = String(opts.easing ?? 'linear');
+  // Default: slow-out to rest (motion.ts EASE.settle); pass 'linear' explicitly when wanted.
+  const easing = String(opts.easing ?? EASE.settle);
   let duration = opts.duration / speed;
   let a: Animation;
   if (smooth) {

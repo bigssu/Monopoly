@@ -33,6 +33,17 @@ export const ECONOMY = {
   groupLandMultiplier: 2,
   /** Festival marker toll multiplier (one marker on the board, never stacks). */
   festivalMultiplier: 2,
+  /** Olympics: festival multiplier by level 1..3 (rules ≥ normal). */
+  olympicsMultipliers: [2, 3, 5],
+  /** Late toll: with a round limit, the last `lateTollRounds` rounds add `lateTollStep` each. */
+  lateTollRounds: 5,
+  lateTollStep: 0.25,
+  /** Hub growth: each toll paid at a hub adds one step, up to ×`hubGrowthMax` (rules = advanced). */
+  hubGrowthMax: 4,
+  /** Double-up: right guesses allowed on the salary (×2 each), rules = advanced. */
+  doubleUpMaxWins: 3,
+  /** Dice gauge: chance (at a full pull) of a second roll that keeps the low/high one. */
+  diceGaugeBias: 0.35,
 
   /**
    * Build cost as a fraction of price, indexed by the level being built

@@ -6,7 +6,9 @@ import {
   defaultSettings,
   PROMPT_TIMER_OPTIONS,
   ROUND_LIMIT_OPTIONS,
+  RULE_LEVELS,
   START_CASH_OPTIONS,
+  type RuleLevel,
   type PlayerSetup,
   type Seat,
   type Settings,
@@ -37,6 +39,8 @@ export interface SetupDraft {
   auction: boolean;
   endOnFirstBankruptcy: boolean;
   promptTimer: 0 | 15 | 30;
+  /** Rule level (쉬움/보통/고급). */
+  rules: RuleLevel;
 }
 
 export const NAME_MAX = 10;
@@ -60,6 +64,7 @@ export function defaultDraft(): SetupDraft {
     auction: base.auction,
     endOnFirstBankruptcy: base.endOnFirstBankruptcy,
     promptTimer: base.promptTimer,
+    rules: base.rules ?? 'normal',
   };
 }
 
@@ -93,6 +98,7 @@ export function normalizeDraft(raw: unknown): SetupDraft {
     auction: typeof r.auction === 'boolean' ? r.auction : def.auction,
     endOnFirstBankruptcy: typeof r.endOnFirstBankruptcy === 'boolean' ? r.endOnFirstBankruptcy : def.endOnFirstBankruptcy,
     promptTimer: PROMPT_TIMER_OPTIONS.includes(r.promptTimer as 0 | 15 | 30) ? (r.promptTimer as 0 | 15 | 30) : def.promptTimer,
+    rules: RULE_LEVELS.includes(r.rules as RuleLevel) ? (r.rules as RuleLevel) : def.rules,
   };
   const seats = (r.seats ?? {}) as Partial<Record<Seat, Partial<SeatDraft>>>;
   for (const s of SEAT_ORDER) {
@@ -201,6 +207,7 @@ export function buildSettings(
     auction: d.auction,
     endOnFirstBankruptcy: d.endOnFirstBankruptcy,
     promptTimer: d.promptTimer,
+    rules: d.rules,
   });
   const seed = Math.floor(random() * 0x1_0000_0000) >>> 0;
   return { settings, seed };

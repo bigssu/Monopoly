@@ -1,11 +1,14 @@
 /**
  * Result screen: the celebration card is rotated to face the winner's seat.
- * Ranking rows with cash/property asset bars, game stats, "다시 하기" / "타이틀로".
+ * Ranking rows with cash/property asset bars, awards revealed one by one, an assets-over-time
+ * graph, game stats, "다시 하기" / "타이틀로".
  */
 import '@/i18n/game';
 import { GROUP_NAMES } from '@/content/board';
 import { loc, t, fmtMoney } from '@/i18n';
 import type { GameState, Seat } from '@/engine';
+import { playerColor } from '@/content/palette';
+import { awardsFor } from './awards';
 import { registerScreen } from '@/ui/router';
 import { go } from '@/ui/shell/nav';
 import { rotateStart } from '@/ui/shell/setupModel';
@@ -16,6 +19,7 @@ import { prefs } from '@/ui/shell/prefs';
 import { anim, gridTimeout, instant } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
+import { DUR, EASE } from '@/ui/fx/motion';
 
 const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];
 /** Vertical px kept free at the bottom (S edge) for the rotate pill. */
@@ -27,6 +31,28 @@ function victoryDetail(state: GameState): string {
   const r = ph.result;
   if (r.victory === 'triple' && r.groups) return r.groups.map((g) => loc(GROUP_NAMES[g])).join(' · ');
   return t(`r.victory.${r.victory}.detail`);
+}
+
+/** Total assets per player per round (+ the final standing), as coloured lines. */
+function assetGraph(state: GameState, finals: Map<number, number>): SVGSVGElement | null {
+  const rows = [...(state.history ?? [])];
+  if (rows.length < 1) return null;
+  rows.push(state.players.map((p) => finals.get(p.id) ?? 0));
+  const max = Math.max(1, ...rows.flat());
+  const ns = 'http://www.w3.org/2000/svg';
+  const svgEl = document.createElementNS(ns, 'svg');
+  svgEl.setAttribute('viewBox', '0 0 100 40');
+  svgEl.setAttribute('class', 'rs-graph');
+  svgEl.setAttribute('aria-hidden', 'true');
+  for (const p of state.players) {
+    const pts = rows.map((r, i) => `${((i / (rows.length - 1)) * 100).toFixed(1)},${(38 - ((r[p.id] ?? 0) / max) * 34).toFixed(1)}`).join(' ');
+    const line = document.createElementNS(ns, 'polyline');
+    line.setAttribute('points', pts);
+    line.setAttribute('stroke', playerColor(p.colorId).hex);
+    line.setAttribute('pathLength', '1');
+    svgEl.append(line);
+  }
+  return svgEl;
 }
 
 registerScreen('result', (root, { state }) => {
@@ -47,6 +73,8 @@ registerScreen('result', (root, { state }) => {
     h('div', { class: 'rs-detail', text: victoryDetail(state) }),
   );
   setPlayerVars(hero, winner.colorId);
+  const graph = assetGraph(state, new Map(ranking.map((r) => [r.playerId, Math.max(0, r.totalAssets)])));
+  if (graph) hero.append(h('div', { class: 'rs-graph-h', text: t('r.graph') }), graph);
 
   const rows = h('div', { class: 'rs-rows' });
   for (const r of ranking) {
@@ -71,13 +99,25 @@ registerScreen('result', (root, { state }) => {
     h('span', { class: 'lg-cash' }, h('i'), t('r.cash')),
     h('span', { class: 'lg-prop' }, h('i'), t('r.property')),
   );
+  // Awards (staging: revealed one at a time after the card lands), then the plain game stats.
+  const awards = awardsFor(state);
+  const awardEls = awards.map((a) => {
+    const p = state.players[a.pid]!;
+    const el = h(
+      'div',
+      { class: 'rs-award' },
+      iconEl(a.icon, 'ico rs-award-ico'),
+      h('div', { class: 'rs-award-main' }, h('b', { text: t(`r.award.${a.id}`) }), h('span', {}, tokenBadge(p, 'tok-badge rs-award-tok'), h('i', { text: p.name }), h('em', { text: a.value }))),
+    );
+    setPlayerVars(el, p.colorId);
+    return el;
+  });
   const stats = h(
     'div',
-    { class: 'rs-stats' },
-    h('div', { class: 'rs-stat' }, h('b', { text: String(result?.round ?? state.round) }), h('span', { text: t('r.rounds') })),
-    h('div', { class: 'rs-stat' }, h('b', { text: String(state.turn) }), h('span', { text: t('r.turns') })),
-    h('div', { class: 'rs-stat' }, h('b', { text: String(state.bankruptOrder.length) }), h('span', { text: t('r.bankruptcies') })),
+    { class: 'rs-statline' },
+    t('r.statsLine', { rounds: result?.round ?? state.round, turns: state.turn, b: state.bankruptOrder.length }),
   );
+  const awardBox = awardEls.length ? h('div', { class: 'rs-awards' }, ...awardEls) : null;
   const again = h('button', { class: 'rs-btn is-primary', type: 'button' }, iconEl('restart', 'ico'), h('span', { text: t('r.again') }));
   const home = h('button', { class: 'rs-btn', type: 'button' }, iconEl('home', 'ico'), h('span', { text: t('r.title') }));
   again.addEventListener('click', () => {
@@ -91,7 +131,17 @@ registerScreen('result', (root, { state }) => {
     sfx.play('tap');
     go('title', {});
   });
-  const side = h('div', { class: 'rs-side' }, h('div', { class: 'rs-h', text: t('r.ranking') }), rows, legend, stats, h('div', { class: 'rs-btns' }, again, home));
+  const side = h(
+    'div',
+    { class: 'rs-side' },
+    h('div', { class: 'rs-h', text: t('r.ranking') }),
+    rows,
+    legend,
+    awardBox ? h('div', { class: 'rs-h', text: t('r.awards') }) : null,
+    awardBox,
+    stats,
+    h('div', { class: 'rs-btns' }, again, home),
+  );
   const card = h('div', { class: 'rs-card', 'data-seat': winner.seat }, hero, side);
   const fx = h('div', { class: 'fx-layer' });
   // Always-upright pill on the S edge: turns the card toward the next seat so everyone at the
@@ -154,13 +204,30 @@ registerScreen('result', (root, { state }) => {
   sfx.play('win');
   void anim(hero, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
     duration: 520,
-    easing: 'cubic-bezier(.34,1.56,.64,1)',
+    easing: EASE.overshoot,
   });
   // After the screen's entry (its layout settles first); decided now, like every animation of the
   // mount (speed 0 / reduced motion at mount = no confetti, even if the speed changes 60 ms later).
   const cancelConfetti = instant() ? () => {} : gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
+  // Awards pop in one by one (anticipation: hidden until their beat; overshoot on arrival); the
+  // graph lines draw themselves after the hero lands.
+  const cancels: Array<() => void> = [];
+  if (!instant()) {
+    awardEls.forEach((el, i) => {
+      el.style.opacity = '0';
+      cancels.push(gridTimeout(() => {
+        el.style.opacity = '';
+        sfx.play('tap', { pitch: 1 + i * 0.12 });
+        void anim(el, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: DUR.enter, easing: EASE.overshoot });
+      }, 700 + i * DUR.stagger * 6));
+    });
+    graph?.querySelectorAll('polyline').forEach((line) => {
+      void anim(line, [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 1200, easing: EASE.inOut });
+    });
+  }
 
   return () => {
+    cancels.forEach((c) => c());
     cancelConfetti();
     vfx.dispose();
     stop();

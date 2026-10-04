@@ -13,11 +13,13 @@ import {
   citiesInGroup,
   citiesOnSide,
   completedGroups,
+  ECONOMY,
   defaultAction,
   getBoardInfo,
   hubCount,
   legalActions,
   propertyValue,
+  ruleFlags,
   saleOptions,
   sameAction,
   tollAtLevel,
@@ -27,12 +29,14 @@ import {
   type Phase,
   type PlayerId,
 } from '@/engine';
+import { getCard } from '@/content/cards';
 import { playerColor } from '@/content/palette';
 import { loc, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
+import { onFrame } from '@/ui/fx/time';
 import type { Board } from '@/ui/board/Board';
-import { groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, TINT, tokenBadge } from '@/ui/game/util';
+import { cardIcon, chip, groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, TINT, tokenBadge, type ChipTone } from '@/ui/game/util';
 import type { Dice } from './Dice';
 
 export interface PromptCtx {
@@ -60,6 +64,8 @@ function button(label: string, ctx: PromptCtx, action: Action | null, o: BtnOpts
     // Stable hooks for tests / accessibility tooling (labels are localized).
     'data-action': action?.type,
     'data-space': action && 'spaceIndex' in action ? action.spaceIndex : undefined,
+    'data-card': action && 'cardId' in action ? action.cardId : undefined,
+    'data-parity': action && 'parity' in action ? action.parity : undefined,
   });
   if (o.icon) b.append(iconEl(o.icon, 'ico pbtn-ico'));
   b.append(h('span', { class: 'pbtn-label', text: label }));
@@ -113,11 +119,8 @@ function kv(label: string, value: string, cls = ''): HTMLElement {
   return h('div', { class: `pc-kv ${cls}` }, h('span', { class: 'k', text: label }), h('b', { class: 'v', text: value }));
 }
 
-function tag(text: string, tone: 'gold' | 'good' | 'bad' | 'info' = 'info', icon?: string): HTMLElement {
-  const el = h('span', { class: `tag tone-${tone}` });
-  if (icon) el.append(iconEl(icon, 'ico tag-ico'));
-  el.append(h('span', { text }));
-  return el;
+function tag(text: string, tone: ChipTone = 'info', icon?: string): HTMLElement {
+  return chip({ text, tone, icon });
 }
 
 /** `tint` = the text color the building is shown in (stage.css: ladder --ink, lp-cell --ink-3 / --ink). */
@@ -154,11 +157,11 @@ function tollLadder(state: GameState, i: number, owner: PlayerId, current: numbe
 
 /** Group members as chips, tinted by owner. */
 function groupChips(state: GameState, group: GroupId, focus: number): HTMLElement {
-  const row = h('div', { class: 'gchips' });
+  const row = h('div', { class: 'gtiles' });
   for (const i of citiesInGroup(group, state.settings.spacesPerSide ?? 7)) {
     const owner = state.properties[i]?.owner ?? null;
-    const chip = h('span', { class: `gchip${i === focus ? ' is-focus' : ''}${owner !== null ? ' is-owned' : ''}` });
-    chip.append(iconEl(spaceIcon(boardOf(state).board[i]!), 'ico gchip-ico'));
+    const chip = h('span', { class: `gtile${i === focus ? ' is-focus' : ''}${owner !== null ? ' is-owned' : ''}` });
+    chip.append(iconEl(spaceIcon(boardOf(state).board[i]!), 'ico gtile-ico'));
     if (owner !== null) setPlayerVars(chip, state.players[owner]!.colorId);
     row.append(chip);
   }
@@ -173,26 +176,49 @@ function spaceTitle(state: GameState, i: number): string {
 // Phase prompts
 // ---------------------------------------------------------------------------
 
+const GAUGE_PERIOD_MS = 1600;
+const GAUGE_MIN_MS = 300;
+
 function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): PromptResult {
   const p = ctx.state.players[ph.playerId]!;
   const rollBtn = h('button', { class: 'roll-btn', type: 'button', 'data-action': 'Roll' });
   rollBtn.append(iconEl('dice-face-5', 'ico roll-ico'), h('span', { class: 'roll-label', text: t('g.roll') }));
   const roll: Action = { type: 'Roll', playerId: ph.playerId };
+  // Dice gauge (rules = advanced): while held, a gauge swings low ↔ high (slow at the ends);
+  // releasing after GAUGE_MIN_MS sends where it was. A quick tap or the keyboard rolls neutral.
+  const gaugeOn = ruleFlags(ctx.state.settings).diceGauge && !ctx.cpu;
+  const fill = h('i', { class: 'rg-fill' });
+  const gaugeEl = gaugeOn
+    ? h('div', { class: 'roll-gauge', 'aria-hidden': 'true' }, h('span', { class: 'rg-end', text: t('g.gauge.low') }), h('div', { class: 'rg-track' }, fill), h('span', { class: 'rg-end', text: t('g.gauge.high') }))
+    : null;
+  let gauge: number | undefined;
+  let stopGauge: (() => void) | null = null;
   if (ctx.cpu) rollBtn.disabled = true;
   else {
     let down = false;
     let fired = false;
+    let heldAt = 0;
     const fire = (): void => {
       if (fired) return;
       fired = true;
+      stopGauge?.();
       ctx.dice.shake(false);
-      ctx.act(roll);
+      ctx.act(gauge === undefined ? roll : { ...roll, gauge });
     };
     rollBtn.addEventListener('pointerdown', (e) => {
       down = true;
       rollBtn.setPointerCapture?.(e.pointerId);
       rollBtn.classList.add('is-held');
       ctx.dice.shake(true);
+      if (gaugeOn) {
+        heldAt = performance.now();
+        stopGauge = onFrame((now) => {
+          const g = 0.5 + 0.5 * Math.sin(((now - heldAt) / GAUGE_PERIOD_MS) * 2 * Math.PI);
+          gauge = now - heldAt >= GAUGE_MIN_MS ? g : undefined;
+          fill.style.transform = `scaleX(${g.toFixed(3)})`;
+          return true;
+        });
+      }
     });
     rollBtn.addEventListener('pointerup', () => {
       if (!down) return;
@@ -203,6 +229,8 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
     rollBtn.addEventListener('pointercancel', () => {
       down = false;
       rollBtn.classList.remove('is-held');
+      stopGauge?.();
+      gauge = undefined;
       ctx.dice.shake(false);
     });
     rollBtn.addEventListener('click', (e) => {
@@ -223,7 +251,8 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
   const el = h('div', { class: `pcard pc-roll${ctx.cpu ? ' is-cpu' : ''}` });
   if (tags.childNodes.length) el.append(tags);
   el.append(rollBtn);
-  if (!ctx.cpu) el.append(h('div', { class: 'roll-hint', text: t('g.roll.hold') }));
+  if (gaugeEl) el.append(gaugeEl);
+  if (!ctx.cpu) el.append(h('div', { class: 'roll-hint', text: t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') }));
   return { el };
 }
 
@@ -377,6 +406,90 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
       ctx,
     ),
     focus: i,
+  };
+}
+
+/** Double-up (rules = advanced): odd or even for what is on the line, or bank it. */
+function doubleUpPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'doubleUp' }>): PromptResult {
+  const guess = (parity: 'odd' | 'even'): Action => ({ type: 'DoubleUpGuess', playerId: ph.playerId, parity });
+  return {
+    el: card(
+      'pc-doubleup',
+      {
+        icon: 'corner-start',
+        kicker: t('g.doubleUp.kicker'),
+        title: t('g.doubleUp.title'),
+        body: [
+          h('div', { class: 'pc-kvs' }, kv(t('g.doubleUp.stake'), money(ph.stake), 'is-strong'), kv(t('g.doubleUp.win'), money(ph.stake * 2))),
+          h('div', { class: 'pc-note', text: t('g.doubleUp.round', { n: ph.wins + 1, max: ECONOMY.doubleUpMaxWins }) }),
+        ],
+        buttons: [
+          button(t('g.doubleUp.odd'), ctx, guess('odd'), { primary: true, tone: 'gold' }),
+          button(t('g.doubleUp.even'), ctx, guess('even'), { primary: true, tone: 'gold' }),
+          button(t('g.doubleUp.stop'), ctx, { type: 'Pass', playerId: ph.playerId }),
+        ],
+      },
+      ctx,
+    ),
+  };
+}
+
+/** Card choice (rules ≥ normal): two event cards side by side; tap one. */
+function cardChoicePrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'cardChoice' }>): PromptResult {
+  return {
+    el: card(
+      'pc-cardpick',
+      {
+        icon: 'space-event',
+        kicker: t('g.cardPick.kicker'),
+        title: t('g.cardPick.title'),
+        buttons: ph.options.map((id) => {
+          const c = getCard(id);
+          return button(loc(c.title), ctx, { type: 'ChooseCard', playerId: ph.playerId, cardId: id }, { icon: cardIcon(id), sub: loc(c.description) });
+        }),
+      },
+      ctx,
+    ),
+  };
+}
+
+/** Manual keep-cards (rules ≥ normal): spend the Toll Pass, or (owner) raise the Guard Shield. */
+function useCardPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'useCard' }>): PromptResult {
+  const { state } = ctx;
+  const use: Action = { type: 'UseCard', playerId: ph.playerId };
+  const pass: Action = { type: 'Pass', playerId: ph.playerId };
+  if (ph.card === 'toll-pass') {
+    const toll = tollOf(state, ph.spaceIndex) * (ph.multiplier ?? 1);
+    return {
+      el: card(
+        'pc-usecard',
+        {
+          icon: cardIcon('toll-pass'),
+          kicker: t('g.usePass.kicker'),
+          title: t('g.usePass.title'),
+          body: [h('div', { class: 'pc-kvs' }, kv(t('g.toll'), money(toll), 'is-strong'))],
+          buttons: [button(t('g.usePass.use'), ctx, use, { primary: true, tone: 'gold' }), button(t('g.usePass.pay'), ctx, pass, { sub: money(toll) })],
+        },
+        ctx,
+      ),
+      focus: ph.spaceIndex,
+    };
+  }
+  const buyer = state.players[ph.buyerId!]!;
+  return {
+    el: card(
+      'pc-usecard',
+      {
+        icon: cardIcon('shield'),
+        accent: playerColor(buyer.colorId).hex,
+        kicker: t('g.useShield.kicker'),
+        title: t('g.useShield.title', { name: buyer.name }),
+        body: [h('div', { class: 'pc-kvs' }, kv(t('g.value'), money(propertyValue(state, ph.spaceIndex))))],
+        buttons: [button(t('g.useShield.use'), ctx, use, { primary: true, tone: 'gold' }), button(t('g.useShield.allow'), ctx, pass, { sub: money(ph.price ?? 0) })],
+      },
+      ctx,
+    ),
+    focus: ph.spaceIndex,
   };
 }
 
@@ -592,6 +705,12 @@ export function buildPromptFor(ctx: PromptCtx): PromptResult | null {
       return auctionPrompt(ctx, ph);
     case 'debt':
       return debtPrompt(ctx, ph);
+    case 'cardChoice':
+      return cardChoicePrompt(ctx, ph);
+    case 'useCard':
+      return useCardPrompt(ctx, ph);
+    case 'doubleUp':
+      return doubleUpPrompt(ctx, ph);
     case 'gameOver':
       return null;
   }

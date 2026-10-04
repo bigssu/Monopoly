@@ -19,6 +19,8 @@ import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type G
 import { h, iconEl, isDevHook, prepareGameIcons } from './util';
 import { disposeIconAtlas } from './iconAtlas';
 import { prefs } from '@/ui/shell/prefs';
+import { Dealer } from '@/ui/dealer/Dealer';
+import { DealerDirector } from '@/ui/dealer/director';
 
 /** Dev A/B knob `?dev=1&fxpool=6.12` (canvas size classes, present.ts SLOT_CLASSES). */
 function devPool(): number[] | null {
@@ -41,6 +43,8 @@ export class GameView {
   readonly table: HTMLElement;
   readonly board: Board;
   readonly stage: Stage;
+  readonly dealer: Dealer;
+  readonly director: DealerDirector;
   readonly panels = new Map<PlayerId, PlayerPanel>();
   /** `.fx-layer` (z 40, pointer-events none): the VFX canvas. */
   readonly fx: HTMLElement;
@@ -66,6 +70,9 @@ export class GameView {
     this.board = new Board(state.players, (i) => this.showInfo(i), spacesPerSide);
     this.stage = new Stage();
     this.board.stageHost.append(this.stage.el);
+    this.dealer = new Dealer(() => prefs.get().sound);
+    this.stage.mountDealer(this.dealer.el);
+    this.director = new DealerDirector(this.dealer, () => prefs.get().dealer);
     this.table.append(this.board.el);
     for (const p of state.players) {
       const panel = new PlayerPanel(p, spacesPerSide);
@@ -231,6 +238,7 @@ export class GameView {
   }
 
   dispose(): void {
+    this.dealer.dispose();
     this.stopPrefs();
     this.vfx.dispose();
     this.stage.dropCloseUp();

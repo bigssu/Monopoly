@@ -7,6 +7,7 @@
  */
 import {
   chooseAction,
+  isFinalStretch,
   defaultAction,
   initialEvents,
   isLegal,
@@ -18,10 +19,11 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, D, endSkip, frame, instant, onFrame, skip } from '@/ui/fx/time';
+import { animSpeed, D, endSkip, frame, gamePace, instant, onFrame, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
+import { playMusic } from '@/ui/audio/music';
 import type { GameView } from './view';
 import { isDevHook } from './util';
 
@@ -82,7 +84,11 @@ export class GameController {
     this.busy = true;
     try {
       if (fresh) await this.play(s, initialEvents(s), s);
-      else await this.view.stage.rotateTo(this.actingSeat());
+      else {
+        this.view.director.markResumed(s);
+        if (isFinalStretch(s)) void playMusic('final');
+        await this.view.stage.rotateTo(this.actingSeat());
+      }
     } finally {
       this.busy = false;
     }
@@ -198,8 +204,8 @@ export class GameController {
     }
     if (p.isCpu) {
       stage.setThinking(s.phase.kind !== 'preRoll');
-      const base = s.phase.kind === 'preRoll' ? 350 + Math.random() * 200 : 450 + Math.random() * 300;
-      const delay = instant() || animSpeed() === 0 ? 0 : D(base);
+      const base = s.phase.kind === 'preRoll' ? 600 + Math.random() * 300 : 700 + Math.random() * 400;
+      const delay = instant() || animSpeed() === 0 ? 0 : D(base * gamePace());
       const snapshot = s;
       // A plain timeout, not a grid one: the CPU policy and `reduce` stay out of the animation
       // frame (dispatch's deferPlay puts the first DOM change on the next grid frame instead).
@@ -242,15 +248,18 @@ export class GameController {
       stage.showPrompt(res.el, {
         big: !!res.big,
         timer,
+        onUrgent: () => this.view.director.onTimerUrgent(),
         onTimeout: () => {
           const a = defaultAction(this.state);
           if (!a) return;
           // Tell the table why the prompt vanished (the safe default was picked).
           void stage.notice(t('g.timer.auto'), 'timer');
+          this.view.director.onTimerAuto();
           void this.dispatch(a);
         },
       });
       if (res.focus !== undefined) board.setFocus(res.focus);
+      this.view.director.onPrompt(s);
     }
     if (!p.isCpu) this.flushIdle();
   }

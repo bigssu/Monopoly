@@ -2,7 +2,7 @@
  * Default settings / player setups.
  */
 import { ECONOMY } from './economy';
-import type { CpuLevel, PlayerSetup, Seat, Settings } from './types';
+import type { CpuLevel, PlayerSetup, RuleLevel, Seat, Settings } from './types';
 import { BOARD_SIDE_OPTIONS } from '../content/board';
 
 /** Default seats by player count (DESIGN §2.1). */
@@ -43,8 +43,29 @@ export function defaultSettings(overrides: Partial<Settings> = {}): Settings {
     buildAnywhere: false,
     promptTimer: 15,
     spacesPerSide: 7,
+    rules: 'normal',
     ...overrides,
   };
+}
+
+export const RULE_LEVELS: readonly RuleLevel[] = ['easy', 'normal', 'advanced'];
+
+/** Which optional rules a level turns on (the engine checks flags, never level names). */
+export interface RuleFlags {
+  lateToll: boolean;
+  cardChoice: boolean;
+  manualCards: boolean;
+  olympics: boolean;
+  hubGrowth: boolean;
+  doubleUp: boolean;
+  diceGauge: boolean;
+}
+
+export function ruleFlags(settings: Pick<Settings, 'rules'>): RuleFlags {
+  const level = settings.rules ?? 'easy';
+  const normal = level !== 'easy';
+  const advanced = level === 'advanced';
+  return { lateToll: normal, cardChoice: normal, manualCards: normal, olympics: normal, hubGrowth: advanced, doubleUp: advanced, diceGauge: advanced };
 }
 
 export const ROUND_LIMIT_OPTIONS: readonly (number | null)[] = [10, 15, 20, 30, null];

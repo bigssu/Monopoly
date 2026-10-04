@@ -5,12 +5,13 @@
 import { getCard, type CardId } from '@/content/cards';
 import { loc, t } from '@/i18n';
 import type { GameState, Player, Seat } from '@/engine';
-import { ranking } from '@/engine';
+import { lateTollMultiplier, ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, gridTimeout, instant, onFrame, sleep } from '@/ui/fx/time';
-import { cardIcon, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, svgNode, tokenBadge } from '@/ui/game/util';
+import { anim, gamePace, gridTimeout, instant, onFrame, sleep } from '@/ui/fx/time';
+import { cardIcon, chip, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, svgNode, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
+import { EASE } from '@/ui/fx/motion';
 
 export type Tone = 'info' | 'good' | 'bad' | 'gold';
 
@@ -65,6 +66,11 @@ export class Stage {
     });
   }
 
+  /** The dealer stands on the rotating stage, beside the prompt card. */
+  mountDealer(el: HTMLElement): void {
+    this.rot.append(el);
+  }
+
   get currentSeat(): Seat {
     return this.seat;
   }
@@ -85,7 +91,7 @@ export class Stage {
     // turn's largest per-frame step at ~11 degrees for a quarter turn.
     await anim(this.rot, [{ transform: `rotate(${from}deg)` }, { transform: `rotate(${this.angle}deg)` }], {
       duration: 420,
-      easing: 'cubic-bezier(.65,0,.35,1)',
+      easing: EASE.inOut,
     });
   }
 
@@ -95,7 +101,9 @@ export class Stage {
     setPlayerVars(this.banner, p.colorId);
     this.banner.append(tokenBadge(p, 'tok-badge st-banner-tok'), h('span', { class: 'st-banner-name', text: t('g.turn', { name: p.name }) }));
     const limit = state.settings.roundLimit;
-    this.round.textContent = limit ? t('g.round.of', { n: state.round, max: limit }) : t('g.round', { n: state.round });
+    const late = lateTollMultiplier(state);
+    this.round.textContent = (limit ? t('g.round.of', { n: state.round, max: limit }) : t('g.round', { n: state.round })) + (late > 1 ? ` · ${t('g.lateToll', { m: late })}` : '');
+    this.round.classList.toggle('is-late', late > 1);
     this.setRanking(state);
   }
 
@@ -109,7 +117,7 @@ export class Stage {
         { transform: 'translateY(0) scale(1.08)', opacity: 1, offset: 0.6 },
         { transform: 'translateY(0) scale(1)', opacity: 1 },
       ],
-      { duration: 420, easing: 'cubic-bezier(.22,1,.36,1)' },
+      { duration: 420, easing: EASE.settle },
     );
   }
 
@@ -137,7 +145,7 @@ export class Stage {
   // -------------------------------------------------------------------------
 
   /** Show a prompt card (replacing any). `timer` seconds > 0 draws a countdown ring. */
-  showPrompt(card: HTMLElement, opts: { timer?: number; onTimeout?: () => void; big?: boolean } = {}): void {
+  showPrompt(card: HTMLElement, opts: { timer?: number; onTimeout?: () => void; onUrgent?: () => void; big?: boolean } = {}): void {
     this.clearTimer();
     this.promptSlot.innerHTML = '';
     this.el.classList.toggle('has-big', !!opts.big);
@@ -166,6 +174,7 @@ export class Stage {
       this.tickId = window.setTimeout(() => {
         ring.classList.add('is-urgent');
         sfx.play('timer-tick');
+        opts.onUrgent?.();
       }, Math.max(0, timer - 3) * 1000);
     }
     this.promptSlot.append(card);
@@ -173,7 +182,7 @@ export class Stage {
     // On the slot (its own layer, same box as the card): see .st-prompt in stage.css.
     void anim(this.promptSlot, [{ transform: 'translateY(30%) scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
       duration: 300,
-      easing: 'cubic-bezier(.22,1,.36,1)',
+      easing: EASE.settle,
     });
   }
 
@@ -239,7 +248,7 @@ export class Stage {
     this.toastLayer.append(el);
     await anim(el, [{ transform: 'scale(.5)', opacity: 0 }, { transform: 'scale(1.06)', opacity: 1, offset: 0.7 }, { transform: 'scale(1)', opacity: 1 }], {
       duration: 260,
-      easing: 'cubic-bezier(.34,1.56,.64,1)',
+      easing: EASE.overshoot,
     });
     await sleep(ms);
     await anim(el, [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-20%)' }], { duration: 200 });
@@ -257,9 +266,27 @@ export class Stage {
     this.noticeLayer.append(el);
     // Real time (not the animation speed): it must stay readable even at test speeds. The DOM
     // changes still land in budgeted frames (gridTimeout).
-    await new Promise<void>((r) => gridTimeout(r, 1600));
+    await new Promise<void>((r) => gridTimeout(r, 1600 * gamePace()));
     el.classList.add('is-leaving');
     await new Promise<void>((r) => gridTimeout(r, 260));
+    el.remove();
+  }
+
+  /**
+   * The rolled total as a huge number in the middle of the stage, held while it is read
+   * (anticipation pop → hold → fade). Resolves when it has gone.
+   */
+  async bigTotal(n: number, holdMs: number): Promise<void> {
+    if (instant()) return;
+    // 6 and 9 are underlined (as on billiard balls): the stage faces one seat, others read it rotated.
+    const el = h('div', { class: `st-total num${n === 6 || n === 9 ? ' is-69' : ''}`, text: String(n), 'aria-hidden': 'true' });
+    this.toastLayer.append(el);
+    await anim(el, [{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1.18)', opacity: 1, offset: 0.65 }, { transform: 'scale(1)', opacity: 1 }], {
+      duration: 320,
+      easing: EASE.overshoot,
+    });
+    await sleep(holdMs);
+    await anim(el, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.85)' }], { duration: 220 });
     el.remove();
   }
 
@@ -276,7 +303,7 @@ export class Stage {
         { transform: 'scale(1) rotate(-8deg)', opacity: 1, offset: 0.8 },
         { transform: 'scale(1.1) rotate(-8deg)', opacity: 0 },
       ],
-      { duration: 900, easing: 'cubic-bezier(.22,1,.36,1)' },
+      { duration: 900, easing: EASE.settle },
     );
     el.remove();
   }
@@ -302,7 +329,7 @@ export class Stage {
     const inner = card.firstElementChild as HTMLElement;
     await anim(card, [{ transform: 'translateY(60%) scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
       duration: 320,
-      easing: 'cubic-bezier(.22,1,.36,1)',
+      easing: EASE.settle,
     });
     // Two-step flip (0→90°, swap faces, −90→0°): never relies on backface culling.
     await anim(inner, [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }], { duration: 230, easing: 'cubic-bezier(.5,0,1,1)' });
@@ -338,7 +365,7 @@ export class Stage {
     content.focus({ preventScroll: true });
     void anim(content, [{ transform: 'scale(.85)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
       duration: 220,
-      easing: 'cubic-bezier(.34,1.56,.64,1)',
+      easing: EASE.overshoot,
     });
   }
 
@@ -367,13 +394,13 @@ export class Stage {
       ),
       h('div', { class: 'toll-amt', text: opts.waived ? t('g.free') : money(opts.amount) }),
       opts.festival || opts.multiplier > 1
-        ? h('div', { class: 'toll-tags' }, opts.festival ? h('span', { class: 'tag', text: t('g.toll.festival') }) : null, opts.multiplier > 1 ? h('span', { class: 'tag', text: `×${opts.multiplier}` }) : null)
+        ? h('div', { class: 'toll-tags' }, opts.festival ? chip({ text: t('g.toll.festival') }) : null, opts.multiplier > 1 ? chip({ text: `×${opts.multiplier}` }) : null)
         : null,
     );
     this.toastLayer.append(el);
     await anim(el, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
       duration: 280,
-      easing: 'cubic-bezier(.34,1.56,.64,1)',
+      easing: EASE.overshoot,
     });
     await sleep(700);
     void anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).then(() => el.remove());
@@ -401,7 +428,7 @@ export class Stage {
       this.rot.append(el);
       void anim(el, [{ opacity: 0, transform: 'translateY(8%) scale(.7)' }, { opacity: 1, transform: 'none' }], {
         duration: 133,
-        easing: 'cubic-bezier(.34,1.56,.64,1)',
+        easing: EASE.overshoot,
       });
     } else if (phase === 'pop') {
       const el = this.cu;

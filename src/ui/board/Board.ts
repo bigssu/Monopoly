@@ -2,7 +2,7 @@
  * The board: an SVG ring of 7/8/9 spaces per side, the Stage host in the
  * middle and an HTML token layer on top (tokens hop with the Web Animations API).
  */
-import { getBoard, oneAwayWarnings, type GameState, type Player, type PlayerId, type SpaceDef, type SpacesPerSide } from '@/engine';
+import { festivalMultiplier, getBoard, hubStep, oneAwayWarnings, type GameState, type Player, type PlayerId, type SpaceDef, type SpacesPerSide } from '@/engine';
 import { playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
@@ -11,6 +11,7 @@ import { anim, animSpeed, D, gridTimeout, instant, isSkipping, onFrame } from '@
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
 import { DEPTH, INNER, VB, getBoardGeometry, tokenSpot, type SpaceGeom } from './geometry';
+import { EASE } from '@/ui/fx/motion';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -135,7 +136,10 @@ function textLines(
 interface SpaceView {
   owner: PlayerId | null;
   level: number;
-  festival: boolean;
+  /** Festival multiplier on this space (0 = no festival): ×2, or the olympics ×3 / ×5. */
+  festival: number;
+  /** Hub growth step (1 = none). */
+  boost: number;
   pot: number;
   ring: string | null;
   lang: string;
@@ -202,7 +206,12 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   if (v.festival) {
     parts.push(iconAt('festival-marker', w - 138, 96, 124, 'sp-fest'));
     parts.push(
-      `<g class="sp-x2"><rect x="${14}" y="${104}" width="96" height="58" rx="29" fill="#E8564F"/><text x="62" y="147" font-size="44" text-anchor="middle" fill="#fff">×2</text></g>`,
+      `<g class="sp-x2"><rect x="${14}" y="${104}" width="96" height="58" rx="29" fill="#E8564F"/><text x="62" y="147" font-size="44" text-anchor="middle" fill="#fff">×${v.festival}</text></g>`,
+    );
+  }
+  if (v.boost > 1) {
+    parts.push(
+      `<g class="sp-x2"><rect x="${14}" y="${104}" width="96" height="58" rx="29" fill="#2EC4B6"/><text x="62" y="147" font-size="44" text-anchor="middle" fill="#fff">×${v.boost}</text></g>`,
     );
   }
   return parts.join('');
@@ -249,8 +258,8 @@ function spaceMatrix(i: number, geom: readonly SpaceGeom[]): DOMMatrix {
 }
 
 /** The look of a space with nothing on it (what the static base image shows). */
-const BARE: Omit<SpaceView, 'lang'> = { owner: null, level: 0, festival: false, pot: 0, ring: null };
-const isBare = (v: SpaceView): boolean => v.owner === null && v.level === 0 && !v.festival && v.pot === 0;
+const BARE: Omit<SpaceView, 'lang'> = { owner: null, level: 0, festival: 0, boost: 1, pot: 0, ring: null };
+const isBare = (v: SpaceView): boolean => v.owner === null && v.level === 0 && !v.festival && v.boost <= 1 && v.pot === 0;
 
 /** Invisible hit area of a bare space (taps, picking); the art is in the base image. */
 function hitMarkup(i: number, geom: readonly SpaceGeom[]): string {
@@ -641,7 +650,8 @@ export class Board {
       const v: SpaceView = {
         owner: pr?.owner ?? null,
         level: pr?.level ?? 0,
-        festival: vs.festival === i,
+        festival: vs.festival === i ? festivalMultiplier(vs) : 0,
+        boost: hubStep(vs, i),
         pot: i === 0 ? vs.pot : 0,
         ring: rings.get(i) ?? null,
         lang,
@@ -718,7 +728,7 @@ export class Board {
             { transform: 'scale(1.12)', opacity: 1, offset: 0.45 },
             { transform: 'scale(1)', opacity: 0 },
           ];
-    await anim(ring, frames, { duration: kind === 'stamp' ? 700 : 520, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+    await anim(ring, frames, { duration: kind === 'stamp' ? 700 : 520, easing: EASE.overshoot });
     ring.remove();
   }
 
@@ -734,7 +744,7 @@ export class Board {
     void anim(r, [
       { transform: 'translate(-50%,-50%) scale(.2)', opacity: 0.9 },
       { transform: 'translate(-50%,-50%) scale(1.5)', opacity: 0 },
-    ], { duration: 650, easing: 'cubic-bezier(.22,1,.36,1)' }).then(() => r.remove());
+    ], { duration: 650, easing: EASE.settle }).then(() => r.remove());
   }
 
   /**
@@ -988,7 +998,7 @@ export class Board {
         if (animate && !first) {
           void anim(tk.root, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }], {
             duration: 240,
-            easing: 'cubic-bezier(.22,1,.36,1)',
+            easing: EASE.settle,
           });
         }
       });
@@ -1002,9 +1012,13 @@ export class Board {
     tk.moving = true;
     tk.root.classList.add('is-moving');
     this.layoutTokens(true); // others on the start space re-centre
-    // 180 ms/space for short moves; long moves hop faster (≤150 ms) so they never drag.
-    const per = path.length > 6 ? Math.max(85, Math.min(150, 180 * (9 / path.length))) : 180;
+    // 300 ms/space for short moves; long moves hop a little faster (≥ 200 ms) so they never drag.
+    const per = path.length > 6 ? Math.max(200, Math.min(300, 300 * (7 / path.length))) : 300;
     const lift = 0.95 * (this.px / 32);
+    // Anticipation: a short crouch before the first hop.
+    if (!instant()) {
+      await anim(tk.body, [{ transform: 'scale(1)' }, { transform: 'scale(1.16, .8)' }], { duration: 140, easing: 'cubic-bezier(.3,0,.7,1)' });
+    }
     for (let n = 0; n < path.length; n++) {
       const idx = path[n]!;
       const spot = tokenSpot(idx, 0, 1, this.size);
@@ -1033,6 +1047,19 @@ export class Board {
         ),
       ]);
       onLand?.(n);
+    }
+    // Follow-through: a little settle bounce on the final space.
+    if (!instant()) {
+      await anim(
+        tk.body,
+        [
+          { transform: 'scale(1)' },
+          { transform: `translateY(${-lift * 0.3}px) scale(.96, 1.06)`, offset: 0.4 },
+          { transform: 'translateY(0) scale(1.05, .95)', offset: 0.75 },
+          { transform: 'scale(1)' },
+        ],
+        { duration: 240, easing: EASE.settle },
+      );
     }
     tk.moving = false;
     tk.root.classList.remove('is-moving');
@@ -1066,7 +1093,7 @@ export class Board {
             { transform: 'translateY(0) scale(1.15, .85)', offset: 0.9 },
             { transform: 'translateY(0) scale(1)' },
           ],
-          { duration: 700, easing: 'ease-in-out' },
+          { duration: 700, easing: EASE.inOut },
         ),
       ]);
     }

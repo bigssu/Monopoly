@@ -1,5 +1,6 @@
 /** Screen shake (transform only). */
 import { anim } from './time';
+import { EASE } from '@/ui/fx/motion';
 
 export function shake(el: HTMLElement, strength = 1): Promise<void> {
   const a = 7 * strength;
@@ -14,7 +15,7 @@ export function shake(el: HTMLElement, strength = 1): Promise<void> {
       { transform: `translate(${-a * 0.2}px, 0)`, offset: 0.82 },
       { transform: 'translate(0,0)' },
     ],
-    { duration: 480, easing: 'ease-out' },
+    { duration: 480, easing: EASE.settle },
   );
 }
 
@@ -34,5 +35,5 @@ export function shakeAll(els: readonly HTMLElement[], px: number, ms: number): P
     { transform: `translate(${-a * 0.12}px, 0)`, offset: 0.82 },
     { transform: 'translate(0,0)' },
   ];
-  return Promise.all(els.map((el) => anim(el, kf, { duration: ms, easing: 'ease-out' }))).then(() => {});
+  return Promise.all(els.map((el) => anim(el, kf, { duration: ms, easing: EASE.settle }))).then(() => {});
 }

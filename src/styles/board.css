@@ -79,8 +79,8 @@
    tokens and overlay above it onto "overlap" layers for as long as the warning stood. */
 .bm-pick rect,
 .bm-pick circle { stroke: var(--brand); stroke-width: 8; }
-.bm-pick { animation: lr-pick 1s ease-in-out infinite; }
-@keyframes lr-pick { 50% { opacity: 0.35; } }
+.bm-pick { animation: lr-pick var(--t-breathe) var(--ease-breathe) infinite; }
+@keyframes lr-pick { 50% { opacity: 0.45; } }
 .bm-focus rect,
 .bm-focus circle { stroke: var(--brand); stroke-width: 9; }
 /* Pick mode dims the other spaces: a board-colored veil at .68 = those groups at opacity .32. */

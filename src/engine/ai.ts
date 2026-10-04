@@ -35,7 +35,7 @@ import {
   tollAtLevel,
   tollOf,
 } from './rules';
-import type { Action, GameState, PlayerId } from './types';
+import type { Action, CardId, GameState, PlayerId } from './types';
 
 /** Average toll a player currently risks when landing on an opponent's property. */
 export function tollExposure(state: GameState, pid: PlayerId): number {
@@ -185,6 +185,14 @@ function travelScore(state: GameState, pid: PlayerId, target: number): number {
   }
 }
 
+/** Card choice: how much the CPU likes each card (money in > keep-cards > moves > money out). */
+const CARD_VALUE: Partial<Record<CardId, number>> = {
+  lottery: 9, welfare: 8, 'free-upgrade': 8, 'hub-bonus': 7, birthday: 7, 'bank-dividend': 6, 'to-start': 6,
+  shield: 6, 'toll-pass': 6, escape: 5, 'tax-refund': 5, express: 4, 'to-travel': 4, 'to-festival': 4,
+  'festival-invite': 4, 'leader-tax': 3, 'random-jump': 2, 'nearest-hub': 1, typhoon: 1, 'back-three': 0,
+  charity: -2, fine: -3, repairs: -3, 'to-island': -5,
+};
+
 /** Choose an action for `playerId` in the current phase. Always legal. */
 export function chooseAction(state: GameState, playerId: PlayerId): Action {
   const ph = state.phase;
@@ -274,6 +282,22 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
         blocksOpponent(state, playerId, ph.spaceIndex).stopsWin;
       const cap = easy ? price * 0.7 : want ? price * 1.3 : price * 0.9;
       return ph.minBid <= cap && after >= reserveFor(state, playerId) ? { type: 'Bid', playerId } : pass;
+    }
+
+    case 'doubleUp':
+      // One brave guess, then bank it.
+      return ph.wins === 0 && !easy ? { type: 'DoubleUpGuess', playerId, parity: 'odd' } : pass;
+
+    case 'cardChoice': {
+      const best = pickBest([...ph.options], (id) => CARD_VALUE[id] ?? 0);
+      return { type: 'ChooseCard', playerId, cardId: best ?? ph.options[0] };
+    }
+
+    case 'useCard': {
+      if (ph.card === 'shield') return { type: 'UseCard', playerId };
+      // Save the Toll Pass for a toll that actually hurts.
+      const toll = tollOf(state, ph.spaceIndex) * (ph.multiplier ?? 1);
+      return toll >= Math.min(300, p.cash * 0.25) || toll > p.cash ? { type: 'UseCard', playerId } : pass;
     }
 
     case 'debt': {

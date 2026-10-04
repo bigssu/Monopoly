@@ -15,6 +15,7 @@ import {
   type SideId,
 } from './board';
 import { ECONOMY } from './economy';
+import { ruleFlags } from './settings';
 import type {
   GameResult,
   GameState,
@@ -94,7 +95,9 @@ export function ownsSide(state: GameState, pid: PlayerId, side: SideId): boolean
 export function tollOf(state: GameState, index: number): number {
   const prop = propertyAt(state, index);
   if (prop.owner === null) return 0;
-  if (isHub(index, state.settings.spacesPerSide ?? 7)) return ECONOMY.hubTollPerHub * hubCount(state, prop.owner);
+  if (isHub(index, state.settings.spacesPerSide ?? 7)) {
+    return Math.round(ECONOMY.hubTollPerHub * hubCount(state, prop.owner) * hubStep(state, index) * lateTollMultiplier(state));
+  }
   const price = priceOf(index, state.settings.spacesPerSide ?? 7);
   const rate = ECONOMY.tollRates[prop.level] ?? 0;
   let toll = round10(price * rate);
@@ -102,8 +105,40 @@ export function tollOf(state: GameState, index: number): number {
   if (prop.level === 0 && group && ownsGroup(state, prop.owner, group)) {
     toll *= ECONOMY.groupLandMultiplier;
   }
-  if (state.festival === index) toll *= ECONOMY.festivalMultiplier;
-  return toll;
+  if (state.festival === index) toll *= festivalMultiplier(state);
+  return round10(toll * lateTollMultiplier(state));
+}
+
+/** Festival multiplier: ×2, or the olympics level's multiplier when that rule is on. */
+export function festivalMultiplier(state: GameState): number {
+  if (!ruleFlags(state.settings).olympics) return ECONOMY.festivalMultiplier;
+  const level = Math.min(ECONOMY.olympicsMultipliers.length, Math.max(1, state.festivalLevel ?? 1));
+  return ECONOMY.olympicsMultipliers[level - 1]!;
+}
+
+/** Late toll (rules ≥ normal, round limit only): ×1.25 … ×2.25 over the last five rounds. */
+export function lateTollMultiplier(state: GameState): number {
+  const limit = state.settings.roundLimit;
+  if (!limit || !ruleFlags(state.settings).lateToll) return 1;
+  const left = limit - state.round;
+  if (left >= ECONOMY.lateTollRounds) return 1;
+  return 1 + ECONOMY.lateTollStep * (ECONOMY.lateTollRounds - Math.max(0, left));
+}
+
+/** The final stretch: the late-toll rounds (rules ≥ normal) or, on easy, the last three rounds. */
+export function isFinalStretch(state: GameState): boolean {
+  const limit = state.settings.roundLimit;
+  if (!limit) return false;
+  return state.round >= limit - (ruleFlags(state.settings).lateToll ? ECONOMY.lateTollRounds - 1 : 2);
+}
+
+/** Hub growth step ×1..×4 (rules = advanced); steps belong to the owner who earned them. */
+export function hubStep(state: GameState, index: number): number {
+  if (!ruleFlags(state.settings).hubGrowth) return 1;
+  const v = state.hubVisits?.[index];
+  const owner = state.properties[index]?.owner;
+  if (!v || v.owner !== owner) return 1;
+  return Math.min(ECONOMY.hubGrowthMax, 1 + v.n);
 }
 
 /** Toll this city/hub would charge at a hypothetical level (no festival). For AI estimates. */

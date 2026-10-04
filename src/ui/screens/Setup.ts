@@ -5,7 +5,7 @@
 import { BOARD_SIDE_OPTIONS, getBoard, GROUP_COLORS, HUB_COLOR, type SpacesPerSide } from '@/content/board';
 import { icon, LOGO_SVG } from '@/content/icons';
 import { PLAYER_COLORS, TOKEN_IDS } from '@/content/palette';
-import { PROMPT_TIMER_OPTIONS, ROUND_LIMIT_OPTIONS, START_CASH_OPTIONS, type Seat } from '@/engine';
+import { PROMPT_TIMER_OPTIONS, ROUND_LIMIT_OPTIONS, RULE_LEVELS, START_CASH_OPTIONS, type Seat } from '@/engine';
 import { fmtMoney, onLangChange, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
@@ -387,6 +387,21 @@ registerScreen('setup', (root) => {
       { class: 'opt-card' },
       h('h2', { class: 'opt-card-title' }, t('setup.rules')),
       row(
+        t('setup.level'),
+        'trophy',
+        segmented(
+          RULE_LEVELS.map((value) => ({ value, label: t(`setup.level.${value}`) })),
+          draft.rules,
+          (value) => {
+            draft.rules = value;
+            save();
+            renderAll();
+          },
+          { label: t('setup.level'), focusKey: 'level' },
+        ),
+      ),
+      h('p', { class: 'opt-level-note' }, t(`setup.levelDesc.${draft.rules}`)),
+      row(
         t('setup.spacesPerSide'),
         'landmark',
         segmented(
@@ -510,7 +525,7 @@ registerScreen('setup', (root) => {
         { class: 'setup-order-list' },
         activeSeats(draft).flatMap((seat, i) => [
           i > 0 ? ico('chevron-right', 'order-arrow') : null,
-          h('span', { class: 'order-chip', ...colorVars(draft.seats[seat].colorId) }, tokenAvatar(draft.seats[seat].tokenId, draft.seats[seat].colorId), seatName(draft, seat)),
+          h('span', { class: 'chip is-player', ...colorVars(draft.seats[seat].colorId) }, tokenAvatar(draft.seats[seat].tokenId, draft.seats[seat].colorId), seatName(draft, seat)),
         ]),
       ),
     );

@@ -10,6 +10,7 @@ import {
   getBoardInfo,
   distance,
   isCity,
+  isHub,
   isProperty,
   nearestHubAhead,
   priceOf,
@@ -17,6 +18,7 @@ import {
   walkPath,
 } from './board';
 import { ECONOMY } from './economy';
+import { ruleFlags } from './settings';
 import { createRng, rollDice, seedToState, type Rng } from './rng';
 import {
   canBeTakenOver,
@@ -39,6 +41,7 @@ import {
   type OneAwayWarning,
 } from './rules';
 import type {
+  PlayerStats,
   Action,
   Continuation,
   GameEvent,
@@ -94,6 +97,44 @@ export function deepClone<T>(value: T): T {
 
 function emit(ctx: Ctx, e: GameEvent): void {
   ctx.ev.push(e);
+  track(ctx.s, e);
+}
+
+export const emptyStats = (): PlayerStats => ({ tollPaid: 0, tollEarned: 0, biggestToll: 0, takeovers: 0, bought: 0, built: 0, islandVisits: 0, doubles: 0, cards: 0 });
+
+/** Game statistics for the result screen (UI only reads them; no rule depends on them). */
+function track(s: GameState, e: GameEvent): void {
+  const st = (s.stats ??= s.players.map(emptyStats));
+  const of = (pid: PlayerId) => st[pid] ?? (st[pid] = emptyStats());
+  switch (e.type) {
+    case 'TollPaid':
+      if (e.waived) return;
+      of(e.payerId).tollPaid += e.amount;
+      of(e.ownerId).tollEarned += e.amount;
+      of(e.ownerId).biggestToll = Math.max(of(e.ownerId).biggestToll, e.amount);
+      return;
+    case 'TakenOver':
+      of(e.buyerId).takeovers++;
+      return;
+    case 'PropertyBought':
+      of(e.playerId).bought++;
+      return;
+    case 'Built':
+      of(e.playerId).built++;
+      return;
+    case 'SentToIsland':
+      of(e.playerId).islandVisits++;
+      return;
+    case 'DiceRolled':
+      if (e.isDouble) of(e.playerId).doubles++;
+      return;
+    case 'CardDrawn':
+      of(e.playerId).cards++;
+      return;
+    case 'RoundStarted':
+      (s.history ??= []).push(s.players.map((p) => (p.bankrupt ? 0 : totalAssets(s, p.id))));
+      return;
+  }
 }
 
 function player(ctx: Ctx, pid: PlayerId): Player {
@@ -163,6 +204,9 @@ export function createGame(settings: Settings, seed: number): GameState {
     extraRoll: false,
     remoteBuildUsed: false,
     bankruptOrder: [],
+    stats: players.map(emptyStats),
+    // Round 1 starts here (no RoundStarted from the reducer): everyone starts with the start cash.
+    history: [players.map(() => settings.startCash)],
   };
 }
 
@@ -180,10 +224,26 @@ export function initialEvents(state: GameState): GameEvent[] {
 // Randomness (with test hooks)
 // ---------------------------------------------------------------------------
 
-function nextDice(ctx: Ctx): [number, number] {
+function nextDice(ctx: Ctx, gauge?: number): [number, number] {
   const q = ctx.s.testHooks?.diceQueue;
   if (q && q.length > 0) return q.shift()!;
-  return rollDice(ctx.rng);
+  const first = rollDice(ctx.rng);
+  if (gauge === undefined || !ruleFlags(ctx.s.settings).diceGauge) return first;
+  return gaugeRoll(ctx.rng, gauge, first);
+}
+
+/**
+ * Dice gauge (B7): with chance `diceGaugeBias × pull` (pull = distance of the release from the
+ * middle, 0..1) roll again and keep the roll nearer the low (g < .5) or high (g > .5) end.
+ */
+export function gaugeRoll(rng: Rng, gauge: number, first: [number, number]): [number, number] {
+  const g = Math.min(1, Math.max(0, gauge));
+  const pull = Math.abs(g - 0.5) * 2;
+  if (rng.next() >= ECONOMY.diceGaugeBias * pull) return first;
+  const second = rollDice(rng);
+  const sum = (d: [number, number]) => d[0] + d[1];
+  const better = g > 0.5 ? sum(second) > sum(first) : sum(second) < sum(first);
+  return better ? second : first;
 }
 
 function pick<T>(ctx: Ctx, list: readonly T[]): T {
@@ -541,12 +601,16 @@ function land(ctx: Ctx, pid: PlayerId, opts: LandOpts = {}): void {
         receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', board.startIndex);
       }
       receivePot(ctx, pid);
+      if (ruleFlags(s.settings).doubleUp) {
+        emit(ctx, { type: 'DoubleUpOffered', playerId: pid, stake: ECONOMY.salary });
+        return setPhase(ctx, { kind: 'doubleUp', playerId: pid, stake: ECONOMY.salary, wins: 0 });
+      }
       return endLanding(ctx);
     case 'city':
     case 'hub':
       return landOnProperty(ctx, pid, idx, opts.tollMultiplier ?? 1);
     case 'event':
-      return drawCard(ctx, pid);
+      return ruleFlags(s.settings).cardChoice ? offerCards(ctx, pid) : drawCard(ctx, pid);
     case 'island':
       sendToIsland(ctx, pid, 'space');
       return endTurn(ctx);
@@ -598,13 +662,28 @@ function offerBuild(ctx: Ctx, pid: PlayerId, idx: number): void {
 function payToll(ctx: Ctx, pid: PlayerId, idx: number, mult: number): void {
   const s = ctx.s;
   const p = player(ctx, pid);
+  const passAt = p.cards.indexOf('toll-pass');
+  if (passAt >= 0 && ruleFlags(s.settings).manualCards) {
+    return setPhase(ctx, { kind: 'useCard', playerId: pid, card: 'toll-pass', spaceIndex: idx, multiplier: mult });
+  }
+  return settleToll(ctx, pid, idx, mult, passAt >= 0);
+}
+
+/** Pay the toll at `idx`, or waive it with the payer's Toll Pass (`usePass`). */
+function settleToll(ctx: Ctx, pid: PlayerId, idx: number, mult: number, usePass: boolean): void {
+  const s = ctx.s;
+  const p = player(ctx, pid);
   const ownerId = propertyAt(s, idx).owner!;
   const baseToll = tollOf(s, idx);
   const amount = baseToll * mult;
   const info: TollInfo = { spaceIndex: idx, ownerId, baseToll, festival: s.festival === idx, multiplier: mult };
-  const passAt = p.cards.indexOf('toll-pass');
-  if (passAt >= 0) {
-    p.cards.splice(passAt, 1);
+  // Hub growth: this visit raises the hub's next toll (the current one is already priced).
+  if (ruleFlags(s.settings).hubGrowth && isHub(idx, s.settings.spacesPerSide ?? 7)) {
+    const v = s.hubVisits?.[idx];
+    s.hubVisits = { ...s.hubVisits, [idx]: { owner: ownerId, n: v && v.owner === ownerId ? v.n + 1 : 1 } };
+  }
+  if (usePass) {
+    p.cards.splice(p.cards.indexOf('toll-pass'), 1);
     emit(ctx, { type: 'CardUsed', playerId: pid, card: 'toll-pass' });
     emit(ctx, {
       type: 'TollPaid',
@@ -648,14 +727,41 @@ function takeoverCheck(ctx: Ctx, pid: PlayerId, idx: number): void {
   });
 }
 
+/** Cities `pid` may hold the festival in: own cities, the current one only to raise its olympics level. */
+export function festivalOptions(s: GameState, pid: PlayerId): number[] {
+  const olympics = ruleFlags(s.settings).olympics && (s.festivalLevel ?? 1) < ECONOMY.olympicsMultipliers.length;
+  return ownedCities(s, pid).filter((i) => i !== s.festival || olympics);
+}
+
+function blockTakeover(ctx: Ctx, buyerId: PlayerId, ownerId: PlayerId, idx: number): void {
+  const owner = player(ctx, ownerId);
+  owner.cards.splice(owner.cards.indexOf('shield'), 1);
+  emit(ctx, { type: 'CardUsed', playerId: ownerId, card: 'shield' });
+  emit(ctx, { type: 'TakeoverBlocked', buyerId, ownerId, spaceIndex: idx });
+  return endLanding(ctx);
+}
+
+function completeTakeover(ctx: Ctx, buyerId: PlayerId, ownerId: PlayerId, idx: number, price: number): void {
+  emit(ctx, { type: 'TakenOver', buyerId, sellerId: ownerId, spaceIndex: idx, price });
+  pay(ctx, buyerId, ownerId, price, 'takeover', idx);
+  propertyAt(ctx.s, idx).owner = buyerId;
+  checkVictory(ctx);
+  if (ECONOMY.buildAfterTakeover) return offerBuild(ctx, buyerId, idx);
+  return endLanding(ctx);
+}
+
 function offerFestival(ctx: Ctx, pid: PlayerId): void {
-  const options = ownedCities(ctx.s, pid).filter((i) => i !== ctx.s.festival);
+  const options = festivalOptions(ctx.s, pid);
   if (options.length === 0) return endLanding(ctx);
   return setPhase(ctx, { kind: 'festival', playerId: pid, options });
 }
 
 function setFestival(ctx: Ctx, pid: PlayerId, idx: number): void {
   const previous = ctx.s.festival;
+  // Olympics: holding it again on the same city raises the level (×2 → ×3 → ×5); moving resets.
+  if (ruleFlags(ctx.s.settings).olympics) {
+    ctx.s.festivalLevel = previous === idx ? Math.min(ECONOMY.olympicsMultipliers.length, (ctx.s.festivalLevel ?? 1) + 1) : 1;
+  }
   ctx.s.festival = idx;
   emit(ctx, { type: 'FestivalSet', playerId: pid, spaceIndex: idx, previous });
 }
@@ -748,10 +854,21 @@ function noEffect(ctx: Ctx, pid: PlayerId, cardId: CardId): void {
   return endLanding(ctx);
 }
 
-function drawCard(ctx: Ctx, pid: PlayerId): void {
+/** Card choice: draw two different cards and let the player pick one. */
+function offerCards(ctx: Ctx, pid: PlayerId): void {
+  const a = nextCardId(ctx);
+  let b = nextCardId(ctx);
+  for (let k = 0; b === a && k < 8; k++) b = nextCardId(ctx);
+  if (b === a) b = CARDS[(CARDS.findIndex((c) => c.id === a) + 1) % CARDS.length]!.id;
+  const options: [CardId, CardId] = [a, b];
+  emit(ctx, { type: 'CardsOffered', playerId: pid, options });
+  return setPhase(ctx, { kind: 'cardChoice', playerId: pid, options });
+}
+
+function drawCard(ctx: Ctx, pid: PlayerId, chosen?: CardId): void {
   const s = ctx.s;
   const p = player(ctx, pid);
-  const cardId = nextCardId(ctx);
+  const cardId = chosen ?? nextCardId(ctx);
   emit(ctx, { type: 'CardDrawn', playerId: pid, cardId });
   const eff = getCard(cardId).effect;
   switch (eff.kind) {
@@ -923,6 +1040,12 @@ export function legalActions(state: GameState): Action[] {
       return p.cash >= ph.minBid ? [{ type: 'Bid', playerId: pid }, pass] : [pass];
     case 'debt':
       return saleOptions(state, pid).map((o) => o.action);
+    case 'cardChoice':
+      return ph.options.map((cardId): Action => ({ type: 'ChooseCard', playerId: pid, cardId }));
+    case 'doubleUp':
+      return [{ type: 'DoubleUpGuess', playerId: pid, parity: 'odd' }, { type: 'DoubleUpGuess', playerId: pid, parity: 'even' }, pass];
+    case 'useCard':
+      return [{ type: 'UseCard', playerId: pid }, pass];
   }
 }
 
@@ -947,6 +1070,11 @@ export function defaultAction(state: GameState): Action | null {
       opts.sort((a, b) => a.amount - b.amount);
       return opts[0]!.action;
     }
+    case 'cardChoice':
+      return { type: 'ChooseCard', playerId: pid, cardId: ph.options[0] };
+    case 'useCard':
+      // Safe: keep the Toll Pass for a bigger toll; never lose land by letting a shield sleep.
+      return ph.card === 'shield' ? { type: 'UseCard', playerId: pid } : { type: 'Pass', playerId: pid };
     default:
       return { type: 'Pass', playerId: pid };
   }
@@ -960,7 +1088,11 @@ export function sameAction(a: Action, b: Action): boolean {
   if (a.type !== b.type || a.playerId !== b.playerId) return false;
   const ai = 'spaceIndex' in a ? a.spaceIndex : undefined;
   const bi = 'spaceIndex' in b ? b.spaceIndex : undefined;
-  return ai === bi;
+  const ac = 'cardId' in a ? a.cardId : undefined;
+  const bc = 'cardId' in b ? b.cardId : undefined;
+  const ap = 'parity' in a ? a.parity : undefined;
+  const bp = 'parity' in b ? b.parity : undefined;
+  return ai === bi && ac === bc && ap === bp;
 }
 
 // ---------------------------------------------------------------------------
@@ -1018,7 +1150,7 @@ function dispatch(ctx: Ctx, action: Action): void {
         emit(ctx, { type: 'Built', playerId: pid, spaceIndex: action.spaceIndex, level: prop.level, cost, free: false });
         return setPhase(ctx, { kind: 'preRoll', playerId: pid, rollAgain: ph.rollAgain });
       }
-      return doRoll(ctx, pid);
+      return doRoll(ctx, pid, action.type === 'Roll' ? action.gauge : undefined);
 
     case 'island':
       switch (action.type) {
@@ -1072,20 +1204,41 @@ function dispatch(ctx: Ctx, action: Action): void {
     case 'takeover':
       if (action.type === 'Takeover') {
         const owner = player(ctx, ph.ownerId);
-        const shieldAt = owner.cards.indexOf('shield');
-        if (shieldAt >= 0) {
-          owner.cards.splice(shieldAt, 1);
-          emit(ctx, { type: 'CardUsed', playerId: owner.id, card: 'shield' });
-          emit(ctx, { type: 'TakeoverBlocked', buyerId: pid, ownerId: owner.id, spaceIndex: ph.spaceIndex });
-          return endLanding(ctx);
+        if (owner.cards.includes('shield')) {
+          if (ruleFlags(s.settings).manualCards) {
+            return setPhase(ctx, { kind: 'useCard', playerId: owner.id, card: 'shield', spaceIndex: ph.spaceIndex, buyerId: pid, price: ph.price });
+          }
+          return blockTakeover(ctx, pid, owner.id, ph.spaceIndex);
         }
-        emit(ctx, { type: 'TakenOver', buyerId: pid, sellerId: owner.id, spaceIndex: ph.spaceIndex, price: ph.price });
-        pay(ctx, pid, owner.id, ph.price, 'takeover', ph.spaceIndex);
-        propertyAt(s, ph.spaceIndex).owner = pid;
-        checkVictory(ctx);
-        if (ECONOMY.buildAfterTakeover) return offerBuild(ctx, pid, ph.spaceIndex);
+        return completeTakeover(ctx, pid, owner.id, ph.spaceIndex, ph.price);
       }
       return endLanding(ctx);
+
+    case 'cardChoice':
+      if (action.type === 'ChooseCard') return drawCard(ctx, pid, action.cardId);
+      return endLanding(ctx);
+
+    case 'doubleUp': {
+      if (action.type !== 'DoubleUpGuess') return endLanding(ctx);
+      // Odd/even of one seeded die: right doubles what is on the line, wrong loses it.
+      const die = ctx.rng.int(6) + 1;
+      const win = (die % 2 === 1 ? 'odd' : 'even') === action.parity;
+      emit(ctx, { type: 'DoubleUpRolled', playerId: pid, die, parity: action.parity, win, stake: ph.stake });
+      const start = getBoardInfo(s.settings.spacesPerSide ?? 7).startIndex;
+      if (!win) {
+        pay(ctx, pid, 'bank', Math.min(ph.stake, p.cash), 'salary', start);
+        return endLanding(ctx);
+      }
+      receiveFromBank(ctx, pid, ph.stake, 'salary', start);
+      const wins = ph.wins + 1;
+      if (wins >= ECONOMY.doubleUpMaxWins) return endLanding(ctx);
+      return setPhase(ctx, { kind: 'doubleUp', playerId: pid, stake: ph.stake * 2, wins });
+    }
+
+    case 'useCard':
+      if (ph.card === 'toll-pass') return settleToll(ctx, pid, ph.spaceIndex, ph.multiplier ?? 1, action.type === 'UseCard');
+      if (action.type === 'UseCard') return blockTakeover(ctx, ph.buyerId!, pid, ph.spaceIndex);
+      return completeTakeover(ctx, ph.buyerId!, pid, ph.spaceIndex, ph.price!);
 
     case 'festival':
       if (action.type === 'SetFestival') setFestival(ctx, pid, action.spaceIndex);
@@ -1142,10 +1295,10 @@ function dispatch(ctx: Ctx, action: Action): void {
   throw new IllegalActionError(`Unhandled action ${action.type} in phase ${ph.kind}`, action, ph.kind);
 }
 
-function doRoll(ctx: Ctx, pid: PlayerId): void {
+function doRoll(ctx: Ctx, pid: PlayerId, gauge?: number): void {
   const s = ctx.s;
   const p = player(ctx, pid);
-  const dice = nextDice(ctx);
+  const dice = nextDice(ctx, gauge);
   s.lastDice = dice;
   const total = dice[0] + dice[1];
   const isDouble = dice[0] === dice[1];

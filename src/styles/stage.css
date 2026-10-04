@@ -144,6 +144,7 @@
   pointer-events: none;
 }
 .face svg { width: 100%; height: 100%; display: block; }
+.face.is-side { background: linear-gradient(160deg, #C3CAD6 0%, #AEB6C4 100%); box-shadow: inset 0 0 0 max(1.5px, calc(var(--u) * 0.06)) #98A1B1; }
 /* Rolling: Dice.ts draws both tumbling, bouncing dice into one canvas over the pair. */
 .dice-canvas { position: absolute; pointer-events: none; }
 .dice.is-rolling .die { visibility: hidden; }
@@ -263,22 +264,7 @@
 .pc-tags:empty { display: none; }
 .pc-owner-tok { width: calc(var(--u) * 1.3); height: calc(var(--u) * 1.3); min-width: 20px; min-height: 20px; }
 
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--u) * 0.2);
-  align-self: flex-start;
-  padding: calc(var(--u) * 0.12) calc(var(--u) * 0.45);
-  border-radius: var(--r-pill);
-  font-weight: 800;
-  font-size: 0.9em;
-  background: #EEF1F6;
-  color: var(--ink-2);
-}
-.tag-ico { width: 1.25em; height: 1.25em; }
-.tag.tone-gold { background: #FFF1CC; color: #9A6500; }
-.tag.tone-good { background: #E4F7EB; color: #25874C; }
-.tag.tone-bad { background: #FDE8E7; color: #B33A34; }
+.stage .chip { align-self: flex-start; gap: calc(var(--u) * 0.2); padding: calc(var(--u) * 0.12) calc(var(--u) * 0.45); font-size: 0.9em; }
 
 .ladder { display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(var(--u) * 0.18); }
 .ld {
@@ -291,13 +277,13 @@
   background: #F3F5F9;
 }
 .ld b { font-family: var(--font-num); font-weight: 800; font-size: 0.86em; color: var(--ink-2); }
-.ld.is-cur { background: #FFF1CC; box-shadow: inset 0 0 0 2px var(--brand); }
+.ld.is-cur { background: var(--tone-gold-bg); box-shadow: inset 0 0 0 2px var(--brand); }
 .ld.is-cur b { color: var(--ink); }
 .lvl-ico { width: calc(var(--u) * 1.25); height: calc(var(--u) * 1.25); min-width: 18px; min-height: 18px; }
 .lvl-land { display: block; width: calc(var(--u) * 0.85); height: calc(var(--u) * 0.85); min-width: 12px; min-height: 12px; margin: calc(var(--u) * 0.2); border-radius: 3px; background: var(--accent); }
 
-.gchips { display: flex; gap: calc(var(--u) * 0.2); margin-left: auto; }
-.gchip {
+.gtiles { display: flex; gap: calc(var(--u) * 0.2); margin-left: auto; }
+.gtile {
   width: calc(var(--u) * 1.45);
   height: calc(var(--u) * 1.45);
   min-width: 20px;
@@ -308,9 +294,9 @@
   background: #F7F8FB;
   box-shadow: inset 0 0 0 2px #E2E6EE;
 }
-.gchip .gchip-ico { width: 82%; height: 82%; }
-.gchip.is-owned { background: var(--pc-tint); box-shadow: inset 0 0 0 3px var(--pc); }
-.gchip.is-focus { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
+.gtile .gtile-ico { width: 82%; height: 82%; }
+.gtile.is-owned { background: var(--pc-tint); box-shadow: inset 0 0 0 3px var(--pc); }
+.gtile.is-focus { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
 
 .lvl-preview { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 0.5); }
 .lp-cell { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 0.1); font-weight: 800; color: var(--ink-3); }
@@ -348,14 +334,14 @@
   line-height: 1.1;
   box-shadow: inset 0 calc(var(--u) * -0.16) 0 rgba(20, 30, 50, 0.12);
   cursor: pointer;
-  transition: transform var(--t-fast) var(--ease-out), opacity var(--t-fast);
+  transition: transform var(--t-release) var(--ease-spring), opacity var(--t-fast);
 }
 .pbtn .pbtn-ico { width: 1.2em; height: 1.2em; }
 .pbtn-sub { font-family: var(--font-num); font-weight: 800; font-size: 0.66em; opacity: 0.9; }
 .pbtn.is-primary { background: var(--success); color: #fff !important; box-shadow: inset 0 calc(var(--u) * -0.18) 0 #25874C, 0 calc(var(--u) * 0.15) calc(var(--u) * 0.5) rgba(61, 187, 110, 0.35); }
 .pbtn.is-primary.tone-danger { background: var(--danger); box-shadow: inset 0 calc(var(--u) * -0.18) 0 #B33A34, 0 calc(var(--u) * 0.15) calc(var(--u) * 0.5) rgba(232, 86, 79, 0.35); }
 .pbtn.tone-gold { background: #FFE9A8; color: #7A4F00 !important; }
-.pbtn:active:not(:disabled) { transform: translateY(2px) scale(0.98); }
+.pbtn:active:not(:disabled) { transform: translateY(2px) scale(1.01, .94); }
 .pbtn:disabled { opacity: 0.42; cursor: default; }
 .pcard.is-cpu .pc-buttons { opacity: 0.75; }
 .pcard.is-cpu .pbtn:disabled { opacity: 0.55; }
@@ -583,6 +569,17 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
   white-space: nowrap;
   box-shadow: var(--sh-3);
 }
+/* Rolled total (Stage.bigTotal): huge, white with a gold edge, readable on the dark stage. */
+.st-total {
+  font-family: var(--font-display);
+  font-size: max(96px, calc(var(--u) * 9));
+  line-height: 1;
+  color: #FFFFFF;
+  -webkit-text-stroke: max(3px, calc(var(--u) * 0.22)) #E39B00;
+  paint-order: stroke fill;
+  text-shadow: 0 calc(var(--u) * 0.25) 0 #B5841A, 0 calc(var(--u) * 0.5) calc(var(--u) * 1.2) rgba(0, 0, 0, 0.45);
+}
+.st-total.is-69 { text-decoration: underline; text-decoration-thickness: max(6px, calc(var(--u) * 0.45)); text-underline-offset: max(6px, calc(var(--u) * 0.4)); text-decoration-color: #E39B00; }
 .st-stamp.tone-gold { color: #E39B00; }
 .st-stamp.tone-bad { color: var(--danger); }
 .st-stamp.tone-good { color: var(--success); }
@@ -684,3 +681,60 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 .st-notice .st-toast-ico { width: 1.5em; height: 1.5em; min-width: 18px; min-height: 18px; }
 .st-notice.is-leaving { opacity: 0; transform: translateY(-30%); }
 @keyframes lr-notice-in { from { opacity: 0; transform: translateY(-40%) scale(0.9); } }
+
+/* Dealer (ui/dealer/Dealer.ts): the host on the rotating stage, top-left under the banner, with a
+   speech bubble opening to the right. No idle loop: the stage is one layer, a loop would repaint it. */
+.dealer {
+  position: absolute;
+  left: calc(var(--u) * 0.15);
+  top: calc(var(--u) * 2.6);
+  width: max(64px, calc(var(--u) * 5.2));
+  /* Above prompt cards and card reveals (.st-toasts is 4): the host's line stays readable. */
+  z-index: 5;
+  pointer-events: none;
+}
+.dealer-img { display: block; width: 100%; aspect-ratio: 1; filter: drop-shadow(0 calc(var(--u) * 0.15) calc(var(--u) * 0.2) rgba(0, 0, 0, 0.35)); }
+.dealer-bubble {
+  position: absolute;
+  left: 86%;
+  top: 6%;
+  width: max-content;
+  max-width: calc(var(--u) * 11.5);
+  padding: calc(var(--u) * 0.35) calc(var(--u) * 0.6);
+  border-radius: calc(var(--u) * 0.7);
+  background: #FFFFFF;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: max(13px, calc(var(--u) * 0.68));
+  line-height: 1.35;
+  box-shadow: var(--sh-2);
+  opacity: 0;
+  transform: scale(0.85);
+  transform-origin: 0 30%;
+  transition: opacity var(--t-fast) linear, transform var(--t-med) var(--ease-spring);
+}
+.dealer-bubble::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--u) * -0.35);
+  top: calc(var(--u) * 0.55);
+  border: calc(var(--u) * 0.22) solid transparent;
+  border-right-color: #FFFFFF;
+  border-left-width: calc(var(--u) * 0.15);
+}
+.dealer-bubble.is-in { opacity: 1; transform: none; }
+.dealer-bubble.is-out { opacity: 0; transform: scale(0.85); }
+
+/* Card choice: two event cards as tall buttons; their descriptions wrap. */
+.pc-cardpick .pc-buttons { align-items: stretch; }
+.pc-cardpick .pbtn { flex: 1 1 0; min-width: 0; flex-direction: column; gap: calc(var(--u) * 0.2); padding-block: calc(var(--u) * 0.5); }
+.pc-cardpick .pbtn-ico { width: calc(var(--u) * 2); height: calc(var(--u) * 2); }
+.pc-cardpick .pbtn-sub { white-space: normal; text-align: center; line-height: 1.3; }
+
+/* Dice gauge (rules = advanced): a gold fill swinging low ↔ high while Roll is held. */
+.roll-gauge { display: flex; align-items: center; gap: calc(var(--u) * 0.3); width: 86%; align-self: center; margin-top: calc(var(--u) * 0.35); font-size: 0.8em; font-weight: 800; color: #D9EAE8; }
+.rg-track { flex: 1; height: max(8px, calc(var(--u) * 0.42)); border-radius: var(--r-pill); background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.rg-fill { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6EC1E4, var(--brand), var(--brand-2)); transform: scaleX(0.5); transform-origin: 0 50%; }
+
+/* Late toll (rules ≥ normal): the round line turns hot over the last five rounds. */
+.st-round.is-late { color: #FFB4A8; font-weight: 900; }

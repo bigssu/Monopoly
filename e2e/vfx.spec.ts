@@ -212,7 +212,8 @@ const BEATS: Beat[] = [
     name: 'toll-N',
     patch: `${ME(2)} s.players[2].position = 15; s.properties[20] = { owner: 3, level: 3 }; s.properties[19] = { owner: 2, level: 1 }; s.properties[22] = { owner: 2, level: 0 }; s.phase = { kind: 'preRoll', playerId: 2, rollAgain: false }; s.testHooks = { diceQueue: [[2, 3]] };`,
     action: JSON.stringify({ type: 'Roll', playerId: 2 }),
-    ticks: 110,
+    // Dice read hold + crouch, 5 hops, settle and landing beat before the toll (animate.ts timing).
+    ticks: 170,
     expect: ['tollPay'],
   },
   {

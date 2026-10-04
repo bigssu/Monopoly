@@ -88,7 +88,9 @@ const LABEL: Partial<Record<Action['type'], RegExp>> = {
 
 function sel(a: Action): string {
   const sp = 'spaceIndex' in a ? `[data-space="${a.spaceIndex}"]` : '';
-  return `.st-prompt [data-action="${a.type}"]${sp}`;
+  const card = 'cardId' in a ? `[data-card="${a.cardId}"]` : '';
+  const parity = 'parity' in a ? `[data-parity="${a.parity}"]` : '';
+  return `.st-prompt [data-action="${a.type}"]${sp}${card}${parity}`;
 }
 
 function boardSpace(page: Page, i: number): Locator {
@@ -485,8 +487,10 @@ test.describe('human play (clicking real controls)', () => {
 
     // --- Event card: normal speed, tap the card to dismiss it early.
     await page.evaluate(() => window.__lotAndRoll!.setAnimSpeed(1));
-    await loadCrafted(page, {}, `s.players[s.current].position = 0; s.testHooks = { diceQueue: [[1, 2]], cardQueue: ['lottery'] };`);
+    await loadCrafted(page, {}, `s.players[s.current].position = 0; s.testHooks = { diceQueue: [[1, 2]], cardQueue: ['lottery', 'fine'] };`);
     await page.locator('.st-prompt [data-action="Roll"]').click();
+    // Normal rules (the default): pick one of two cards first, then it flips.
+    await page.locator('.st-prompt [data-action="ChooseCard"][data-card="lottery"]').click({ timeout: 15_000 });
     await expect(page.locator('.ev-card-inner.is-flipped')).toBeVisible({ timeout: 10_000 });
     await page.screenshot({ path: `${SHOTS}/human-card-1600x1000.png` });
     const t0 = Date.now();

@@ -82,10 +82,10 @@ export function switcher(on: boolean, onChange: (v: boolean) => void, label: str
 export function toggleChip(label: string, on: boolean, onChange: (v: boolean) => void, iconId?: string): HTMLButtonElement {
   const b = h(
     'button',
-    { type: 'button', class: 'tchip', 'aria-pressed': String(on) },
-    h('span', { class: 'tchip-box' }, ico('check')),
-    iconId ? ico(iconId, 'tchip-ico') : null,
-    h('span', { class: 'tchip-label' }, label),
+    { type: 'button', class: 'chip is-toggle', 'aria-pressed': String(on) },
+    h('span', { class: 'chip-check' }, ico('check')),
+    iconId ? ico(iconId) : null,
+    h('span', {}, label),
   );
   onTap(b, () => {
     const next = b.getAttribute('aria-pressed') !== 'true';

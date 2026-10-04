@@ -7,6 +7,7 @@ import { haptic } from '@/ui/audio/haptics';
 import { anim, D, instant, isSkipping, onFrame } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, svg } from '@/ui/game/util';
+import { EASE } from '@/ui/fx/motion';
 
 const PIPS: Record<number, Array<[number, number]>> = {
   1: [[50, 50]],
@@ -290,6 +291,8 @@ class Die {
       if (!f.visible) continue;
       el.style.transform = f.transform;
       el.style.setProperty('--shade', String(f.shade));
+      // Only the rolled face stays white; the visible sides go grey so the result reads first.
+      el.classList.toggle('is-side', f.n !== this.value);
     }
   }
 
@@ -365,7 +368,7 @@ export class Dice {
     }
     void anim(this.readout, [{ transform: 'scale(.4)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
       duration: 260,
-      easing: 'cubic-bezier(.34,1.56,.64,1)',
+      easing: EASE.overshoot,
     });
   }
 

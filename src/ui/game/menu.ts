@@ -9,6 +9,7 @@ import { prefs } from '@/ui/shell/prefs';
 import { anim } from '@/ui/fx/time';
 import { FocusTrap } from '@/ui/shell/focus';
 import { h, iconEl } from './util';
+import { EASE } from '@/ui/fx/motion';
 
 export interface MenuHandlers {
   onOpen: () => void;
@@ -65,7 +66,7 @@ export class GameMenu {
     this.hnd.onOpen();
     void anim(this.sheet, [{ transform: 'translateY(-12px) scale(.96)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
       duration: 220,
-      easing: 'cubic-bezier(.22,1,.36,1)',
+      easing: EASE.settle,
     });
   }
 

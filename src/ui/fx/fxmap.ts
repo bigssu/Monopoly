@@ -196,6 +196,9 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   ],
   TakenOver: (ev) => [step('takeoverStamp', { space: ev.spaceIndex, buyer: ev.buyerId, seller: ev.sellerId }, { applyAt: 'frame', wait: 'block' })],
   TakeoverBlocked: (ev) => [step('ringPulse', { at: { space: ev.spaceIndex }, color: SKY, double: true, sparkles: 8 })],
+  CardsOffered: () => [],
+  DoubleUpOffered: () => [],
+  DoubleUpRolled: () => [],
   CardDrawn: (ev, c) => {
     const p = c.cardAt?.();
     return [step('cardReveal', { tone: cardTone(ev.cardId), ...(p ? { at: p } : {}) })];

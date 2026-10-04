@@ -12,7 +12,7 @@ import { confirmDialog, openDialog, toast } from '@/ui/shell/dialog';
 import { markdownToHtml } from '@/ui/shell/markdown';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, savedGameSummary } from '@/ui/shell/persist';
-import { prefs, type FxQualityPref } from '@/ui/shell/prefs';
+import { DEALER_PREFS, GAME_PACES, prefs, TURN_PAUSES, type DealerPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
 import { segmented, switcher } from '@/ui/shell/widgets';
 import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
 import { version } from '../../../package.json';
@@ -116,6 +116,27 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       { label: t('settings.fx'), focusKey: 'effects' },
     );
 
+    const pace = segmented<GamePacePref>(
+      GAME_PACES.map((v) => ({ value: v, label: t(`settings.pace.${v}`) })),
+      p.gamePace,
+      (v) => prefs.set({ gamePace: v }),
+      { label: t('settings.pace'), focusKey: 'pace' },
+    );
+
+    const dealer = segmented<DealerPref>(
+      DEALER_PREFS.map((v) => ({ value: v, label: t(`settings.dealer.${v}`) })),
+      p.dealer,
+      (v) => prefs.set({ dealer: v }),
+      { label: t('settings.dealer'), focusKey: 'dealer' },
+    );
+
+    const rest = segmented<TurnPausePref>(
+      TURN_PAUSES.map((v) => ({ value: v, label: t('settings.restSec', { n: v / 1000 }) })),
+      p.turnPause,
+      (v) => prefs.set({ turnPause: v }),
+      { label: t('settings.rest'), focusKey: 'rest' },
+    );
+
     const timer = segmented(
       [0, 15, 30].map((v) => ({ value: v as 0 | 15 | 30, label: v === 0 ? t('setup.timerOff') : t('setup.seconds', { n: v }) })),
       p.promptTimer,
@@ -130,7 +151,11 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       row(GLOBE_SVG, t('settings.language'), lang),
       row(soundIco, t('settings.sound'), h('div', { class: 'set-inline' }, soundSwitch)),
       row(LEVELS_SVG, t('settings.volume'), h('div', { class: 'set-inline set-volume' }, volume, test)),
+      row('play', t('settings.music'), h('div', { class: 'set-inline' }, switcher(p.music, (v) => prefs.set({ music: v }), t('settings.music')))),
       row('vibrate', t('settings.haptics'), switcher(p.haptics, (v) => prefs.set({ haptics: v }), t('settings.haptics'))),
+      row('human', t('settings.dealer'), dealer, t('settings.dealerHint')),
+      row('play', t('settings.pace'), pace, t('settings.paceHint')),
+      row('timer', t('settings.rest'), rest, t('settings.restHint')),
       row('timer', t('settings.timer'), timer, t('settings.timerHint')),
       row(
         BATTERY_SVG,

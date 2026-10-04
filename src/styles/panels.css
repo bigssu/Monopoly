@@ -53,10 +53,10 @@
   z-index: 3;
   border-radius: inherit;
   box-shadow: inset 0 0 0 3px var(--pc);
-  animation: lr-turnglow 1.6s ease-in-out infinite;
+  animation: lr-turnglow var(--t-breathe) var(--ease-breathe) infinite;
   pointer-events: none;
 }
-@keyframes lr-turnglow { 50% { opacity: 0.2; } }
+@keyframes lr-turnglow { 50% { opacity: 0.35; } }
 .native-webview .pp.is-turn:not(.is-cpu) .pp-card::before { animation: none; }
 
 .pp-head { display: flex; align-items: center; gap: 4cqmin; min-width: 0; }
@@ -214,21 +214,14 @@
   gap: 1cqmin;
 }
 .pp-badges:empty { display: none; }
-.bdg {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2em;
+.pp-badges .chip {
   height: clamp(20px, min(10cqw, 8cqh), 32px);
   padding: 0 0.45em 0 0.15em;
-  border-radius: var(--r-pill);
-  background: #EEF1F6;
   font-weight: 900;
   font-size: clamp(11px, min(5.6cqw, 4.4cqh), 16px);
-  color: var(--ink-2);
 }
-.bdg-ico { height: 88%; aspect-ratio: 1; }
-.bdg.is-island { background: #D6EEF8; color: #1F6E91; }
-.bdg.is-card { background: #FFF1CC; padding: 0 0.15em; }
+.pp-badges .chip > .ico { width: auto; height: 88%; aspect-ratio: 1; }
+.pp-badges .chip.is-card { padding: 0 0.15em; }
 
 .pp-floats { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .pp-float {

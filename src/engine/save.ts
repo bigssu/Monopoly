@@ -6,8 +6,9 @@ import { GROUP_IDS, SIDE_IDS } from '../content/board';
 import type { GameState } from './types';
 import { getBoardInfo, priceOf } from './board';
 import { ECONOMY } from './economy';
-import { travelOptions } from './reducer';
+import { festivalOptions, travelOptions } from './reducer';
 import { canBeTakenOver, liquidationValue, nextBuildCost, ownedCities, round10, takeoverPrice, tollOf } from './rules';
+import { ruleFlags } from './settings';
 
 export const SAVE_FORMAT = 'lot-and-roll-save';
 export const SAVE_VERSION = 1;
@@ -35,6 +36,8 @@ export function serialize(state: GameState, savedAt: string | null = null): stri
 /** Add the original board size to v1 saves that predate the board-size option. */
 function migrate(file: SaveFile): SaveFile {
   if (file.state?.settings && file.state.settings.spacesPerSide === undefined) file.state.settings.spacesPerSide = 7;
+  // Saves from before rule levels played the original rules.
+  if (file.state?.settings && file.state.settings.rules === undefined) file.state.settings.rules = 'easy';
   return file;
 }
 
@@ -42,7 +45,8 @@ function validateSettings(value: unknown): value is JsonObject & { spacesPerSide
   if (!object(value) || !Array.isArray(value.players) || !integer(value.startCash, 1) ||
     !(value.roundLimit === null || integer(value.roundLimit, 1)) || !boolean(value.takeover) || !boolean(value.auction) ||
     !boolean(value.endOnFirstBankruptcy) || !boolean(value.buildAnywhere) || ![0, 15, 30].includes(value.promptTimer as number) ||
-    ![7, 8, 9].includes(value.spacesPerSide as number) || value.players.length < 2 || value.players.length > 4) return false;
+    ![7, 8, 9].includes(value.spacesPerSide as number) || !['easy', 'normal', 'advanced'].includes(value.rules as string) ||
+    value.players.length < 2 || value.players.length > 4) return false;
   const seats = new Set<string>();
   return value.players.every((player) => {
     if (!object(player) || typeof player.name !== 'string' || typeof player.tokenId !== 'string' || typeof player.colorId !== 'string' ||
@@ -122,6 +126,14 @@ function validatePhase(value: unknown, boardSize: number, propertyIndices: reado
         value.order.every((id) => playerId(id, playerCount)) && Array.isArray(value.active) && value.active.every((id) => playerId(id, playerCount)) &&
         (value.highBid === null || integer(value.highBid, 0)) && (value.highBidderId === null || playerId(value.highBidderId, playerCount)) &&
         integer(value.minBid, 0) && integer(value.increment, 1);
+    case 'doubleUp':
+      return prompt() && integer(value.stake, 1) && integer(value.wins, 0) && value.wins < ECONOMY.doubleUpMaxWins;
+    case 'cardChoice':
+      return prompt() && Array.isArray(value.options) && value.options.length === 2 && value.options[0] !== value.options[1] &&
+        value.options.every((id) => CARDS.some((c) => c.id === id));
+    case 'useCard':
+      return prompt() && propertyIndex(value.spaceIndex) && (value.card === 'toll-pass' ? integer(value.multiplier, 1) :
+        value.card === 'shield' && playerId(value.buyerId, playerCount) && integer(value.price, 0));
     case 'debt':
       return prompt() && integer(value.amount, 0) && Array.isArray(value.payments) && value.payments.every((payment) =>
         object(payment) && (payment.to === 'bank' || payment.to === 'pot' || playerId(payment.to, playerCount)) && integer(payment.amount, 0)) &&
@@ -174,7 +186,22 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
     }
     case 'festival':
       return currentPrompt && player.position === getBoardInfo(size).festivalIndex &&
-        phase.options.length > 0 && sameNumbers(phase.options, ownedCities(state, phase.playerId).filter((index) => index !== state.festival));
+        phase.options.length > 0 && sameNumbers(phase.options, festivalOptions(state, phase.playerId));
+    case 'doubleUp':
+      return currentPrompt && ruleFlags(state.settings).doubleUp && player.position === getBoardInfo(size).startIndex &&
+        phase.stake === ECONOMY.salary * 2 ** phase.wins;
+    case 'cardChoice':
+      return currentPrompt && ruleFlags(state.settings).cardChoice && getBoardInfo(size).eventIndices.includes(player.position);
+    case 'useCard': {
+      if (!ruleFlags(state.settings).manualCards) return false;
+      if (phase.card === 'toll-pass') {
+        const owner = property(phase.spaceIndex).owner;
+        return currentPrompt && player.position === phase.spaceIndex && player.cards.includes('toll-pass') && owner !== null && owner !== phase.playerId;
+      }
+      // Shield: the owner decides while the turn owner (the buyer) stands on the space.
+      return phase.buyerId === state.current && property(phase.spaceIndex).owner === phase.playerId && player.cards.includes('shield') &&
+        state.players[phase.buyerId]!.position === phase.spaceIndex && phase.price === takeoverPrice(state, phase.spaceIndex);
+    }
     case 'freeUpgrade':
       return currentPrompt && phase.options.length > 0 &&
         sameNumbers(phase.options, ownedCities(state, phase.playerId).filter((index) => property(index).level < ECONOMY.maxLevel));
@@ -239,6 +266,17 @@ function playerId(value: unknown, count: number): value is number {
   return integer(value, 0) && value < count;
 }
 
+/** Optional rule-level state (olympics level, hub growth steps). */
+function validateRuleState(state: JsonObject, boardSize: number): boolean {
+  if (state.festivalLevel !== undefined && !(integer(state.festivalLevel, 1) && state.festivalLevel <= ECONOMY.olympicsMultipliers.length)) return false;
+  // Result-screen statistics: plain non-negative counters / asset rows.
+  if (state.stats !== undefined && !(Array.isArray(state.stats) && state.stats.every((p) => object(p) && Object.values(p).every((v) => integer(v, 0))))) return false;
+  if (state.history !== undefined && !(Array.isArray(state.history) && state.history.every((row) => Array.isArray(row) && row.every((v) => integer(v, 0))))) return false;
+  if (state.hubVisits === undefined) return true;
+  if (!object(state.hubVisits)) return false;
+  return Object.entries(state.hubVisits).every(([k, v]) => spaceIndex(Number(k), boardSize) && object(v) && integer(v.n, 1) && integer(v.owner, 0));
+}
+
 function spaceIndex(value: unknown, boardSize: number): value is number {
   return integer(value, 0) && value < boardSize;
 }
@@ -277,7 +315,7 @@ export function deserialize(json: string): GameState {
     !(state.lastDice === null || (Array.isArray(state.lastDice) && state.lastDice.length === 2 && state.lastDice.every((die) => integer(die, 1) && die <= 6))) ||
     !boolean(state.extraRoll) || !boolean(state.remoteBuildUsed) || !Array.isArray(state.bankruptOrder) ||
     !state.bankruptOrder.every((id) => playerId(id, state.players.length)) || new Set(state.bankruptOrder).size !== state.bankruptOrder.length ||
-    !validateTestHooks(state.testHooks) || !validatePhase(state.phase, board.size, board.propertyIndices, board.cityIndices, state.players.length) ||
+    !validateTestHooks(state.testHooks) || !validateRuleState(state, board.size) || !validatePhase(state.phase, board.size, board.propertyIndices, board.cityIndices, state.players.length) ||
     !validatePhaseContext(state.phase, state as GameState)) fail('Save file state is malformed');
   return state as GameState;
 }

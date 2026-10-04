@@ -19,7 +19,7 @@
  * now), prefers-reduced-motion is instant for DOM motion while the presets still play their
  * sound + a static highlight (VFX.md §8.3).
  */
-import { deepClone, getBoardInfo, groupOf, type GameEvent, type GameState, type Level, type PlayerId } from '@/engine';
+import { deepClone, getBoardInfo, groupOf, isFinalStretch, type GameEvent, type GameState, type Level, type PlayerId } from '@/engine';
 import { GROUP_NAMES } from '@/content/board';
 import { getCard } from '@/content/cards';
 import { playerColor } from '@/content/palette';
@@ -28,7 +28,9 @@ import type { GameView } from '@/ui/game/view';
 import { isDevHook, money, spaceIcon } from '@/ui/game/util';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
-import { animSpeed, instant, sleep } from './time';
+import { animSpeed, instant, sleep, turnRest, wait } from './time';
+import { BEAT } from './motion';
+import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
 
 type Alive = () => boolean;
@@ -58,7 +60,9 @@ export async function playEvents(
     if (!alive()) return;
     try {
       if (MARK) performance.mark(`lr:${ev.type}`);
+      if (!fast) view.director.onEvent(ev, vs, 'before');
       await step(view, vs, ev, fast, batch);
+      if (!fast) view.director.onEvent(ev, vs, 'after');
     } catch (e) {
       // An animation must never break the game loop.
       console.error('[animate]', ev.type, e);
@@ -148,8 +152,13 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
   switch (ev.type) {
     case 'RoundStarted': {
       vs.round = ev.round;
+      if (isFinalStretch(vs)) void playMusic('final');
       const steps = planFx(ev, ctx);
-      if (!steps.length) return;
+      if (!steps.length) {
+        // Every new round gets its own beat (staging: the table sees the round turn over).
+        if (!fast && ev.round > 1) await stage.toast(t('g.round.start', { n: ev.round }), 700, 'info', 'restart');
+        return;
+      }
       fire(view, steps);
       if (!fast) {
         view.playSfx('warning');
@@ -175,10 +184,13 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       }
       fire(view, steps);
       await Promise.all([stage.rotateTo(p.seat), stage.announce()]);
-      await sleep(100);
+      // Staging: let the turn banner read before anything else moves.
+      await sleep(BEAT.turnBanner);
       return;
     }
     case 'TurnEnded':
+      // Timing: a rest between players so the last moment lands before the next turn starts.
+      if (!fast) await turnRest();
       return;
     case 'DiceRolled': {
       vs.lastDice = ev.dice;
@@ -189,17 +201,17 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       }
       await stage.dice.roll(ev.dice[0], ev.dice[1], ev.total, ev.isDouble);
       const hs = fire(view, planFx(ev, ctx));
+      // Timing: the total, huge, held so it can be read before anything else happens.
+      await stage.bigTotal(ev.total, BEAT.diceRead);
       if (ev.isDouble && ev.consecutiveDoubles >= 3) {
         // The siren preset plays the warning sound + haptic.
         await Promise.all([hs[1], stage.stamp(t('g.doubles.three'), 'bad')]);
       } else if (ev.isDouble) {
-        // Informational: let the stamp finish over the start of the move.
-        void stage.stamp(t('g.doubles'), 'gold');
-        await sleep(450);
+        // Staging: the stamp finishes before the token moves (one thing at a time).
+        await stage.stamp(t('g.doubles'), 'gold');
+        await sleep(BEAT.doubles);
       } else if (ev.context === 'island' && ev.steps === 0) {
-        await sleep(250);
-      } else {
-        await sleep(120);
+        await sleep(BEAT.islandFail);
       }
       if (ev.express) void stage.toast(t('g.express'), 500, 'gold', 'hub-rail');
       return;
@@ -216,6 +228,8 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       }
       vs.players[ev.playerId]!.position = ev.to;
       render(view, vs);
+      // Settle on the landing space before its consequence (toll, prompt, card) plays.
+      if (!fast) await sleep(BEAT.landing);
       return;
     }
     case 'PassedStart': {
@@ -235,7 +249,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         batch.tollArrive = null;
         render(view, vs);
         panel?.float(ev.delta, t('g.toll'));
-        await sleep(300);
+        await sleep(BEAT.money);
         return;
       }
       render(view, vs);
@@ -245,7 +259,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       if (fast) return;
       // Only reasons without a dedicated preset make their own sound (presets play cash-in / -out).
       if (ev.reason === 'pot' || ev.reason === 'sale') view.playSfx('cash-in');
-      await sleep(ev.reason === 'bankruptcy' ? 80 : 120);
+      await sleep(ev.reason === 'bankruptcy' ? BEAT.moneyBankrupt : BEAT.money);
       return;
     }
     case 'PotChanged':
@@ -328,7 +342,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       }
       // Glints around the card at the flip apex (the card rises 320 ms, flips 230 ms).
       const shown = stage.showCard(ev.cardId);
-      await sleep(430);
+      await wait(430);
       fire(view, planFx(ev, ctx));
       await shown;
       return;
@@ -402,6 +416,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
     case 'TravelDeclined':
       vs.players[ev.playerId]!.travelPending = false;
       render(view, vs);
+      if (!fast) void stage.toast(t('g.travel.declined'), 600, 'info', 'corner-tour');
       return;
     case 'DebtStarted':
       fire(view, planFx(ev, ctx));
@@ -434,7 +449,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       pr.level = (ev.to === null ? 0 : ev.level) as Level;
       render(view, vs);
       fire(view, steps);
-      if (!fast) await sleep(90);
+      if (!fast) await wait(90);
       return;
     }
     case 'Bankrupt': {
@@ -458,17 +473,22 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       }
       return;
     case 'AuctionDropped':
+      if (!fast) void stage.toast(t('g.auction.dropped', { name: vs.players[ev.playerId]!.name }), 450, 'info');
       return;
     case 'AuctionEnded':
-      if (!fast && ev.winnerId === null) await stage.toast(t('g.auction.noWinner'), 600, 'info');
+      if (fast) return;
+      if (ev.winnerId === null) await stage.toast(t('g.auction.noWinner'), 600, 'info');
+      else await stage.toast(t('g.auction.won', { name: vs.players[ev.winnerId]!.name, amount: money(ev.price) }), 800, 'good', spaceIcon(boardOf(vs)[ev.spaceIndex]!));
       return;
     case 'OneAway': {
       fire(view, planFx(ev, ctx));
       if (fast) return;
       // The preset plays the warning sound + haptic.
       const p = vs.players[ev.playerId]!;
+      // Camera: punch in on the one space that would end the game.
+      board.zoomPunch(ev.missing, 1.18);
       void edgeToast(board.overlay, view.seats, p, spaceIcon(boardOf(vs)[ev.missing]!), playerColor(p.colorId).hex);
-      await sleep(500);
+      await sleep(BEAT.oneAway);
       return;
     }
     case 'PromptOpened':
@@ -480,10 +500,10 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       }
       stage.clearPrompt();
       // A first bankruptcy ends the game: a beat of silence between the crack and the finale (§7.4).
-      if (batch.prev === 'Bankrupt') await sleep(400);
+      if (batch.prev === 'Bankrupt') await sleep(BEAT.bankruptSilence);
       const hs = fire(view, planFx(ev, ctx));
       await Promise.all([...hs, stage.stamp(t('g.gameOver'), 'gold')]);
-      await sleep(1100);
+      await sleep(BEAT.finale);
       return;
     }
   }

@@ -22,6 +22,13 @@
   --danger: #E8564F;
   --warning: #F5A25D;
 
+  /* Tones: chip / badge / highlight fills. Each ink keeps >= 4.5:1 on its bg (tokens.test.ts). */
+  --tone-neutral-bg: #EEF1F6; --tone-neutral-ink: #4B5563;
+  --tone-gold-bg: #FFF1CC;    --tone-gold-ink: #875800;
+  --tone-good-bg: #E4F7EB;    --tone-good-ink: #1D7340;
+  --tone-bad-bg: #FDE8E7;     --tone-bad-ink: #B33A34;
+  --tone-info-bg: #D6EEF8;    --tone-info-ink: #1F6E91;
+
   /* Property groups (DESIGN §3) */
   --g-brown: #A0715B;
   --g-sky: #6EC1E4;
@@ -54,11 +61,16 @@
   --sh-3: 0 10px 30px rgba(20, 30, 50, .28), 0 30px 80px rgba(20, 30, 50, .22);
   --sh-inset: inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 0 rgba(20,30,50,.10);
 
-  /* Motion */
+  /* Motion — one vocabulary for the whole app (the 12 principles; mirrored in ui/fx/motion.ts).
+     settle = slow out to rest · spring = overshoot & back (squash/stretch, follow-through)
+     anticipate = pull back before leaving · breathe = loops, slow in & out · in-out = travel */
   --ease-out: cubic-bezier(.22, 1, .36, 1);
   --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
   --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-anticipate: cubic-bezier(.36, 0, .66, -0.56);
+  --ease-breathe: cubic-bezier(.45, 0, .55, 1);
   --t-fast: 140ms; --t-med: 260ms; --t-slow: 420ms; --t-stage: 420ms;
+  --t-press: 90ms; --t-release: 260ms; --t-enter: 380ms; --t-exit: 220ms; --t-breathe: 2s; --stagger: 60ms;
 
   /* Safe areas (Android WebView + Capacitor) */
   --safe-t: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
@@ -68,5 +80,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-stage: 0ms; }
+  :root { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-stage: 0ms; --t-press: 0ms; --t-release: 0ms; --t-enter: 0ms; --t-exit: 0ms; }
 }

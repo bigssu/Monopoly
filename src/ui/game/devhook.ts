@@ -9,7 +9,7 @@
 import { chooseAction, defaultPlayers, defaultSettings, deepClone, legalActions, type Action, type GameState, type Settings } from '@/engine';
 import { setLang, type Lang } from '@/i18n';
 import { showScreen } from '@/ui/router';
-import { activeFrameTicks, setAnimSpeed, setManualClock, stepClock } from '@/ui/fx/time';
+import { activeFrameTicks, setAnimSpeed, setPace, setTurnRest, setManualClock, stepClock } from '@/ui/fx/time';
 import type { FxStats, PresetName, PresetParams } from '@/ui/fx/vfx';
 import type { GameController } from './controller';
 import { isDevHook } from './util';
@@ -69,7 +69,12 @@ export function installDevHook(): void {
     startGame: (settings, seed) => showScreen('game', { settings, seed }),
     getState: () => current?.state ?? null,
     dispatch: (a) => current?.dispatch(a) ?? Promise.resolve(false),
-    setAnimSpeed,
+    // Tests that drive the clock keep the original pace (holds unstretched, no turn rest).
+    setAnimSpeed: (x) => {
+      setPace(1);
+      setTurnRest(0);
+      setAnimSpeed(x);
+    },
     autoStep: () => current?.autoStep() ?? Promise.resolve(false),
     whenIdle: () => current?.whenIdle() ?? Promise.resolve(),
     isBusy: () => current?.isBusy() ?? false,

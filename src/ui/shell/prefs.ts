@@ -1,5 +1,5 @@
 /**
- * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality).
+ * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality, game pace, turn pause, dealer).
  *
  *   prefs.get().sound
  *   prefs.set({ volume: 0.6 })
@@ -23,7 +23,24 @@ export interface Prefs {
   batterySaver: boolean;
   /** Effects quality (docs/VFX.md §15.4): auto adapts to the device; off = static highlight + sound. */
   fxQuality: FxQualityPref;
+  /** Game pace: how long holds/reading pauses last (1 = original, 2 = twice as long). */
+  gamePace: GamePacePref;
+  /** Rest after each turn before the next player (ms). */
+  turnPause: TurnPausePref;
+  /** How much the dealer talks (voice in Korean, subtitles in English). */
+  dealer: DealerPref;
+  /** Background music on/off (follows `sound` and `volume` too). */
+  music: boolean;
 }
+
+export const DEALER_PREFS = ['off', 'min', 'normal', 'full'] as const;
+export type DealerPref = (typeof DEALER_PREFS)[number];
+
+export const TURN_PAUSES = [1000, 1500, 2000, 3000] as const;
+export type TurnPausePref = (typeof TURN_PAUSES)[number];
+
+export const GAME_PACES = [2.5, 2, 1.5, 1] as const;
+export type GamePacePref = (typeof GAME_PACES)[number];
 
 export type FxQualityPref = 'auto' | 'high' | 'low' | 'off';
 
@@ -42,7 +59,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low' };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -58,6 +75,10 @@ function sanitize(raw: unknown): Prefs {
     lastSetup: r.lastSetup ? normalizeDraft(r.lastSetup) : null,
     batterySaver: typeof r.batterySaver === 'boolean' ? r.batterySaver : d.batterySaver,
     fxQuality: r.fxQuality === 'auto' || r.fxQuality === 'high' || r.fxQuality === 'low' || r.fxQuality === 'off' ? r.fxQuality : d.fxQuality,
+    gamePace: GAME_PACES.includes(r.gamePace as GamePacePref) ? (r.gamePace as GamePacePref) : d.gamePace,
+    turnPause: TURN_PAUSES.includes(r.turnPause as TurnPausePref) ? (r.turnPause as TurnPausePref) : d.turnPause,
+    dealer: DEALER_PREFS.includes(r.dealer as DealerPref) ? (r.dealer as DealerPref) : d.dealer,
+    music: typeof r.music === 'boolean' ? r.music : d.music,
   };
 }
 

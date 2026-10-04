@@ -17,11 +17,14 @@ import { haptics, installHaptics } from '@/ui/audio/haptics';
 import { createHaptics } from '@/ui/audio/nativeHaptics';
 import { installSfx, sfx } from '@/ui/audio/sfx';
 import { SynthSfx } from '@/ui/audio/synth';
+import { installVoiceHost } from '@/ui/audio/voice';
+import { installMusicHost, playMusic, resumeMusic, setMusicEnabled } from '@/ui/audio/music';
+import { onScreenChange } from '@/ui/router';
 import { currentScreen, showScreen } from '@/ui/router';
 import { exitApp, hideNativeSplash, initNative, isNative, setNativeFrameRate } from '@/ui/shell/capacitor';
 import { toast } from '@/ui/shell/dialog';
 import { handleBack } from '@/ui/shell/nav';
-import { anim, calibrateFrameGrid, frameGrid, installCssAnimationQuantizer, onFrame, setFrameRate, sleep } from '@/ui/fx/time';
+import { anim, calibrateFrameGrid, frameGrid, installCssAnimationQuantizer, onFrame, setFrameRate, setPace, setTurnRest, sleep } from '@/ui/fx/time';
 import { installAmbientCalm, runningAmbient } from '@/ui/fx/ambient';
 import { clearSavedGame, loadSavedGame, SAVE_BACKUP_KEY, SAVE_KEY, saveGame } from '@/ui/shell/persist';
 import { prefs, PREFS_KEY, type Prefs } from '@/ui/shell/prefs';
@@ -48,6 +51,9 @@ function applyPrefs(p: Readonly<Prefs>): void {
   synth.setVolume(p.volume);
   haptics.setEnabled(p.haptics);
   setFrameRate(p.batterySaver ? 30 : 60);
+  setPace(p.gamePace);
+  setMusicEnabled(p.music && p.sound);
+  setTurnRest(p.turnPause);
   void setNativeFrameRate(p.batterySaver ? 30 : 60);
 }
 
@@ -88,13 +94,22 @@ async function boot(): Promise<void> {
   installAmbientCalm();
   calibrateFrameGrid();
   installSfx(synth);
+  installVoiceHost(synth);
+  installMusicHost(synth);
+  // Music follows the screen: the game and result screens pick their own tracks (final stretch,
+  // victory jingle); everything else plays the title theme.
+  onScreenChange((name) => {
+    if (name === 'game') void playMusic('game');
+    else if (name === 'result') void playMusic('win', { loop: false, after: 'title' });
+    else void playMusic('title');
+  });
   installHaptics(createHaptics(prefs.get().haptics));
   applyPrefs(prefs.get());
   prefs.onChange((next) => applyPrefs(next));
 
   // Web Audio needs a user gesture outside the Android WebView; resume on every return.
-  window.addEventListener('pointerdown', () => sfx.unlock(), { capture: true, passive: true });
-  window.addEventListener('keydown', () => sfx.unlock(), { capture: true, passive: true });
+  window.addEventListener('pointerdown', () => { sfx.unlock(); resumeMusic(); }, { capture: true, passive: true });
+  window.addEventListener('keydown', () => { sfx.unlock(); resumeMusic(); }, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) suspendAll();
     else sfx.unlock();

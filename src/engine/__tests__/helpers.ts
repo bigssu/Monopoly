@@ -5,7 +5,8 @@ import type { Action, GameEvent, GameState, Level, PlayerId, Settings } from '..
 
 export function settings(overrides: Partial<Settings> & { n?: number } = {}): Settings {
   const { n = 2, ...rest } = overrides;
-  return { ...defaultSettings(), players: defaultPlayers(n), ...rest };
+  // Rule tests describe the original rules; new rule levels opt in with `rules`.
+  return { ...defaultSettings(), players: defaultPlayers(n), rules: 'easy', ...rest };
 }
 
 export function game(overrides: Partial<Settings> & { n?: number; seed?: number } = {}): GameState {

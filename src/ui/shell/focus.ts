@@ -30,6 +30,8 @@ export class FocusTrap {
   activate(preferred?: HTMLElement | null): void {
     if (this.disposed) return;
     active = this;
+    // Activation runs a frame after opening: keep a focus the user already moved inside.
+    if (!preferred && this.container.contains(document.activeElement)) return;
     this.focus(preferred);
   }
 

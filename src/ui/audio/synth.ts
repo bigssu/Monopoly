@@ -1,7 +1,12 @@
 /**
  * Web Audio synthesizer implementing every `SfxName` (zero audio assets).
  *
- * Graph: voice → per-play gain → master (volume/mute) → soft compressor → destination.
+ * Graph: voice → per-play gain → sfx bus (ducked under the dealer) → master (volume/mute) → soft
+ * compressor → destination. The dealer's voice (audio/voice.ts) plays straight into the master;
+ * music (audio/music.ts) has its own bus under the master, ducked with the SFX.
+ *
+ * Generated samples (public/sfx, docs/superpowers/specs/2026-10-04-sound-design.md) replace the
+ * synthesized voices name by name once decoded; until then (or if one is missing) the synth plays.
  * All sounds are scheduled on `ctx.currentTime`, short, and disconnect themselves.
  */
 import type { Sfx, SfxName } from './sfx';
@@ -43,7 +48,7 @@ interface NoiseOpts {
 }
 
 /** Minimum spacing between two plays of the same sound (seconds). */
-const THROTTLE: Partial<Record<SfxName, number>> = {
+export const THROTTLE: Partial<Record<SfxName, number>> = {
   tap: 0.03,
   hop: 0.03,
   'timer-tick': 0.08,
@@ -52,7 +57,7 @@ const THROTTLE: Partial<Record<SfxName, number>> = {
   'cash-out': 0.05,
   toll: 0.05,
 };
-const DEFAULT_THROTTLE = 0.04;
+export const DEFAULT_THROTTLE = 0.04;
 
 // Note frequencies.
 const N = {
@@ -64,6 +69,11 @@ const N = {
 export class SynthSfx implements Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private sfxBus: GainNode | null = null;
+  private musicBus: GainNode | null = null;
+  /** Decoded sample takes per name (filled by loadSamples). */
+  private samples = new Map<SfxName, AudioBuffer[]>();
+  private samplesRequested = false;
   private noiseBuf: AudioBuffer | null = null;
   private muted = false;
   private volume = 0.8;
@@ -75,6 +85,43 @@ export class SynthSfx implements Sfx {
   unlock(): void {
     const c = this.ensure();
     if (c && c.state !== 'running') void c.resume().catch(() => undefined);
+    if (c && !this.samplesRequested) {
+      this.samplesRequested = true;
+      void this.loadSamples(c);
+    }
+  }
+
+  /** Fetch + decode every generated sample listed in sfx/manifest.json (name → takes). */
+  private async loadSamples(c: AudioContext): Promise<void> {
+    let manifest: Record<string, number>;
+    try {
+      const r = await fetch('sfx/manifest.json');
+      if (!r.ok) return;
+      manifest = (await r.json()) as Record<string, number>;
+    } catch {
+      return;
+    }
+    await Promise.all(
+      Object.entries(manifest).map(async ([name, takes]) => {
+        const files = takes > 1 ? Array.from({ length: takes }, (_, k) => `sfx/${name}.${k + 1}.ogg`) : [`sfx/${name}.ogg`];
+        const bufs = await Promise.all(
+          files.map((f) =>
+            fetch(f)
+              .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(f))))
+              .then((b) => c.decodeAudioData(b))
+              .catch(() => null),
+          ),
+        );
+        const ok = bufs.filter((b): b is AudioBuffer => b !== null);
+        if (ok.length) this.samples.set(name as SfxName, ok);
+      }),
+    );
+  }
+
+  /** Where background music plays (shared context, under the master volume). */
+  musicOut(): { ctx: AudioContext; node: AudioNode } | null {
+    const c = this.ctx;
+    return c && this.musicBus ? { ctx: c, node: this.musicBus } : null;
   }
 
   /** Pause output while the app is in the background. */
@@ -109,8 +156,19 @@ export class SynthSfx implements Sfx {
 
     const out = c.createGain();
     out.gain.value = Math.max(0, opts.gain ?? 1);
-    out.connect(this.master!);
+    out.connect(this.sfxBus!);
     const p = opts.pitch && opts.pitch > 0 ? opts.pitch : 1;
+    const takes = this.samples.get(name);
+    if (takes?.length) {
+      // A generated take (random among them, so repeats do not tire the ear); pitch = rate.
+      const src = c.createBufferSource();
+      src.buffer = takes[Math.floor(Math.random() * takes.length)]!;
+      src.playbackRate.value = p;
+      src.connect(out);
+      src.onended = () => out.disconnect();
+      src.start(now + 0.004);
+      return;
+    }
     let len = 0.5;
     try {
       len = this.voice(name, now + 0.008, p, out);
@@ -118,6 +176,19 @@ export class SynthSfx implements Sfx {
       console.warn('[sfx]', name, e);
     }
     setTimeout(() => out.disconnect(), (len + 0.3) * 1000);
+  }
+
+  /** Where the dealer's voice plays (shared context + volume), once unlocked and running. */
+  voiceOut(): { ctx: AudioContext; node: AudioNode } | null {
+    const c = this.ctx;
+    return c && this.master && c.state === 'running' && !this.muted && this.volume > 0 ? { ctx: c, node: this.master } : null;
+  }
+
+  /** Lower the sound effects while the dealer talks. */
+  duck(on: boolean): void {
+    if (!this.sfxBus || !this.ctx) return;
+    this.sfxBus.gain.setTargetAtTime(on ? 0.45 : 1, this.ctx.currentTime, 0.08);
+    this.musicBus?.gain.setTargetAtTime(on ? 0.35 : 1, this.ctx.currentTime, 0.12);
   }
 
   // ------------------------------------------------------------------ setup
@@ -143,11 +214,17 @@ export class SynthSfx implements Sfx {
       comp.connect(c.destination);
       const master = c.createGain();
       master.connect(comp);
+      const bus = c.createGain();
+      bus.connect(master);
+      const music = c.createGain();
+      music.connect(master);
       const buf = c.createBuffer(1, c.sampleRate, c.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
       this.ctx = c;
       this.master = master;
+      this.sfxBus = bus;
+      this.musicBus = music;
       this.noiseBuf = buf;
       this.applyGain();
       return c;

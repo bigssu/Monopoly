@@ -2,7 +2,7 @@
  * Balance report: simulate many seeded 4-CPU games and print statistics.
  *
  *   npm run sim                         # 500 seeds, 4 normal CPUs, default settings
- *   npm run sim -- --seeds 200 --players 3 --rounds 30 --level easy --cash 5000 --auction
+ *   npm run sim -- --seeds 200 --players 3 --rounds 30 --level easy --cash 5000 --auction --rules advanced
  */
 import { defaultPlayers, defaultSettings } from '../src/engine/settings';
 import { simulateGame, type SimResult } from '../src/engine/sim';
@@ -30,6 +30,7 @@ const settings: Settings = {
   takeover: !flag('no-takeover'),
   endOnFirstBankruptcy: !flag('elimination'),
   buildAnywhere: flag('build-anywhere'),
+  rules: (arg('rules') ?? base.rules) as Settings['rules'],
 };
 
 const t0 = Date.now();
@@ -53,7 +54,7 @@ const allBk = results.flatMap((r) => r.bankruptcies);
 const earlyBk = (maxRoundExclusive: number) =>
   results.filter((r) => r.bankruptcies.some((b) => b.round < maxRoundExclusive)).length;
 
-console.log(`Lot & Roll balance report — ${results.length} games, ${nPlayers} × ${level} CPU, ` +
+console.log(`Lot & Roll balance report — ${results.length} games, ${nPlayers} × ${level} CPU, rules ${settings.rules}, ` +
   `cash ${settings.startCash}, round limit ${settings.roundLimit ?? '∞'}, takeover ${settings.takeover ? 'on' : 'off'}, ` +
   `auction ${settings.auction ? 'on' : 'off'}, ${settings.endOnFirstBankruptcy ? 'first bankruptcy ends game' : 'elimination'} (${ms} ms)`);
 console.log('');

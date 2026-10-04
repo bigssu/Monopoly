@@ -161,3 +161,22 @@ say the same):
 * Auction (setting): opening bid 50 % of price, increments 10 % of price, bidders in seat order
   after the decliner; players who cannot afford the current bid drop out automatically.
 * Round limit: the game ends after the last solvent player's turn of the final round.
+
+## Rule levels (2026-10-04)
+
+`npm run sim -- --rules easy|normal|advanced` (500 seeds, 4 normal CPUs, cash 3000, 15 rounds,
+first bankruptcy ends). Spec: `docs/superpowers/specs/2026-10-04-rule-levels-design.md`.
+
+| | easy | normal | advanced |
+|---|---|---|---|
+| Ended before the round cap | 41.2 % | 69.6 % | 72.6 % |
+| Victory: bankruptcy / roundLimit | 34.8 / 58.8 % | 62.8 / 30.4 % | 65.0 / 27.4 % |
+| Victory: triple / line / hubs | 0.8 / 1.6 / 4.0 % | 0.2 / 1.4 / 5.2 % | 0.2 / 2.2 / 5.2 % |
+| Mean rounds | 13.58 | 13.06 | 12.98 |
+| Seat wins P1 / P4 | 29.4 / 18.4 % | 28.2 / 20.0 % | 32.2 / 18.2 % |
+| Bankrupt before round 5 | 0.2 % | 0.0 % | 0.0 % |
+
+Late toll was first ×1.5 … ×3.5 (step 0.5): 76.0 % (normal) / 80.0 % (advanced) of games ended
+in a late bankruptcy and only 14–18 % reached the round cap — a bust race rather than a final
+stretch. Step 0.25 (×1.25 … ×2.25) keeps roughly a third of games going to the cap. Seat
+advantage is unchanged versus easy; the UI's random start order still applies.

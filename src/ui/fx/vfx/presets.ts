@@ -282,6 +282,13 @@ function hitBurst(b: B, p: Pt, f: number, dustS: number, lines = 1): void {
   dust(b, p, f, dustS * 0.8);
 }
 
+/**
+ * Flight-time multiplier for coins that cross the table (toll, takeover price, Start salary,
+ * payments): slow enough to follow with the eye. Purchase/build coins keep their 10 f because the
+ * owner colour lands on a fixed cue right as they arrive.
+ */
+const COIN_FLIGHT = 2;
+
 /** Coins on an arc (quadratic Bézier bulging toward the board centre). */
 function coinArc(
   b: B,
@@ -678,12 +685,12 @@ export interface CoinInParams {
   n?: number;
 }
 
-/** Delivery coins (the `coinArc` variant for payments): 10 f, stagger 1 f, one `cash-out`. */
+/** Delivery coins (the `coinArc` variant for payments): 10 f × COIN_FLIGHT, stagger 1 f, one `cash-out`. */
 export function coinIn(p: CoinInParams, env: PresetEnv): Timeline {
   const b = new B(env);
   const n = Math.min(12, p.n ?? 5);
   const to = b.pt(p.to);
-  const r = coinArc(b, b.pt(p.from), to, n, 0, { frames: 10 });
+  const r = coinArc(b, b.pt(p.from), to, n, 0, { frames: 10 * COIN_FLIGHT });
   b.at(0, sfx('cash-out', { gain: 0.7 }));
   dust(b, to, r.last, 0.5, DUST);
   return b.build('coinIn', 1, PRIORITY.misc, 'space' in p.to ? { space: p.to.space } : undefined);
@@ -1036,12 +1043,12 @@ export function takeoverStamp(p: TakeoverParams, env: PresetEnv): Timeline {
   b.at(I + 1, cue('stamp'));
   glow(b, tile, I + 3, buyer, { s: 1.6, a: 0.55, fadeIn: 3, life: 20 });
   // Price coins buyer → seller.
-  const pay = coinArc(b, c.panel(p.buyer), c.panel(p.seller), 12, 21, { frames: 20, stagger: 1 });
+  const pay = coinArc(b, c.panel(p.buyer), c.panel(p.seller), 12, 21, { frames: 20 * COIN_FLIGHT, stagger: 1 });
   b.at(21, block(), sfx('cash-out', { gain: 0.7 }));
   b.at(pay.first, sfx('cash-in'), dom((d) => d.panelBump?.(p.seller)));
   sparkles(b, c.panel(p.buyer), 8, 33, { r: 1.1, color: [buyer, GOLD] });
-  dust(b, c.panel(p.seller), 33, 0.8, GREY, 2, 0.8);
-  b.at(33, haptic('light'));
+  dust(b, c.panel(p.seller), pay.first, 0.8, GREY, 2, 0.8);
+  b.at(pay.first, haptic('light'));
   return b.build('takeoverStamp', 3, PRIORITY.takeover, { space: p.space });
 }
 
@@ -1153,10 +1160,13 @@ export function tollPay(p: TollParams, env: PresetEnv): Timeline {
   if (p.festival || (p.multiplier ?? 1) > 1) tier = Math.min(3, tier + 1);
   const coins = [6, 10, 14, 14][tier]!;
   const start = 4;
-  const frames = 16;
+  const frames = 16 * COIN_FLIGHT;
   ring(b, from, 0, payerCol, 0.9);
   b.at(0, sfx('toll'), haptic(tier >= 2 ? 'heavy' : 'medium'));
   const arc = coinArc(b, from, to, coins, start, { frames, stagger: 1, s: p.festival ? 0.8 : tier >= 3 ? 0.75 : 0.62, comet: (p.multiplier ?? 1) > 1 });
+  // Camera on big tolls: punch in on the space; the biggest also dim the table around it.
+  if (tier >= 2 && p.space !== undefined) b.at(0, dom((d) => d.zoomPunch?.(p.space!, tier >= 3 ? 1.22 : 1.12)));
+  if (tier >= 3) b.at(0, dom((d) => d.spotlight?.(true))).at(arc.last + 6, dom((d) => d.spotlight?.(false)));
   arrivals(b, to, coins, arc.first, 1, GOLD);
   const pitch = semi([0, 2, 4, 6][tier]!);
   b.at(arc.first, cue('arrive'), sfx('cash-in', { pitch }), dom((d) => d.panelBump?.(p.receiver)));
@@ -1210,7 +1220,7 @@ export function passStart(p: PassStartParams, env: PresetEnv): Timeline {
   b.area(bag, 1.5);
   b.at(2, spawn((e) => void e.emit({ anim: 'moneybag', x: bag.x, y: bag.y, life: 18, s: 0.3, s1: 0.85, sT: 0.25, se1: Ease.OutBack, c1: 2.17, squash: [5, 1.3, 0.75], fadeOut: 6, layer: 3 })));
   const n = p.landed ? 24 : 16;
-  const frames = 22;
+  const frames = 22 * COIN_FLIGHT;
   const center = c.center();
   b.area(tile, 3).area(panel, 1.5);
   b.at(

@@ -127,6 +127,22 @@ export function iconEl(id: string, cls = 'ico', tint?: string): HTMLSpanElement 
   return el;
 }
 
+export type ChipTone = 'neutral' | 'gold' | 'good' | 'bad' | 'info';
+
+/**
+ * Status pill (base.css `.chip`). `label` names chips whose visible text alone doesn't say what
+ * they mean (icon-only, a bare count); it becomes the accessible name.
+ */
+export function chip(o: { text?: string; icon?: string; tone?: ChipTone; label?: string; cls?: string }): HTMLSpanElement {
+  const cls = ['chip', `tone-${o.tone ?? 'neutral'}`, o.cls].filter(Boolean).join(' ');
+  return h(
+    'span',
+    { class: cls, role: o.label ? 'img' : null, 'aria-label': o.label ?? null },
+    o.icon ? iconEl(o.icon) : null,
+    o.text ? h('span', { text: o.text }) : null,
+  );
+}
+
 /** Theme colors icons are tinted with, read once from the stylesheet (see `prepareGameIcons`). */
 export const TINT: { ink?: string; ink3?: string } = {};
 
