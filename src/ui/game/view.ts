@@ -76,6 +76,9 @@ export class GameView {
     this.table.append(this.board.el);
     for (const p of state.players) {
       const panel = new PlayerPanel(p, spacesPerSide);
+      panel.onSetsTap = () => {
+        if (!this.director.explainSets()) void this.stage.toast(t('g.panel.setsHelp'), 2200, 'info');
+      };
       this.panels.set(p.id, panel);
       this.table.append(panel.el);
     }

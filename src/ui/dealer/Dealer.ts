@@ -27,6 +27,9 @@ export class Dealer {
   private stopFlap: (() => void) | null = null;
   private hideTimer = 0;
   private preload: HTMLImageElement[];
+  /** True while a line is being spoken (or read, when silent); the bubble may linger after. */
+  private speaking = false;
+  private quietWaiters: Array<() => void> = [];
 
   constructor(private readonly voiceOn: () => boolean) {
     this.img = h('img', { class: 'dealer-img', alt: '', src: src('idle'), draggable: 'false' });
@@ -46,6 +49,35 @@ export class Dealer {
     return this.current !== null;
   }
 
+  /**
+   * Resolves when the current line has been said (at once when quiet), or after `maxMs` so a
+   * stuck voice can never hold the game. The sequencer waits on this before turning the stage.
+   */
+  whenQuiet(maxMs = 6000): Promise<void> {
+    if (!this.speaking) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = window.setTimeout(() => {
+        this.quietWaiters = this.quietWaiters.filter((w) => w !== done);
+        resolve();
+      }, maxMs);
+      this.quietWaiters.push(done);
+    });
+  }
+
+  private setSpeaking(on: boolean): void {
+    this.speaking = on;
+    this.el.dataset.speaking = on ? '1' : '0';
+    if (!on) {
+      const waiters = this.quietWaiters;
+      this.quietWaiters = [];
+      waiters.forEach((w) => w());
+    }
+  }
+
   say(line: DealerLine): void {
     if (instant()) return;
     if (this.current && line.priority <= this.current.priority) return;
@@ -55,11 +87,13 @@ export class Dealer {
     this.setSprite(line.expr);
     this.text.textContent = getLang() === 'ko' ? line.ko : line.en;
     this.el.classList.add('is-talking');
+    this.setSpeaking(true);
     this.bubble.classList.remove('is-out');
     this.bubble.classList.add('is-in');
 
     const finish = (): void => {
       if (token !== this.token) return;
+      this.setSpeaking(false);
       this.stopFlap?.();
       this.stopFlap = null;
       this.setSprite(line.expr);
@@ -90,7 +124,11 @@ export class Dealer {
   private silent(line: DealerLine, token: number): void {
     const text = getLang() === 'ko' ? line.ko : line.en;
     const ms = Math.max(1400, text.length * 75) * gamePace();
-    this.hideTimer = window.setTimeout(() => token === this.token && this.end(), ms);
+    this.hideTimer = window.setTimeout(() => {
+      if (token !== this.token) return;
+      this.setSpeaking(false);
+      this.end();
+    }, ms);
   }
 
   /** Expression first, then the mouth flaps (talk-a / talk-b) until the voice ends. */
@@ -124,6 +162,7 @@ export class Dealer {
   }
 
   private end(): void {
+    this.setSpeaking(false);
     this.current = null;
     this.el.classList.remove('is-talking');
     this.bubble.classList.remove('is-in');

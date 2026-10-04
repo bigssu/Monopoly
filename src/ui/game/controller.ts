@@ -249,6 +249,7 @@ export class GameController {
         big: !!res.big,
         timer,
         onUrgent: () => this.view.director.onTimerUrgent(),
+        onTimerTap: () => this.onPauseRequest?.(),
         onTimeout: () => {
           const a = defaultAction(this.state);
           if (!a) return;
@@ -263,6 +264,9 @@ export class GameController {
     }
     if (!p.isCpu) this.flushIdle();
   }
+
+  /** Set by the game screen: the prompt timer was tapped (pause = open the game menu). */
+  onPauseRequest: (() => void) | null = null;
 
   /** Pause CPU + prompt timers (menu open). */
   pause(): void {

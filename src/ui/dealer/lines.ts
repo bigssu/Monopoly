@@ -677,6 +677,12 @@ export const SITUATIONS: Record<string, Situation> = {
   },
 
   // --- Rule explanations (first landing on a kind) ---------------------------------------------
+  'explain.sets': {
+    level: 'min',
+    priority: P.end,
+    expr: 'present',
+    takes: [['이건 모은 땅 판이에요! 같은 색을 모두 모으면 통행료가 두 배, 점선 칸은 독점까지 한 칸 남은 땅이에요.', 'This is your set board! Own a whole colour to double its tolls; a dashed square is the one you still need.']],
+  },
   'explain.start': { level: 'full', priority: P.info, expr: 'present', takes: [['출발 칸이에요! 지나갈 때마다 월급을 받아요.', 'This is Start! Collect a salary each time you pass.']] },
   'explain.city': { level: 'full', priority: P.info, expr: 'present', takes: [['도시는 사서 건물을 올릴 수 있어요. 다른 사람이 오면 통행료를 받아요!', 'Buy cities and build. Others pay you tolls!']] },
   'explain.hub': { level: 'full', priority: P.info, expr: 'present', takes: [['여행 허브예요! 허브를 모두 모으면 바로 승리해요!', 'A travel hub! Own them all to win instantly!']] },

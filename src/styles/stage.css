@@ -408,7 +408,7 @@
   .roll-btn::before { animation: none; }
 }
 .roll-hint { font-size: max(12px, calc(var(--u) * 0.55)); color: #BCDAD6; font-weight: 700; }
-.pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -0.6); top: auto; bottom: calc(var(--u) * 2.6); }
+.pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -1.2); top: auto; bottom: calc(var(--u) * 1.6); }
 
 /* Lists (festival / upgrade / debt) */
 .pick-list {
@@ -501,18 +501,24 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
   position: absolute;
   top: calc(var(--u) * 0.4);
   right: calc(var(--u) * 0.4);
-  width: max(30px, calc(var(--u) * 1.75));
-  height: max(30px, calc(var(--u) * 1.75));
+  width: max(60px, calc(var(--u) * 3.5));
+  height: max(60px, calc(var(--u) * 3.5));
   display: grid;
   place-items: center;
+  align-content: center;
   pointer-events: none;
 }
+/* Tap to pause: the ring becomes a button (pause bars under the seconds). */
+.timer-ring.is-tappable { pointer-events: auto; cursor: pointer; border-radius: 50%; transition: transform var(--t-release) var(--ease-spring); }
+.timer-ring.is-tappable:active { transform: scale(1.05, .92); transition-duration: var(--t-press); transition-timing-function: var(--ease-out); }
+.tr-pause { position: relative; display: block; width: 28%; height: 16%; margin-top: 4%; background: linear-gradient(90deg, var(--ink-3) 0 32%, transparent 32% 68%, var(--ink-3) 68%); border-radius: 2px; }
 .timer-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transform: rotate(-90deg); }
 .tr-n {
   position: relative;
   font-family: var(--font-num);
   font-weight: 900;
-  font-size: max(12px, calc(var(--u) * 0.62));
+  font-size: max(22px, calc(var(--u) * 1.15));
+  line-height: 1;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }

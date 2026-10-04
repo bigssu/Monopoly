@@ -203,7 +203,7 @@
 }
 .slot-pips { position: absolute; left: 0; right: 0; bottom: 16%; display: flex; justify-content: center; gap: 9%; }
 .slot-pips i { width: 20%; aspect-ratio: 1; border-radius: 50%; background: #fff; outline: 1px solid rgba(0, 0, 0, 0.12); }
-.slot-star { display: grid; place-items: center; height: 100%; color: #fff; font-size: calc(var(--slot) * 0.6); line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+.slot-star { position: absolute; right: -10%; top: -14%; color: #FFD15C; font-size: calc(var(--slot) * 0.46); line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
 
 .pp-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6cqmin 1.5cqmin; min-width: 0; }
 .pp-sub .pp-assets { flex: 0 1 auto; min-width: 0; }
@@ -284,3 +284,22 @@
   font-size: clamp(18px, 14cqmin, 44px);
   transform: rotate(-12deg);
 }
+
+/* Set grid title + legend: what the squares are (mine / one to go for the set). */
+.pp-sets-h { display: flex; align-items: center; justify-content: center; gap: 0 2.4cqmin; flex-wrap: wrap; font-size: clamp(9px, min(4.4cqw, 3.4cqh), 13px); font-weight: 800; color: var(--ink-3); cursor: pointer; }
+.pp-sets-h b { color: var(--ink-2); font-weight: 900; }
+.pp-sets-h span { display: inline-flex; align-items: center; gap: .3em; }
+.pp-sets-h i { width: .9em; height: .9em; border-radius: 26%; }
+.pp-sets-h .lg-mine i { background: var(--pc); }
+.pp-sets-h .lg-miss i { outline: 1.5px dashed var(--pc); outline-offset: -1.5px; }
+.pp-sets { cursor: pointer; }
+
+/* Set squares as pictures: the city landmark / hub icon, faded until owned. */
+.slot-ico { position: absolute; left: 10%; top: 6%; width: 80%; height: 80%; opacity: .32; }
+.slot.is-mine .slot-ico { opacity: 1; }
+.slot.is-missing .slot-ico { opacity: .75; }
+.slot-mark { position: absolute; inset: 0; pointer-events: none; }
+/* Owned by someone else: their colour dot in the corner (who holds it). */
+.slot.is-taken .slot-ico { opacity: .55; }
+.slot.is-taken::before { content: ''; position: absolute; left: -8%; top: -8%; width: 34%; height: 34%; border-radius: 50%; background: var(--oc); outline: 1.5px solid #fff; }
+.pp-sets-h .lg-taken i { border-radius: 50%; background: var(--ink-3); }

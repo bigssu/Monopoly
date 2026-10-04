@@ -234,6 +234,13 @@ export class DealerDirector {
     if (id) this.speak(id);
   }
 
+  /** A player asked what the set grid is: explain it (false when the dealer is off). */
+  explainSets(): boolean {
+    if (this.setting() === 'off') return false;
+    this.speak('explain.sets');
+    return true;
+  }
+
   onTimerUrgent(): void {
     this.speak('timer.urgent');
   }

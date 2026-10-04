@@ -17,7 +17,8 @@ import {
 import { getCard } from '@/content/cards';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
-import { chip, groupColor, h, iconEl, setPlayerVars, signedMoney, svgNode } from '@/ui/game/util';
+import { chip, groupColor, h, iconEl, setPlayerVars, signedMoney, spaceIcon, svgNode } from '@/ui/game/util';
+import { playerColor } from '@/content/palette';
 import { EASE } from '@/ui/fx/motion';
 
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
@@ -27,6 +28,8 @@ const setsFor = (size: SpacesPerSide): readonly (readonly number[])[] => [...GRO
 
 export class PlayerPanel {
   readonly el: HTMLElement;
+  /** The set grid was tapped (the dealer explains it). */
+  onSetsTap: (() => void) | null = null;
   private cardEl: HTMLElement;
   private cashNum: HTMLElement;
   private assets: HTMLElement;
@@ -65,12 +68,31 @@ export class PlayerPanel {
     this.cashNum = h('span', { class: 'pp-cash-n' });
     const cash = h('div', { class: 'pp-cash' }, iconEl('coin', 'ico pp-coin'), this.cashNum);
     this.assets = h('div', { class: 'pp-assets' });
-    this.chips = h('div', { class: 'pp-sets' });
+    this.chips = h('div', { class: 'pp-sets', role: 'button', tabindex: '0', 'aria-label': t('g.panel.setsHelp') });
+    // What the grid is: one square per city (rows = colour groups, circles = hubs).
+    const setsHead = h(
+      'div',
+      { class: 'pp-sets-h', 'aria-hidden': 'true' },
+      h('b', { text: t('g.panel.sets') }),
+      h('span', { class: 'lg-mine' }, h('i'), t('g.panel.setsMine')),
+      h('span', { class: 'lg-miss' }, h('i'), t('g.panel.setsMissing')),
+      h('span', { class: 'lg-taken' }, h('i'), t('g.panel.setsTaken')),
+    );
+    const explain = (): void => this.onSetsTap?.();
+    for (const el of [this.chips, setsHead]) el.addEventListener('click', explain);
+    this.chips.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        explain();
+      }
+    });
     this.slots = new Map();
     this.sets.forEach((members, g) => {
       members.forEach((i, k) => {
         const sp = this.board[i]!;
         const slot = h('span', { class: `slot${sp.kind === 'hub' ? ' is-hub' : ''}` });
+        // Each square shows its city's landmark (or the hub): faded until it is mine.
+        slot.append(iconEl(spaceIcon(sp), 'ico slot-ico'), h('span', { class: 'slot-mark' }));
         slot.style.setProperty('--gc', groupColor(sp) ?? '#7B8AA3');
         slot.style.setProperty('--g', String(g + 1));
         slot.style.setProperty('--k', String(k + 1));
@@ -82,7 +104,7 @@ export class PlayerPanel {
     this.floats = h('div', { class: 'pp-floats' });
     this.wash = h('div', { class: 'pp-wash' });
     const head = h('div', { class: 'pp-head' }, h('div', { class: 'pp-tokwrap' }, badge, this.rank), h('div', { class: 'pp-id' }, name, cash, h('div', { class: 'pp-sub' }, this.assets, this.badges)));
-    this.cardEl = h('div', { class: 'pp-card' }, head, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats, this.wash);
+    this.cardEl = h('div', { class: 'pp-card' }, head, setsHead, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats, this.wash);
     this.el.append(this.cardEl);
     this.shown = player.cash;
     this.target = player.cash;
@@ -94,7 +116,9 @@ export class PlayerPanel {
     const pad = Math.max(8, Math.min(w, hgt) * 0.05);
     const wide = w / hgt >= 1.25;
     const tok = Math.max(32, Math.min(104, wide ? Math.min(0.2 * w, 0.3 * hgt) : Math.min(0.3 * w, 0.22 * hgt)));
-    const avail = hgt - tok - pad * 3;
+    // Leave room for the set grid's title + legend line.
+    const head = Math.max(14, Math.min(w, hgt) * 0.08);
+    const avail = hgt - tok - pad * 3 - head;
     const inner = w - pad * 2;
     const colsMode = Math.min(inner / this.sets.length, avail / this.maxMembers);
     const rowsMode = Math.min(inner / this.maxMembers, avail / this.sets.length);
@@ -114,7 +138,8 @@ export class PlayerPanel {
     const limit = state.settings.roundLimit;
     const showRank = limit !== null && state.round > limit - 3;
     const r = showRank ? (ranking(state).find((e) => e.playerId === p.id)?.rank ?? 0) : 0;
-    const props = this.sets.flat().map((i) => `${state.properties[i]?.owner === p.id ? state.properties[i]!.level : '-'}`);
+    // Mine with level, or who else owns it (others' squares get the owner's colour dot).
+    const props = this.sets.flat().map((i) => { const o = state.properties[i]?.owner; return o === p.id ? `${state.properties[i]!.level}` : o === null || o === undefined ? '-' : `o${o}`; });
     const away = oneAwayWarnings(state).filter((w) => w.playerId === p.id && w.kind !== 'line').map((w) => w.missing);
     const sig = [totalAssets(state, p.id), r, props.join(','), away.join(','), p.cards.join(','), p.islandTurns, state.festival, p.expressPending, p.travelPending].join('|');
     if (sig === this.sig) return;
@@ -132,7 +157,9 @@ export class PlayerPanel {
         const slot = this.slots.get(i)!;
         const pr = state.properties[i]!;
         const mine = pr.owner === p.id;
-        const cls = `slot${this.board[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
+        const taken = !mine && pr.owner !== null;
+        const cls = `slot${this.board[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${taken ? ' is-taken' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
+        if (taken) slot.style.setProperty('--oc', playerColor(state.players[pr.owner!]!.colorId).hex);
         // Only touch slots that changed: rebuilding all 28 on every money change restyled and
         // re-laid-out ~250 elements per panel (docs/PERFORMANCE.md).
         const content = mine ? pr.level : 0;
@@ -141,12 +168,14 @@ export class PlayerPanel {
         this.slotState.set(i, { cls, content });
         if (slot.className !== cls) slot.className = cls;
         if (prev?.content === content) continue;
-        slot.textContent = '';
+        // The icon stays; only the building mark (pips / landmark star) is redrawn.
+        const mark = slot.querySelector('.slot-mark')!;
+        mark.textContent = '';
         if (mine && pr.level > 0 && pr.level < 4) {
           const pips = h('span', { class: 'slot-pips' });
           for (let k = 0; k < pr.level; k++) pips.append(h('i'));
-          slot.append(pips);
-        } else if (mine && pr.level === 4) slot.append(h('span', { class: 'slot-star', text: '★' }));
+          mark.append(pips);
+        } else if (mine && pr.level === 4) mark.append(h('span', { class: 'slot-star', text: '★' }));
       }
     });
     // Badges (rebuilt only when they change).

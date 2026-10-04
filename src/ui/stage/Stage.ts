@@ -145,7 +145,7 @@ export class Stage {
   // -------------------------------------------------------------------------
 
   /** Show a prompt card (replacing any). `timer` seconds > 0 draws a countdown ring. */
-  showPrompt(card: HTMLElement, opts: { timer?: number; onTimeout?: () => void; onUrgent?: () => void; big?: boolean } = {}): void {
+  showPrompt(card: HTMLElement, opts: { timer?: number; onTimeout?: () => void; onUrgent?: () => void; onTimerTap?: () => void; big?: boolean } = {}): void {
     this.clearTimer();
     this.promptSlot.innerHTML = '';
     this.el.classList.toggle('has-big', !!opts.big);
@@ -160,6 +160,25 @@ export class Stage {
       // Seconds left, in the middle of the ring.
       const num = h('b', { class: 'tr-n', text: String(timer) });
       ring.append(num);
+      // Tap the timer to pause the game (opens the game menu, which stops CPU moves and timers).
+      if (opts.onTimerTap) {
+        const tap = opts.onTimerTap;
+        ring.classList.add('is-tappable');
+        ring.setAttribute('role', 'button');
+        ring.setAttribute('tabindex', '0');
+        ring.setAttribute('aria-label', t('g.timer.pause'));
+        ring.append(h('i', { class: 'tr-pause', 'aria-hidden': 'true' }));
+        ring.addEventListener('click', (e) => {
+          e.stopPropagation();
+          tap();
+        });
+        ring.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            tap();
+          }
+        });
+      }
       card.append(ring);
       let left = timer;
       this.countId = window.setInterval(() => {

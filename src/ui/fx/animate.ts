@@ -60,6 +60,9 @@ export async function playEvents(
     if (!alive()) return;
     try {
       if (MARK) performance.mark(`lr:${ev.type}`);
+      // Let the dealer finish the last line before the stage turns to the next player (and before
+      // he announces that turn), so he is never spun around mid-sentence.
+      if (!fast && ev.type === 'TurnStarted') await view.dealer.whenQuiet();
       if (!fast) view.director.onEvent(ev, vs, 'before');
       await step(view, vs, ev, fast, batch);
       if (!fast) view.director.onEvent(ev, vs, 'after');
