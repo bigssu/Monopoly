@@ -8,7 +8,7 @@ import { GROUP_NAMES } from '@/content/board';
 import { loc, t, fmtMoney } from '@/i18n';
 import type { GameState, Seat } from '@/engine';
 import { playerColor } from '@/content/palette';
-import { awardsFor } from './awards';
+import { awardsFor, leadChanges, storyFor } from './awards';
 import { registerScreen } from '@/ui/router';
 import { go } from '@/ui/shell/nav';
 import { rotateStart } from '@/ui/shell/setupModel';
@@ -52,6 +52,17 @@ function assetGraph(state: GameState, finals: Map<number, number>): SVGSVGElemen
     line.setAttribute('pathLength', '1');
     svgEl.append(line);
   }
+  // Where the lead changed hands: a dot in the new leader's colour.
+  for (const c of leadChanges(rows)) {
+    const v = rows[c.at]![c.pid] ?? 0;
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('cx', ((c.at / (rows.length - 1)) * 100).toFixed(1));
+    dot.setAttribute('cy', (38 - (v / max) * 34).toFixed(1));
+    dot.setAttribute('r', '1.6');
+    dot.setAttribute('fill', playerColor(state.players[c.pid]!.colorId).hex);
+    dot.setAttribute('class', 'rs-lead');
+    svgEl.append(dot);
+  }
   return svgEl;
 }
 
@@ -74,7 +85,11 @@ registerScreen('result', (root, { state }) => {
   );
   setPlayerVars(hero, winner.colorId);
   const graph = assetGraph(state, new Map(ranking.map((r) => [r.playerId, Math.max(0, r.totalAssets)])));
-  if (graph) hero.append(h('div', { class: 'rs-graph-h', text: t('r.graph') }), graph);
+  if (graph) {
+    hero.append(h('div', { class: 'rs-graph-h', text: t('r.graph') }), graph);
+    const story = storyFor(state, state.players.map((p) => Math.max(0, ranking.find((r) => r.playerId === p.id)?.totalAssets ?? 0)));
+    if (story) hero.append(h('div', { class: 'rs-story', text: t(story.key, story.params) }));
+  }
 
   const rows = h('div', { class: 'rs-rows' });
   for (const r of ranking) {
@@ -137,7 +152,7 @@ registerScreen('result', (root, { state }) => {
     h('div', { class: 'rs-h', text: t('r.ranking') }),
     rows,
     legend,
-    awardBox ? h('div', { class: 'rs-h', text: t('r.awards') }) : null,
+    awardBox ? h('div', { class: 'rs-h rs-h-awards', text: t('r.awards') }) : null,
     awardBox,
     stats,
     h('div', { class: 'rs-btns' }, again, home),

@@ -149,13 +149,15 @@
   top: 50%;
   display: grid;
   grid-template-columns: 40% 1fr;
+  /* Rows stay within the card height so the side scrolls instead of spilling out. */
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   border-radius: 28px;
   background: var(--bg-stage);
   box-shadow: var(--sh-3), 0 0 0 1px rgba(255, 255, 255, 0.06);
   container-type: size;
 }
-.rs-card.is-tall { grid-template-columns: 1fr; grid-template-rows: 40% 1fr; }
+.rs-card.is-tall { grid-template-columns: 1fr; grid-template-rows: 40% minmax(0, 1fr); }
 
 .rs-hero {
   position: relative;
@@ -204,6 +206,8 @@
   gap: 1.8cqmin;
   padding: 3.4cqmin 4cqmin;
   min-height: 0;
+  /* Never push the buttons off the card: the content scrolls if a layout runs out of room. */
+  overflow-y: auto;
 }
 .rs-h { font-family: var(--font-display); font-size: clamp(16px, 4.2cqmin, 30px); color: var(--ink); }
 .rs-rows { display: flex; flex-direction: column; gap: 1.2cqmin; }
@@ -248,7 +252,7 @@
 }
 .rs-stat b { font-family: var(--font-display); font-size: clamp(16px, 4.6cqmin, 32px); color: var(--ink); }
 .rs-stat span { font-size: clamp(11px, 2.4cqmin, 15px); color: var(--ink-3); font-weight: 700; }
-.rs-btns { display: flex; gap: 1.8cqmin; margin-top: auto; }
+.rs-btns { display: flex; gap: 1.8cqmin; margin-top: auto; position: sticky; bottom: 0; padding-top: 1.2cqmin; background: linear-gradient(to bottom, transparent, var(--bg-stage) 35%); }
 .rs-btn {
   flex: 1;
   min-height: max(52px, 9cqmin);
@@ -326,3 +330,14 @@
 .rs-graph-h { margin-top: .6em; font-size: .78em; font-weight: 800; opacity: .7; }
 .rs-graph { width: 100%; max-width: 16em; height: auto; overflow: visible; }
 .rs-graph polyline { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+.rs-story { margin-top: .3em; font-weight: 900; font-size: .9em; color: var(--pc-dark, var(--ink)); }
+.rs-lead { stroke: #fff; stroke-width: .5; }
+/* Tall (sideways) cards have no room for the graph: keep its one-line story. */
+.rs-card.is-tall .rs-graph, .rs-card.is-tall .rs-graph-h { display: none; }
+/* Tall cards: awards as one compact row (icon, title, token, value) without their heading. */
+.rs-card.is-tall .rs-h-awards { display: none; }
+.rs-card.is-tall .rs-awards { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .3em; }
+.rs-card.is-tall .rs-award { flex-direction: column; gap: .15em; padding: .3em .2em; text-align: center; }
+.rs-card.is-tall .rs-award-main span { justify-content: center; }
+.rs-card.is-tall .rs-award-main i { display: none; }
+.rs-card.is-tall .rs-award-main em { margin-left: 0; }
