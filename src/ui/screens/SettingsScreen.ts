@@ -12,7 +12,8 @@ import { confirmDialog, openDialog, toast } from '@/ui/shell/dialog';
 import { markdownToHtml } from '@/ui/shell/markdown';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, savedGameSummary } from '@/ui/shell/persist';
-import { DEALER_PREFS, GAME_PACES, MOTION_PREFS, prefs, TURN_PAUSES, type DealerPref, type MotionPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
+import { DEALER_PREFS, fxQualityOn, GAME_PACES, MOTION_PREFS, prefs, TURN_PAUSES, type DealerPref, type MotionPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
+import { isNative } from '@/ui/shell/capacitor';
 import { segmented, switcher } from '@/ui/shell/widgets';
 import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
 import { version } from '../../../package.json';
@@ -111,8 +112,9 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
         { value: 'low', label: t('settings.fxLow') },
         { value: 'off', label: t('settings.fxOff') },
       ],
-      p.fxQuality,
-      (v) => prefs.set({ fxQuality: v }),
+      fxQualityOn(p, isNative()),
+      // Choosing a quality in the Android app is the opt-in for the canvas effects there.
+      (v) => prefs.set({ fxQuality: v, fxNative: v !== 'off' }),
       { label: t('settings.fx'), focusKey: 'effects' },
     );
 
@@ -171,7 +173,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
         h('div', { class: 'set-inline' }, switcher(p.batterySaver, (v) => prefs.set({ batterySaver: v }), t('settings.batterySaver'))),
         t('settings.batterySaverHint'),
       ),
-      row(SPARKLE_SVG, t('settings.fx'), fxq, t('settings.fxHint')),
+      row(SPARKLE_SVG, t('settings.fx'), fxq, t(isNative() ? 'settings.fxHintNative' : 'settings.fxHint')),
     );
 
     const summary = savedGameSummary();

@@ -18,7 +18,8 @@ import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
 import { h, iconEl, isDevHook, prepareGameIcons } from './util';
 import { disposeIconAtlas } from './iconAtlas';
-import { prefs } from '@/ui/shell/prefs';
+import { fxQualityOn, prefs } from '@/ui/shell/prefs';
+import { isNative } from '@/ui/shell/capacitor';
 import { Dealer } from '@/ui/dealer/Dealer';
 import { DealerDirector } from '@/ui/dealer/director';
 
@@ -125,13 +126,16 @@ export class GameView {
       frameBudget: 0.5e6,
       ...(isDevHook() ? { tune: devTune() } : {}),
       softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
+      // Android app: paint on the main thread, like the dice canvas (no OffscreenCanvas placeholder).
+      ...(isNative() ? { worker: false } : {}),
       dev: isDevHook(),
     });
     // Effects quality (Settings, docs/VFX.md §15.4), applied live; dev A/B override ?dev=1&fxq=auto|high|low|off.
     const q = isDevHook() ? new URLSearchParams(location.search).get('fxq') : null;
     const devQ = q === 'auto' || q === 'high' || q === 'low' || q === 'off' ? q : null;
-    this.vfx.setQuality(devQ ?? prefs.get().fxQuality);
-    if (!devQ) this.stopPrefs = prefs.onChange((n, prev) => n.fxQuality !== prev.fxQuality && this.vfx.setQuality(n.fxQuality));
+    const native = isNative();
+    this.vfx.setQuality(devQ ?? fxQualityOn(prefs.get(), native));
+    if (!devQ) this.stopPrefs = prefs.onChange((n, prev) => fxQualityOn(n, native) !== fxQualityOn(prev, native) && this.vfx.setQuality(fxQualityOn(n, native)));
     this.menuSlot = h('div', { class: 'menu-slot' });
     this.rotateOverlay = h(
       'div',

@@ -31,12 +31,28 @@ export interface Prefs {
   dealer: DealerPref;
   /** Background music on/off (follows `sound` and `volume` too). */
   music: boolean;
+  /**
+   * The player turned the canvas effects on in the Android app (Settings → 연출 품질). Off by
+   * default there: some WebViews draw the effect canvases as opaque white boxes (see `fxQualityOn`).
+   */
+  fxNative: boolean;
   /** Animations: full, or reduced (no movement, same timing). The device setting is not read. */
   motion: MotionPref;
 }
 
 export const MOTION_PREFS = ['full', 'reduced'] as const;
 export type MotionPref = (typeof MOTION_PREFS)[number];
+
+/**
+ * The effects quality that applies on this platform. In the Android app the canvas effects stay
+ * off until the player chooses a quality there: on some devices' WebView the effect canvases show
+ * as white rectangles flashing over the table (a tablet report, twice). Dice, token moves, toasts
+ * and every beat are DOM motion and are not affected; 'off' still plays each effect's sound and a
+ * static highlight.
+ */
+export function fxQualityOn(p: Pick<Prefs, 'fxQuality' | 'fxNative'>, native: boolean): FxQualityPref {
+  return native && !p.fxNative ? 'off' : p.fxQuality;
+}
 
 export const DEALER_PREFS = ['off', 'min', 'normal', 'full'] as const;
 export type DealerPref = (typeof DEALER_PREFS)[number];
@@ -64,7 +80,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, motion: 'full' };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full' };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -84,6 +100,7 @@ function sanitize(raw: unknown): Prefs {
     turnPause: TURN_PAUSES.includes(r.turnPause as TurnPausePref) ? (r.turnPause as TurnPausePref) : d.turnPause,
     dealer: DEALER_PREFS.includes(r.dealer as DealerPref) ? (r.dealer as DealerPref) : d.dealer,
     music: typeof r.music === 'boolean' ? r.music : d.music,
+    fxNative: r.fxNative === true,
     motion: MOTION_PREFS.includes(r.motion as MotionPref) ? (r.motion as MotionPref) : d.motion,
   };
 }
