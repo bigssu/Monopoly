@@ -544,7 +544,7 @@ tollPay, takeoverStamp, passStart, billRain, coinIn, bankruptcy)·패널 금액 
 | 등급 | 렌더 배율 | 3D 기울임 + 보드 카메라 | 컷인 중 피크 레이어 메모리 예산 |
 |---|---|---|---|
 | high | 1.0 | 켬 | 250 MB |
-| mid | 0.75 | 기기 픽셀 ≤ 4.1 M일 때만 켬(1280×800 DPR 2 이하) | 150 MB |
+| mid | 0.75 | 3D 기울임만, 기기 픽셀 ≤ 4.1 M일 때(1280×800 DPR 2 이하). 보드 카메라는 끔(2026-10-06, 피크 레이어 21 → 19, `docs/PERFORMANCE.md` "라운드 2") | 150 MB |
 | low | 0.5 | 끔 (2D) | 100 MB |
 
 자동 선택(`pickTier`): deviceMemory(GB, 브라우저가 0.25–8로 반올림; 8은 "8 이상"; 없으면 4로 봄)와 기기 픽셀

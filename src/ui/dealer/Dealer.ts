@@ -111,8 +111,7 @@ export class Dealer {
     const shown = this.bubble.classList.contains('is-in');
     this.bubble.classList.remove('is-out');
     this.bubble.classList.add('is-in');
-    // Pop in (a Web Animation on the shared clock that is gone when it ends: a stylesheet animation
-    // stayed attached, and cancelling it when the line ended repainted the prompt card, gate B).
+    // Pop in: a Web Animation on the shared 30 Hz clock, gone when it ends (the bubble's layer stays).
     if (!shown) void anim(this.bubble, [{ opacity: 0, transform: 'scale(0.85)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: EASE.overshoot });
 
     const finish = (): void => {
