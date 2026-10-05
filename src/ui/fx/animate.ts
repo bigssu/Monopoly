@@ -601,9 +601,12 @@ async function playMoney(view: GameView, vs: GameState, events: readonly GameEve
       void play.done.then(() => (entry.liveMs = Math.round(performance.now() - tStart)));
     }
   }
+  // The dealer reacts to a toll against what the payer had before paying (as before the cut-ins
+  // applied the whole group at once): `toll.big` compares the toll with that cash.
+  const before = fast ? vs : { ...vs, players: vs.players.map((p) => ({ ...p })) };
   for (const e of evs) applyMoneyState(vs, e);
   render(view, vs);
-  if (!fast) for (const e of evs) view.director.onEvent(e, vs, 'after');
+  if (!fast) for (const e of evs) view.director.onEvent(e, e.type === 'TollPaid' ? before : vs, 'after');
   // What the board still does by itself after the cut-in hands back.
   const sc = g.scene;
   if (sc.kind === 'purchase') await groupMoment(view, vs, sc.player, sc.spaceIndex, fast);

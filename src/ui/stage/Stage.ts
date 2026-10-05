@@ -9,7 +9,7 @@ import { lateTollMultiplier, ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
-import { cardIcon, chip, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, svgNode, tokenBadge } from '@/ui/game/util';
+import { cardIcon, h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 import { EASE } from '@/ui/fx/motion';
 
@@ -415,34 +415,6 @@ export class Stage {
     const invoker = this.infoInvoker;
     this.infoInvoker = null;
     if (invoker?.isConnected) invoker.focus({ preventScroll: true });
-  }
-
-  /** Paid-toll card: payer → owner, auto-dismisses. */
-  async showToll(opts: { payer: Player; owner: Player; amount: number; festival: boolean; waived: boolean; multiplier: number }): Promise<void> {
-    if (headless()) return;
-    const el = h(
-      'div',
-      { class: 'toll-card' },
-      h('div', { class: 'toll-kicker', text: opts.waived ? t('g.toll.waived') : t('g.toll.paid') }),
-      h(
-        'div',
-        { class: 'toll-flow' },
-        tokenBadge(opts.payer, 'tok-badge toll-tok'),
-        h('span', { class: 'toll-arrow' }, svgNode('chevron-right')),
-        tokenBadge(opts.owner, 'tok-badge toll-tok'),
-      ),
-      h('div', { class: 'toll-amt', text: opts.waived ? t('g.free') : money(opts.amount) }),
-      opts.festival || opts.multiplier > 1
-        ? h('div', { class: 'toll-tags' }, opts.festival ? chip({ text: t('g.toll.festival') }) : null, opts.multiplier > 1 ? chip({ text: `×${opts.multiplier}` }) : null)
-        : null,
-    );
-    this.toastLayer.append(el);
-    await anim(el, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
-      duration: 280,
-      easing: EASE.overshoot,
-    });
-    await sleep(700);
-    void anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).then(() => el.remove());
   }
 
   // -------------------------------------------------------------------------

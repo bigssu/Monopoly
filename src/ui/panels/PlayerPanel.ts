@@ -17,7 +17,7 @@ import {
 import { getCard } from '@/content/cards';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, gridTimeout, headless, onFrame } from '@/ui/fx/time';
-import { chip, groupColor, h, iconEl, setPlayerVars, signedMoney, spaceIcon, svgNode } from '@/ui/game/util';
+import { chip, groupColor, h, iconEl, setPlayerVars, spaceIcon, svgNode } from '@/ui/game/util';
 import { playerColor } from '@/content/palette';
 import { EASE } from '@/ui/fx/motion';
 
@@ -230,24 +230,6 @@ export class PlayerPanel {
       this.stopTween = null;
       return false;
     });
-  }
-
-  /** "+300" / "−120" float rising from the panel (rotated with it), with an optional caption. */
-  float(delta: number, note?: string): void {
-    if (headless() || delta === 0) return;
-    const el = h('span', { class: `pp-float ${delta > 0 ? 'is-up' : 'is-down'}`, text: signedMoney(delta) });
-    if (note) el.append(h('small', { class: 'pp-float-note', text: note }));
-    this.floats.append(el);
-    void anim(
-      el,
-      [
-        { transform: 'translate(-50%, 20%) scale(.6)', opacity: 0 },
-        { transform: 'translate(-50%, -40%) scale(1.1)', opacity: 1, offset: 0.2 },
-        { transform: 'translate(-50%, -85%) scale(1)', opacity: 1, offset: 0.65 },
-        { transform: 'translate(-50%, -150%) scale(1)', opacity: 0 },
-      ],
-      { duration: note ? 1700 : 1300, easing: EASE.settle },
-    ).then(() => el.remove());
   }
 
   /** A number pop / caption rising from the panel (fx `floatText`: the canvas never draws text). */

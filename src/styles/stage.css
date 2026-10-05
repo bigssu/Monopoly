@@ -643,24 +643,6 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
 .card-desc { color: var(--ink-2); line-height: 1.4; font-weight: 600; }
 .card-tap { margin-top: auto; font-size: max(11px, calc(var(--u) * 0.55)); color: var(--ink-3); font-weight: 700; }
 
-.toll-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--u) * 0.3);
-  padding: calc(var(--u) * 0.6) calc(var(--u) * 1.4) calc(var(--u) * 0.7);
-  border-radius: calc(var(--u) * 0.9);
-  background: #fff;
-  border-top: calc(var(--u) * 0.32) solid var(--danger);
-  box-shadow: var(--sh-3);
-}
-.toll-kicker { font-weight: 800; color: var(--ink-3); }
-.toll-flow { display: flex; align-items: center; gap: calc(var(--u) * 0.45); }
-.toll-tok { width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); min-width: 32px; min-height: 32px; }
-.toll-arrow { width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1); color: var(--ink-3); }
-.toll-arrow svg { width: 100%; height: 100%; }
-.toll-amt { font-family: var(--font-display); font-size: max(22px, calc(var(--u) * 1.8)); color: var(--danger); }
-.toll-tags { display: flex; gap: calc(var(--u) * 0.2); }
 
 /* Space info popover */
 .st-pop {
