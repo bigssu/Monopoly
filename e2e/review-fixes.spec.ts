@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
-import { BOARD, GROUP_COLORS, GROUP_IDS } from '../src/content/board';
+import { BOARD, GROUP_IDS } from '../src/content/board';
 import { PLAYER_COLORS } from '../src/content/palette';
+import { checkOwnedBoard } from './owned-board';
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -8,13 +9,14 @@ test('price text meets normal-text contrast on every group color', async ({ page
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   const spaces = GROUP_IDS.map((group) => BOARD.find((space) => space.group === group)!.index);
+  // One space of every group, owned by each of the four players in turn (red, blue, green, yellow).
   await page.evaluate((spaces) => {
     const hook = window.__lotAndRoll!;
     hook.setAnimSpeed(0);
     hook.setPromptTimer(0);
     hook.startGame(hook.demoSettings(4, false), 11);
     const state = structuredClone(hook.getState()!);
-    for (const index of spaces) state.properties[index] = { owner: 0, level: 0 };
+    spaces.forEach((index, k) => (state.properties[index] = { owner: k % 4, level: 0 }));
     hook.loadState(state);
   }, spaces);
   await expect(page.locator('.board-base')).toBeVisible();
@@ -22,22 +24,22 @@ test('price text meets normal-text contrast on every group color', async ({ page
     const n = v / 255;
     return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
   }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+  const colors = await page.evaluate(() => window.__lotAndRoll!.getState()!.players.map((p) => p.colorId));
   for (const [i, group] of GROUP_IDS.entries()) {
+    // The price sits on the owner-filled card (DESIGN.md §3 "Ownership and buildings").
     const price = page.locator(`.sp[data-i="${spaces[i]}"] .sp-price`);
     const fill = await price.evaluate((el) => getComputedStyle(el).fill);
     const foreground = luminance(fill.match(/[\d.]+/g)!.slice(0, 3).map(Number));
-    const hex = GROUP_COLORS[group];
+    const hex = PLAYER_COLORS.find((c) => c.id === colors[i % 4])!.hex;
     const background = luminance([1, 3, 5].map((p) => parseInt(hex.slice(p, p + 2), 16)));
     const ratio = (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
-    expect(ratio, `${group} contrast`).toBeGreaterThanOrEqual(4.5);
+    expect(ratio, `${group} price on ${colors[i % 4]}`).toBeGreaterThanOrEqual(4.5);
     expect(Number(await price.getAttribute('font-size'))).toBeGreaterThanOrEqual(64);
   }
-  const ownedNameFill = await page.locator('.sp-name.on-owner').first().evaluate((el) => getComputedStyle(el).fill);
-  const ownedName = luminance(ownedNameFill.match(/[\d.]+/g)!.slice(0, 3).map(Number));
-  for (const color of PLAYER_COLORS) {
-    const band = luminance([1, 3, 5].map((p) => parseInt(color.hex.slice(p, p + 2), 16)));
-    expect((Math.max(ownedName, band) + 0.05) / (Math.min(ownedName, band) + 0.05), `${color.id} owner band`).toBeGreaterThanOrEqual(4.5);
-  }
+  // Names and prices on every owned card, against that card's owner color (computed colors).
+  const owned = await checkOwnedBoard(page);
+  expect(owned.problems, owned.problems.join('\n')).toEqual([]);
+  expect(owned.owned).toBe(spaces.length);
 });
 
 test('initial FX coordinates reuse layout without measuring game elements', async ({ page }) => {
