@@ -183,16 +183,47 @@ test.describe('CPU hand', () => {
     await page.waitForSelector('.cpu-hand', { timeout: 30_000 });
     await page.locator('.pause-btn').click();
     await expect(page.locator('.menu-title')).toContainText('일시 정지');
-    const pose = () => page.evaluate(() => getComputedStyle(document.querySelector('.cpu-hand')!).transform);
-    const before = await pose();
+    // (On a loaded machine the click can land after the release: then the check is that nothing
+    // moves on while paused, from wherever the turn was.)
+    const snap = () =>
+      page.evaluate(() => {
+        const hand = document.querySelector('.cpu-hand');
+        const s = window.__lotAndRoll!.getState()!;
+        return { pose: hand ? getComputedStyle(hand).transform : null, phase: s.phase.kind, turn: s.turn };
+      });
+    const before = await snap();
     await page.waitForTimeout(1500);
-    expect(await pose(), 'the hand holds still while paused').toBe(before);
-    expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), 'not dispatched while paused').toBe('buy');
+    expect(await snap(), 'the hand holds still and nothing is dispatched while paused').toEqual(before);
     await page.locator('.menu-item.is-primary').click(); // 계속하기
     await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), { timeout: 30_000 }).not.toBe('buy');
     const presses = (await log(page)).filter((r) => r.phase === 'buy');
     expect(presses, 'one press for the one decision').toHaveLength(1);
     checkPress(presses[0]!, 'after resume');
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('pause during the roll hold silences the dice; resume rattles them again until the release', async ({ page }) => {
+    test.setTimeout(120_000);
+    const logs = watchConsole(page);
+    await boot(page, 1280, 800);
+    // The hand is held at its press (still in the roll hold) by the dev freeze.
+    await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(true));
+    await craft(page, S, '');
+    await waitPress(page, /^preRoll:Roll$/);
+    await page.waitForFunction(() => window.__lotAndRoll!.cpuHand().frozen(), null, { timeout: 10_000 });
+    const dice = page.locator('.st-dice .dice');
+    await expect(dice).toHaveClass(/is-shaking/);
+    await expect(page.locator('.roll-btn')).toHaveClass(/is-held/);
+    await page.locator('.pause-btn').click();
+    await expect(page.locator('.menu-title')).toContainText('일시 정지');
+    await expect(dice, 'paused: the dice stop rattling').not.toHaveClass(/is-shaking/);
+    await page.locator('.menu-item.is-primary').click(); // 계속하기
+    await expect(dice, 'resumed mid-hold: rattling again').toHaveClass(/is-shaking/);
+    await expect(page.locator('.roll-btn')).toHaveClass(/is-held/);
+    expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), 'still holding, not rolled').toBe('preRoll');
+    await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(false));
+    await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), { timeout: 30_000 }).not.toBe('preRoll');
+    checkPress((await log(page)).find((r) => r.phase === 'preRoll')!, 'roll after pause');
     expect(logs, logs.join('\n')).toEqual([]);
   });
 

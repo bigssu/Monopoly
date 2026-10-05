@@ -302,8 +302,6 @@ export class GameController {
     this.view.stage.clearTimer();
     // A running turn freezes too (animations, holds, the dealer), not just the next decision.
     setHeld(true, this.view.table);
-    // A CPU hand frozen on the roll button: the dice stop rattling (their timer is not on the clock).
-    if (this.cpuActing) this.view.stage.dice.shake(false);
     this.view.dealer.hush();
   }
 

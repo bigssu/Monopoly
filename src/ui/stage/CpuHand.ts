@@ -19,7 +19,7 @@
  * when no hand is out; the layer exists only while a hand is.
  */
 import type { Action, GameState, Seat } from '@/engine';
-import { anim, frame, gamePace, headless, noMotion, sleep } from '@/ui/fx/time';
+import { anim, frame, gamePace, headless, isHeld, noMotion, onFrame, sleep } from '@/ui/fx/time';
 import { EASE, HAND } from '@/ui/fx/motion';
 import { h, isDevHook, SEAT_ANGLE, svgNode } from '@/ui/game/util';
 import type { Board } from '@/ui/board/Board';
@@ -182,10 +182,12 @@ export class CpuHand {
     const isRoll = target.kind === 'control' && target.hold;
     const rollBtn = el?.classList.contains('roll-btn') ? el : null;
     let unmark: (() => void) | null = null;
+    let stopShake: (() => void) | null = null;
     const unpress = (): void => {
       el?.classList.remove('is-pressed');
       rollBtn?.classList.remove('is-held');
-      if (isRoll) this.stage.dice.shake(false);
+      stopShake?.();
+      stopShake = null;
     };
     this.cleanup = () => {
       unpress();
@@ -210,7 +212,7 @@ export class CpuHand {
     //    out of it, a board space is outlined in the CPU's color; a roll shakes the dice.
     if (rollBtn) rollBtn.classList.add('is-held');
     else el?.classList.add('is-pressed');
-    if (isRoll) this.stage.dice.shake(true);
+    if (isRoll) stopShake = this.shakeDice();
     if (target.space !== null) unmark = this.board.highlight(target.space, o.color, 60_000);
     this.ring(layer, hand, cx, cy, tw, th, radius, o.color);
     const up = at(qx, qy, TILT, 1);
@@ -248,6 +250,30 @@ export class CpuHand {
       if (this.layer === layer) this.drop();
       else layer.remove();
     }
+  }
+
+  /**
+   * Rattle the dice while the hand holds the roll button. The dice's own rattle is a plain timer
+   * (sound + haptic ticks), outside the game clock, so it follows the pause here on the 30 Hz
+   * clock: silent while the game is held, rattling again on resume, until the returned stop.
+   */
+  private shakeDice(): () => void {
+    const dice = this.stage.dice;
+    let on = false;
+    const set = (v: boolean): void => {
+      if (v === on) return;
+      on = v;
+      dice.shake(v);
+    };
+    set(!isHeld());
+    const stop = onFrame(() => {
+      set(!isHeld());
+      return true;
+    });
+    return () => {
+      stop();
+      set(false);
+    };
   }
 
   /** A ring rippling out of the pressed control (pure decoration: skipped without motion). */
