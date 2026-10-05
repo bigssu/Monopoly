@@ -51,6 +51,8 @@ export interface LotAndRollHook {
   manualClock(on: boolean): void;
   /** Advance the manual clock `n` frames (microtasks and timers flushed after each). */
   stepFrames(n: number): Promise<void>;
+  /** The money stage (docs/MONEY-EVENTS.md §11): live, scene clock (ms), kept, scenes run, coins in flight. */
+  money(): { live: boolean; t: number; kept: boolean; scenes: number; flying: number } | null;
   /** The CPU hand: presses so far, and a switch that holds each hand at its press. */
   cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; release(): void; frozen(): boolean };
 }
@@ -108,6 +110,10 @@ export function installDevHook(): void {
         stepClock(1);
         await new Promise((r) => setTimeout(r, 0));
       }
+    },
+    money: () => {
+      const st = current?.view.money;
+      return st ? { live: st.live, t: Math.round(st.clock?.t ?? 0), kept: st.kept, scenes: st.stats.scenes, flying: st.coins.flying } : null;
     },
     cpuHand: () => ({
       log: handDev?.log ?? [],

@@ -73,7 +73,10 @@ const CFG = {
   layerSeconds: Number(opt('layer-seconds', 40)),
   phases: String(opt('phases', 'boot,idle,cap,play,layers,mount,fx')).split(','),
   json: opt('json', null),
+  /** Extra dev query for every game page, e.g. `--query mcam=3d` (money cut-in board camera). */
+  query: opt('query', null),
 };
+const DEV = '/?dev=1' + (CFG.query ? `&${CFG.query}` : '');
 if (opt('full', false) && !CFG.phases.includes('full')) CFG.phases.push('full');
 if (opt('unique', false) && !CFG.phases.includes('unique')) CFG.phases.push('unique');
 
@@ -243,7 +246,7 @@ if (CFG.phases.includes('idle')) {
   out.idle = {};
   {
     const { ctx, page, cdp } = await newPage();
-    await page.goto(base + '/?dev=1');
+    await page.goto(base + DEV);
     await onTitle(page);
     await page.waitForTimeout(1500);
     out.idle.title = await idlePair(page, cdp, 'title');
@@ -258,7 +261,7 @@ if (CFG.phases.includes('idle')) {
   }
   {
     const { ctx, page, cdp } = await newPage();
-    await page.goto(base + '/?dev=1');
+    await page.goto(base + DEV);
     await onTitle(page);
     await page.evaluate(() => {
       window.__lotAndRoll.setAnimSpeed(0);
@@ -276,7 +279,7 @@ if (CFG.phases.includes('idle')) {
 // ------------------------------------------------------------------------------------ cap (A)
 async function capRun(saver) {
   const { ctx, page, cdp } = await newPage(1);
-  await page.goto(base + '/?dev=1');
+  await page.goto(base + DEV);
   await onTitle(page);
   await page.evaluate((v) => window.__lotAndRollShell.prefs.set({ batterySaver: v }), saver);
   await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
@@ -303,7 +306,7 @@ if (CFG.phases.includes('unique')) {
   out.unique = {};
   for (const saver of [true, false]) {
     const { ctx, page, cdp } = await newPage(1);
-    await page.goto(base + '/?dev=1');
+    await page.goto(base + DEV);
     await onTitle(page);
     await page.evaluate((v) => window.__lotAndRollShell.prefs.set({ batterySaver: v }), saver);
     await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
@@ -330,7 +333,7 @@ if (CFG.phases.includes('unique')) {
 // ------------------------------------------------------------------------------------ play (frames)
 if (CFG.phases.includes('play')) {
   const { ctx, page, cdp } = await newPage();
-  await page.goto(base + '/?dev=1');
+  await page.goto(base + DEV);
   await onTitle(page);
   await page.evaluate(() => {
     window.__lt = [];
@@ -430,7 +433,7 @@ if (CFG.phases.includes('play') || CFG.phases.includes('floor')) {
 // ------------------------------------------------------------------------------------ layers (C)
 if (CFG.phases.includes('layers')) {
   const { ctx, page, cdp } = await newPage();
-  await page.goto(base + '/?dev=1');
+  await page.goto(base + DEV);
   await onTitle(page);
   await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
   await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
@@ -438,18 +441,49 @@ if (CFG.phases.includes('layers')) {
   const counts = [];
   let peak = 0;
   let peakMB = 0;
+  let peakTree = [];
+  let peakDuring = '';
   const dev = CFG.dpr * CFG.dpr;
   const onTree = (ev) => {
     if (!ev.layers) return;
     counts.push(ev.layers.length);
     peak = Math.max(peak, ev.layers.length);
-    peakMB = Math.max(peakMB, ev.layers.reduce((a, l) => a + (l.drawsContent ? l.width * l.height * 4 * dev : 0), 0) / 1048576);
+    const mb = ev.layers.reduce((a, l) => a + (l.drawsContent ? l.width * l.height * 4 * dev : 0), 0) / 1048576;
+    if (mb > peakMB) {
+      peakMB = mb;
+      peakTree = ev.layers.filter((l) => l.drawsContent);
+      // What was running at the peak (dev hook): money stage, animated elements, the last events.
+      void page
+        .evaluate(() => {
+          const anims = document.getAnimations().map((a) => {
+            const t = a.effect && a.effect.target;
+            return t ? `${t.tagName.toLowerCase()}.${String(t.className).split(' ').join('.')}` : '?';
+          });
+          const ms = document.querySelector('.money-stage');
+          const log = window.__moneyLog ?? [];
+          return `stage ${ms && ms.classList.contains('is-live') ? 'live' : 'parked'}; scenes ${log.length} (last ${log.at(-1)?.play ?? '-'}); fx ${window.__lotAndRoll.fx()?.effects?.join('+') || '-'}; anims ${[...new Set(anims)].join(' ') || '-'}`;
+        })
+        .then((v) => (peakDuring = v))
+        .catch(() => {});
+    }
   };
   cdp.on('LayerTree.layerTreeDidChange', onTree);
+  await cdp.send('DOM.getDocument', { depth: 0 });
   await cdp.send('LayerTree.enable');
   const tr = await trace(page, cdp, () => page.waitForTimeout(CFG.layerSeconds * 1000));
   await cdp.send('LayerTree.disable').catch(() => {});
   cdp.off('LayerTree.layerTreeDidChange', onTree);
+  // What the peak-memory layers were (node + class), largest first.
+  const peakLayersList = [];
+  for (const l of [...peakTree].sort((a, b) => b.width * b.height - a.width * a.height).slice(0, 12)) {
+    let who = '?';
+    if (l.backendNodeId) {
+      const d = await cdp.send('DOM.describeNode', { backendNodeId: l.backendNodeId }).catch(() => null);
+      if (d?.node) who = `${d.node.localName || d.node.nodeName}${(d.node.attributes ?? []).reduce((a, v, i, arr) => (arr[i - 1] === 'class' ? `${a}.${v.split(' ').join('.')}` : a), '')}`;
+    }
+    peakLayersList.push(`${who} ${Math.round(l.width)}x${Math.round(l.height)} ${r1((l.width * l.height * 4 * dev) / 1048576)}MB`);
+  }
+  await cdp.send('DOM.disable').catch(() => {});
   const sorted = [...counts].sort((a, b) => a - b);
   out.layers = {
     seconds: r1(tr.sec),
@@ -459,6 +493,8 @@ if (CFG.phases.includes('layers')) {
     paintsPerSec: r1(tr.paint / tr.sec),
     rasterPerSec: r1(tr.raster / tr.sec),
     layoutMaxMs: tr.layoutMaxMs,
+    peakMemoryLayers: peakLayersList,
+    peakMemoryDuring: peakDuring,
   };
   log('layers', JSON.stringify(out.layers));
   await ctx.close();
@@ -469,7 +505,7 @@ if (CFG.phases.includes('mount')) {
   const runs = [];
   for (let i = 0; i < 3; i++) {
     const { ctx, page, cdp } = await newPage();
-    await page.goto(base + '/?dev=1');
+    await page.goto(base + DEV);
     await onTitle(page);
     await page.waitForTimeout(1000);
     const tr = await trace(page, cdp, async () => {
@@ -508,7 +544,7 @@ async function fxScenario(page) {
 }
 async function fxPage(throttle) {
   const p = await newPage(throttle);
-  await p.page.goto(base + '/?dev=1');
+  await p.page.goto(base + DEV);
   await onTitle(p.page);
   await p.page.evaluate(() => {
     window.__lotAndRoll.setPromptTimer(0);
@@ -552,7 +588,7 @@ if (CFG.phases.includes('fx')) {
   // must not do is add much on top of the game (docs/PERFORMANCE.md §1.2).
   const f6Run = async (q) => {
     const { ctx, page, cdp } = await newPage();
-    await page.goto(base + '/?dev=1' + (q ? '&fxq=' + q : ''));
+    await page.goto(base + DEV + (q ? '&fxq=' + q : ''));
     await onTitle(page);
     await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
     await page.waitForTimeout(3000);
@@ -727,7 +763,7 @@ if (CFG.phases.includes('fx')) {
 // ------------------------------------------------------------------------------------ full game DOM
 if (CFG.phases.includes('full')) {
   const { ctx, page } = await newPage(1);
-  await page.goto(base + '/?dev=1');
+  await page.goto(base + DEV);
   await onTitle(page);
   await page.evaluate(() => {
     window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929);
@@ -757,7 +793,7 @@ if (CFG.phases.includes('full')) {
 // ------------------------------------------------------------------------------------ tap (info)
 if (CFG.phases.includes('tap')) {
   const { ctx, page } = await newPage();
-  await page.goto(base + '/?dev=1');
+  await page.goto(base + DEV);
   await onTitle(page);
   await page.evaluate(() => {
     window.__lotAndRoll.setPromptTimer(0);

@@ -11,6 +11,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { reduceMotion } from './motion';
 
 interface LogEntry {
   scene: string;
@@ -181,6 +182,168 @@ test.describe('money cut-ins (normal speed, real controls)', () => {
 
     expect(errors, errors.join('\n')).toEqual([]);
   });
+});
+
+const TOLL = `s.players[me].position = 0; s.players[me].cash = 3000; s.properties[4] = { owner: other(2), level: 2 }; s.testHooks = { diceQueue: [[1, 3]] };`;
+
+/** Roll into the toll and time the cut-in: ms from the stage going live to parked, coins seen. */
+async function timeToll(page: Page, during?: () => Promise<void>): Promise<{ liveMs: number; coinsSeen: number }> {
+  await page.locator('.st-prompt [data-action="Roll"]:not(:disabled)').click();
+  await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.money()!.live), { timeout: 20_000 }).toBe(true);
+  const t0 = Date.now();
+  const sampler = page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        let coins = 0;
+        const tick = (): void => {
+          coins = Math.max(coins, document.querySelectorAll('.money-stage .mc[style*="opacity: 1"]').length);
+          if (window.__lotAndRoll!.money()!.live) requestAnimationFrame(tick);
+          else resolve(coins);
+        };
+        tick();
+      }),
+  );
+  await during?.();
+  const coinsSeen = await sampler;
+  return { liveMs: Date.now() - t0, coinsSeen };
+}
+
+test.describe('money cut-ins follow the time policy (fx/time.ts)', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test('pause freezes the scene clock, resume finishes it; a skip tap plays it ×5', async ({ page }) => {
+    test.setTimeout(150_000);
+    const errors = watchConsole(page);
+    await boot(page, 1280, 800);
+    // Normal speed, for reference.
+    await craft(page, 'S', TOLL);
+    const normal = await timeToll(page);
+    await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+    expect(normal.coinsSeen, 'coins fly').toBeGreaterThan(2);
+
+    // Pause in the middle: the scene clock stands still (and nothing ticks), resume carries on.
+    await craft(page, 'S', TOLL);
+    await timeToll(page, async () => {
+      await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.money()!.t), { timeout: 10_000 }).toBeGreaterThan(600);
+      await page.locator('.pause-btn').click();
+      await expect(page.locator('.menu-title')).toContainText('일시 정지');
+      const t1 = await page.evaluate(() => window.__lotAndRoll!.money()!.t);
+      await page.waitForTimeout(1500);
+      expect(await page.evaluate(() => window.__lotAndRoll!.money()!.t), 'clock frozen while paused').toBe(t1);
+      expect(await page.evaluate(() => window.__lotAndRoll!.money()!.live)).toBe(true);
+      await page.locator('.menu-item.is-primary').click();
+    });
+    await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+    expect((await log(page)).map((e) => e.scene)).toContain('toll');
+
+    // Skip: a tap on the table plays the rest ×5.
+    await craft(page, 'S', TOLL);
+    const skipped = await timeToll(page, async () => {
+      await page.waitForTimeout(150);
+      await page.mouse.click(640, 400);
+    });
+    console.log(`[money] toll cut-in: normal ${normal.liveMs} ms, skipped ${skipped.liveMs} ms`);
+    expect(skipped.liveMs, 'skip shortens the cut-in').toBeLessThan(normal.liveMs * 0.6);
+    await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+    await expectParked(page);
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('headless (speed 0): no cut-in, the state is applied at once', async ({ page }) => {
+    const errors = watchConsole(page);
+    await boot(page, 1280, 800);
+    await craft(page, 'S', TOLL);
+    const res = await page.evaluate(async () => {
+      const h = window.__lotAndRoll!;
+      h.setAnimSpeed(0);
+      let seen = false;
+      const id = setInterval(() => (seen ||= !!h.money()?.live), 5);
+      const s0 = h.getState()!;
+      await h.dispatch({ type: 'Roll', playerId: s0.current });
+      clearInterval(id);
+      const s = h.getState()!;
+      const owner = s.properties[4]!.owner!;
+      return { seen, live: h.money()!.live, ticks: h.activeTicks(), payer: s.players[s0.current]!.cash, owner: s.players[owner]!.cash, logged: (window as unknown as { __moneyLog: unknown[] }).__moneyLog.length };
+    });
+    expect(res.seen, 'stage never up').toBe(false);
+    expect(res.live).toBe(false);
+    expect(res.logged, 'no scene played').toBe(0);
+    expect(res.payer, 'toll paid').toBeLessThan(3000);
+    expect(res.owner).toBeGreaterThan(3000);
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('reduced-motion setting: same beats and numbers, no flying coins', async ({ page }) => {
+    test.setTimeout(90_000);
+    const errors = watchConsole(page);
+    await reduceMotion(page);
+    await boot(page, 1280, 800);
+    await craft(page, 'S', TOLL);
+    const r = await timeToll(page);
+    await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+    console.log(`[money] toll cut-in with reduced motion: ${r.liveMs} ms, coins seen ${r.coinsSeen}`);
+    expect(r.coinsSeen, 'no coin moves').toBe(0);
+    expect(r.liveMs, 'time is kept').toBeGreaterThan(1500);
+    const L = await log(page);
+    const toll = L.find((e) => e.scene === 'toll')!;
+    await expectWalletsMatch(page, toll);
+    await expectParked(page);
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+});
+
+test('CPU buy: the hand presses and leaves, then the cut-in plays (no overlap)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = watchConsole(page);
+  await boot(page, 1600, 1000);
+  // Seat N is a CPU at the buy prompt for Cairo.
+  await page.evaluate(() => {
+    const hook = window.__lotAndRoll!;
+    hook.setPromptTimer(0);
+    hook.startGame({ ...hook.demoSettings(4, false), rules: 'easy' } as never, 7);
+    const s = hook.getState()!;
+    const me = s.players.findIndex((p) => p.seat === 'N');
+    s.players[me]!.isCpu = true;
+    s.players[me]!.position = 4;
+    s.current = me;
+    s.phase = { kind: 'buy', playerId: me, spaceIndex: 4, price: 160 };
+    hook.loadState(s);
+    (window as unknown as { __moneyLog: unknown[] }).__moneyLog.length = 0;
+  });
+  await page.waitForSelector('.game .board');
+  // Sample every frame: is a hand out, is the stage up (and opaque enough to cover it)?
+  const r = await page.evaluate(
+    () =>
+      new Promise<{ both: number; handFrames: number; stageFrames: number; order: string }>((resolve) => {
+        let both = 0;
+        let handFrames = 0;
+        let stageFrames = 0;
+        let order = '';
+        const t0 = performance.now();
+        const tick = (): void => {
+          const hand = !!document.querySelector('.cpu-hand-layer');
+          const st = document.querySelector<HTMLElement>('.money-stage.is-live');
+          const up = !!st && Number(getComputedStyle(st).opacity) > 0.05;
+          if (hand) handFrames++;
+          if (up) stageFrames++;
+          if (hand && up) both++;
+          const k = hand ? 'H' : up ? 'S' : '';
+          if (k && !order.endsWith(k)) order += k;
+          const done = (window as unknown as { __moneyLog: unknown[] }).__moneyLog.length > 0 && !st;
+          if (done || performance.now() - t0 > 30_000) resolve({ both, handFrames, stageFrames, order });
+          else requestAnimationFrame(tick);
+        };
+        tick();
+      }),
+  );
+  console.log(`[money] CPU buy: hand ${r.handFrames} frames, stage ${r.stageFrames} frames, both ${r.both}, order ${r.order}`);
+  expect(r.handFrames, 'the hand pressed').toBeGreaterThan(5);
+  expect(r.stageFrames, 'the cut-in played').toBeGreaterThan(20);
+  expect(r.both, 'hand and cut-in never on screen together').toBe(0);
+  expect(r.order.startsWith('HS'), `hand first, then the stage (${r.order})`).toBe(true);
+  const L = await log(page);
+  expect(L[0]!.scene).toBe('purchase');
+  expect(errors, errors.join('\n')).toEqual([]);
 });
 
 // ------------------------------------------------------------------------------------- filmstrips

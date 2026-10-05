@@ -192,57 +192,38 @@ interface Beat {
 
 const ME = (pid: number) => `s.current = ${pid}; s.players.forEach((p) => (p.cash = 9000));`;
 
+/**
+ * Canvas effects that still play in game. Money (buy / build / toll / takeover payments) is the
+ * money stage's cut-in now (e2e/money-events.spec.ts, docs/MONEY-EVENTS.md §11): the beats below
+ * check what the canvas adds after it hands back — the colour-group chain and the victory.
+ */
 const BEATS: Beat[] = [
   {
     name: 'buy-group-S',
     patch: `${ME(0)} s.players[0].position = 31; s.properties[30] = { owner: 0, level: 0 }; s.phase = { kind: 'buy', playerId: 0, spaceIndex: 31, price: 1000 };`,
     action: JSON.stringify({ type: 'Buy', playerId: 0 }),
-    ticks: 110,
-    expect: ['plotClaim', 'groupChain'],
-  },
-  ...[1, 2, 3, 4].map(
-    (lv): Beat => ({
-      name: `build${lv}-E`,
-      patch: `${ME(1)} s.players[1].position = 22; s.properties[22] = { owner: 1, level: ${lv - 1} }; s.phase = { kind: 'build', playerId: 1, spaceIndex: 22, toLevel: ${lv}, cost: ${[0, 240, 290, 340, 480][lv]} };`,
-      action: JSON.stringify({ type: 'Build', playerId: 1, spaceIndex: 22 }),
-      ticks: lv === 4 ? 90 : 50,
-      expect: [lv === 4 ? 'landmarkReveal' : `buildSeq${lv}`],
-    }),
-  ),
-  {
-    name: 'toll-N',
-    patch: `${ME(2)} s.players[2].position = 15; s.properties[20] = { owner: 3, level: 3 }; s.properties[19] = { owner: 2, level: 1 }; s.properties[22] = { owner: 2, level: 0 }; s.phase = { kind: 'preRoll', playerId: 2, rollAgain: false }; s.testHooks = { diceQueue: [[2, 3]] };`,
-    action: JSON.stringify({ type: 'Roll', playerId: 2 }),
-    // Dice read hold + crouch, 5 hops, settle and landing beat before the toll (animate.ts timing).
-    ticks: 170,
-    expect: ['tollPay'],
+    ticks: 220,
+    expect: ['groupChain'],
   },
   {
     name: 'takeover-group-N',
-    patch: null,
+    patch: `${ME(2)} s.players[2].position = 20; s.properties[20] = { owner: 3, level: 3 }; s.properties[19] = { owner: 2, level: 1 }; s.properties[22] = { owner: 2, level: 0 }; s.phase = { kind: 'takeover', playerId: 2, spaceIndex: 20, ownerId: 3, price: 1320, ownerHasShield: false };`,
     action: JSON.stringify({ type: 'Takeover', playerId: 2 }),
-    ticks: 130,
-    expect: ['takeoverStamp', 'groupChain'],
-  },
-  {
-    name: 'landmark-W',
-    patch: `${ME(3)} s.players[3].position = 12; s.properties[12] = { owner: 3, level: 3 }; s.phase = { kind: 'build', playerId: 3, spaceIndex: 12, toLevel: 4, cost: 280 };`,
-    action: JSON.stringify({ type: 'Build', playerId: 3, spaceIndex: 12 }),
-    ticks: 90,
-    expect: ['landmarkReveal'],
+    ticks: 240,
+    expect: ['groupChain'],
   },
   {
     name: 'victory-hubs-W',
     patch: `${ME(3)} s.players[3].position = 29; for (const i of [5, 13, 21]) s.properties[i] = { owner: 3, level: 0 }; s.phase = { kind: 'buy', playerId: 3, spaceIndex: 29, price: 250 };`,
     action: JSON.stringify({ type: 'Buy', playerId: 3 }),
-    ticks: 130,
-    expect: ['plotClaim', 'victory'],
+    ticks: 220,
+    expect: ['victory'],
   },
 ];
 
 const SIZES = [
   { w: 1600, h: 1000, beats: BEATS.map((b) => b.name) },
-  { w: 800, h: 450, beats: ['buy-group-S', 'build1-E', 'build2-E', 'build3-E', 'build4-E', 'toll-N', 'takeover-group-N', 'victory-hubs-W'] },
+  { w: 800, h: 450, beats: ['buy-group-S', 'takeover-group-N', 'victory-hubs-W'] },
 ];
 
 test.describe('in-game VFX', () => {

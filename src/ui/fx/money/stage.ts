@@ -2,13 +2,13 @@
  * The money stage (docs/MONEY-EVENTS.md §2): ONE full-screen layer for money cut-ins, created once,
  * parked off-screen by a transform while idle (no show/hide paint, no compositor layer, no timers).
  *
- *   .money-stage   root: static vignette + dim, wallets (opacity-composited only while live)
- *     .ms-wallets  four wallet piles, one per seat edge, rotated to face their seat
- *     .ms-hero     the zoomed hero picture (city, plot, vault, bank…), 3D-tilted (perspective
- *                  1200 px on the root), its own layer while live
- *     .ms-fg       foreground layer: plaques, one-shot sprites, the flying-coin pool
+ *   .money-stage   root: static vignette + dim (opacity-composited only while live)
+ *     .ms-hero     the zoomed hero picture (city, plot, vault, bank…), leaning back by a
+ *                  foreshortened 2D scale (no 3D: see money.css)
+ *     .ms-wallets  four wallet piles, one per seat edge, rotated to face their seat (over the hero)
+ *     .ms-fg       plaques, one-shot sprites, the flying-coin pool
  *
- * Extra compositor layers while a scene runs: root, hero, fg (= 3); idle: 0.
+ * Extra compositor layers while a scene runs: the root only (= 1); idle: 0.
  *
  * The stage knows nothing about the game: the wiring injects a host (rect providers for the seat
  * panels / board / tiles, space art, and a board-camera callback). Everything moves on one
@@ -86,7 +86,7 @@ export interface HeroPose {
   s: number;
   /** Rotation about the screen normal (deg, faces a seat). */
   rz: number;
-  /** Tilt back (deg, 3D). */
+  /** Lean back (deg): drawn as a 2D foreshortening, cos(rx) along the facing axis. */
   rx: number;
   o: number;
 }
@@ -500,9 +500,12 @@ export class MoneyStage implements TweenHost {
   pose(p: Partial<HeroPose>): void {
     const h = (this.heroPose = { ...this.heroPose, ...p });
     const g = this.geom;
+    // Lean-back without 3D: the picture is foreshortened along the facing seat's axis (cos rx), and
+    // pivots on its lower part so it seems to rise as it straightens (no compositor layer).
+    const sy = h.s * Math.cos((h.rx * Math.PI) / 180);
     this.hero.style.transform =
       `translate(${(h.x - g.hero / 2).toFixed(1)}px,${(h.y - g.hero / 2).toFixed(1)}px) rotate(${h.rz}deg)` +
-      ` rotateX(${h.rx.toFixed(2)}deg) scale(${h.s.toFixed(4)})`;
+      ` scale(${h.s.toFixed(4)},${sy.toFixed(4)})`;
     this.hero.style.opacity = h.o.toFixed(3);
   }
 

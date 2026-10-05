@@ -162,11 +162,13 @@ export class GameView {
     const defs = getBoard(spacesPerSide);
     const toRect = (r: { x: number; y: number; width: number; height: number }): MoneyRect => ({ x: r.x, y: r.y, w: r.width, h: r.height });
     const boardRect = (): DOMRect => this.rect('board', () => this.board.el.getBoundingClientRect());
-    // Camera (§2): 2D by default — the board pulls back a little under the vignette (transform on
-    // the board, written on the scene clock; a static 2D scale makes no layer). `?dev=1&mcam=3d`
-    // tilts it back in 3D as well (+3–4 compositor layers measured, docs/MONEY-EVENTS.md §11).
-    const cam3d = isDevHook() && new URLSearchParams(location.search).get('mcam') === '3d';
-    const camOff = isDevHook() && new URLSearchParams(location.search).get('mcam') === 'off';
+    // Camera (§2): OFF by default. Scaling the board under the cut-in made the board its own 27 MB
+    // compositor layer (peak layer memory 211 MB with the 3D hero vs the 100 MB gate) for a pull-back
+    // that the ≥ 0.92 vignette nearly hides (docs/MONEY-EVENTS.md §11.4). Dev knobs for measuring:
+    // `?dev=1&mcam=2d` (scale 0.92) / `mcam=3d` (+ rotateX 9°).
+    const mcam = isDevHook() ? new URLSearchParams(location.search).get('mcam') : null;
+    const cam3d = mcam === '3d';
+    const camOff = mcam !== '2d' && mcam !== '3d';
     const stage: MoneyStage = new MoneyStage({
       parent: this.root,
       boardRect: () => {

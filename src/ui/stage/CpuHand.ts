@@ -234,7 +234,17 @@ export class CpuHand {
 
     // 4. Release = dispatch (the caller dispatches when this resolves). Lift and leave meanwhile.
     unpress();
-    void this.leave(hand, layer, down, up, at(sx, sy, TILT - 8, 1));
+    this.leaving = this.leave(hand, layer, down, up, at(sx, sy, TILT - 8, 1));
+  }
+
+  private leaving: Promise<void> = Promise.resolve();
+
+  /**
+   * Resolves when the last hand has lifted off and left (its layer is gone). A full-screen money
+   * cut-in waits for it, so the hand is seen leaving and does not linger under the vignette.
+   */
+  whenGone(): Promise<void> {
+    return this.layer ? this.leaving : Promise.resolve();
   }
 
   /** Lift off the control and slide back to the seat edge, fading; then remove everything. */

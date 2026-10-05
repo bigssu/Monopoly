@@ -25,7 +25,7 @@
  * now), reduced motion keeps every beat but holds still (presets: sound + a static highlight,
  * VFX.md §8.3). The policy lives in `fx/time.ts`.
  */
-import { deepClone, getBoardInfo, groupOf, isFinalStretch, type GameEvent, type GameState, type Level, type PlayerId } from '@/engine';
+import { deepClone, getBoardInfo, groupOf, isFinalStretch, type GameEvent, type GameState, type PlayerId } from '@/engine';
 import { GROUP_NAMES } from '@/content/board';
 import { getCard } from '@/content/cards';
 import { playerColor } from '@/content/palette';
@@ -42,7 +42,6 @@ import type { FxPlay } from './vfx';
 import { applyMoneyState, planMoney, type MoneyGroup, type MoneyScene } from './moneymap';
 import * as M from './money';
 import { festivalMultiplier, type Level as EngineLevel } from '@/engine';
-import { HAND } from './motion';
 
 type Alive = () => boolean;
 const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide ?? 7).board;
@@ -52,14 +51,12 @@ const MARK = typeof window !== 'undefined' && isDevHook();
 
 /** Events that change the board / a panel without the sequencer waiting on their animation. */
 const CHANGE_BEATS: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
-  'PassedStart', 'PropertyBought', 'Built', 'TakenOver', 'CardKept', 'CardUsed', 'ExpressGranted', 'Escaped',
-  'FestivalSet', 'TravelDeclined', 'BuildingSold', 'PropertySold', 'AuctionBid', 'AuctionDropped',
+  'CardKept', 'CardUsed', 'ExpressGranted', 'Escaped',
+  'FestivalSet', 'TravelDeclined', 'AuctionBid', 'AuctionDropped',
 ]);
 
-/** Per-batch state shared between events (toll arrival → receiver float, transfer count, previous event). */
+/** Per-batch state shared between events (previous event). */
 interface Batch {
-  tollArrive: Promise<void> | null;
-  transfers: number;
   prev: GameEvent['type'] | null;
 }
 
@@ -87,7 +84,7 @@ export async function playEvents(
 ): Promise<void> {
   const vs = deepClone(prev);
   const fast = headless();
-  const batch: Batch = { tollArrive: null, transfers: 0, prev: null };
+  const batch: Batch = { prev: null };
   // Money cut-ins: group start index → group; every grouped event index → its group.
   const groups = planMoney(events);
   const starts = new Map<number, MoneyGroup>();
@@ -105,8 +102,8 @@ export async function playEvents(
     const g = starts.get(i);
     if (g) {
       try {
-        // A CPU's own decision: its hand lifts off the button before the cut-in comes up.
-        if (!fast && firstMoney && i <= 1 && vs.players[vs.current]?.isCpu) await wait(HAND.lift + 60);
+        // A CPU's own decision: its hand lifts off the button and leaves before the cut-in comes up.
+        if (!fast && firstMoney) await view.hand.whenGone();
         firstMoney = false;
         await playMoney(view, vs, events, g, fast);
       } catch (e) {
@@ -118,6 +115,12 @@ export async function playEvents(
       continue;
     }
     if (grouped.has(i)) continue;
+    // One thing at a time: the cut-in hands back (stage down, board updated) before the next event
+    // plays — unless it is kept up for a money scene that follows directly (one cut-in, §4.3).
+    if (!fast && view.money.live && !view.money.kept) {
+      await view.money.enqueue(() => Promise.resolve());
+      if (!alive()) return;
+    }
     try {
       if (MARK) performance.mark(`lr:${ev.type}`);
       // Let the dealer finish the last line before the stage turns to the next player (and before
@@ -203,12 +206,11 @@ function fire(view: GameView, steps: readonly FxStep[]): FxPlay[] {
   return steps.filter((s) => s.hop === undefined).map((s) => play(view, s));
 }
 
-function ctxFor(view: GameView, vs: GameState, batch: Batch): FxCtx {
+function ctxFor(view: GameView, vs: GameState): FxCtx {
   return {
     vs,
     cardAt: () => (fxOn() ? view.stage.cardClientCenter() : undefined),
     dice: () => (fxOn() ? view.stage.dice.clientCenters() : undefined),
-    transfers: batch.transfers,
   };
 }
 
@@ -225,7 +227,7 @@ async function groupMoment(view: GameView, vs: GameState, pid: PlayerId, i: numb
 
 async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean, batch: Batch): Promise<void> {
   const { board, stage } = view;
-  const ctx = ctxFor(view, vs, batch);
+  const ctx = ctxFor(view, vs);
   switch (ev.type) {
     case 'RoundStarted': {
       vs.round = ev.round;
@@ -313,67 +315,25 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       if (!fast) await sleep(BEAT.landing);
       return;
     }
-    case 'PassedStart': {
-      // Salary coins fly Start → panel (the preset plays pass-start + cash-in).
-      fire(view, planFx(ev, ctx));
-      if (!fast && ev.landed) void stage.toast(t('g.passStart.landed'), 600, 'good', 'corner-start');
-      return;
-    }
-    case 'MoneyChanged': {
-      const steps = planFx(ev, ctx);
-      vs.players[ev.playerId]!.cash = ev.balance;
-      const toll = ev.reason === 'toll';
-      const panel = view.panel(ev.playerId);
-      if (toll && ev.delta > 0 && batch.tollArrive && !fast) {
-        // The receiver's number pops when the toll coins land on their panel ('arrive' cue).
-        await batch.tollArrive;
-        batch.tollArrive = null;
-        render(view, vs);
-        panel?.float(ev.delta, t('g.toll'));
-        await sleep(BEAT.money);
-        return;
-      }
-      render(view, vs);
-      // Toll: caption the float so the receiver (and payer) see what the money was for.
-      panel?.float(ev.delta, toll ? t('g.toll') : undefined);
-      fire(view, steps);
-      if (fast) return;
-      // Only reasons without a dedicated preset make their own sound (presets play cash-in / -out).
-      if (ev.reason === 'pot' || ev.reason === 'sale') view.playSfx('cash-in');
-      await sleep(ev.reason === 'bankruptcy' ? BEAT.moneyBankrupt : BEAT.money);
-      return;
-    }
+    // Money events are cut-ins (planMoney → playMoney); one that no group claimed only changes state.
+    case 'PassedStart':
+    case 'MoneyChanged':
     case 'PotChanged':
-      vs.pot = ev.pot;
+    case 'PropertyBought':
+    case 'Built':
+    case 'TollPaid':
+    case 'TakenOver':
+    case 'BuildingSold':
+    case 'PropertySold':
+    case 'PropertyTransferred':
+    case 'Bankrupt':
+      applyMoneyState(vs, ev);
       render(view, vs);
-      fire(view, planFx(ev, ctx));
       return;
-    case 'PropertyBought': {
-      const steps = planFx(ev, ctx);
-      if (!fast) void stage.toast(t('g.bought', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 500, 'good', spaceIcon(boardOf(vs)[ev.spaceIndex]!));
-      // Coins in → tag drop → the owner colour lands on the 'frame' cue.
-      await runSteps(view, steps, () => {
-        vs.properties[ev.spaceIndex]!.owner = ev.playerId;
-        render(view, vs);
-      });
-      await groupMoment(view, vs, ev.playerId, ev.spaceIndex, fast);
-      return;
-    }
     case 'CannotAfford':
       fire(view, planFx(ev, ctx));
       if (!fast) await stage.toast(t('g.cannotAfford'), 700, 'bad', 'coin');
       return;
-    case 'Built': {
-      const steps = planFx(ev, ctx);
-      const [h] = fire(view, steps);
-      if (ev.level === 4 && !fast) void h!.cue('stamp').then(() => stage.stamp(t('g.landmark.done'), 'gold'));
-      // Hammer hits → dust curtain → the new level icon is swapped in under the dust ('swap' cue).
-      await h!.cue('swap');
-      vs.properties[ev.spaceIndex]!.level = ev.level;
-      render(view, vs);
-      await h;
-      return;
-    }
     case 'Demolished': {
       vs.properties[ev.spaceIndex]!.level = ev.level;
       render(view, vs);
@@ -387,26 +347,6 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
           stage.toast(t('g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!)),
         ]);
       } else await board.pulseSpace(ev.spaceIndex, 'shake');
-      return;
-    }
-    case 'TollPaid': {
-      const hs = fire(view, planFx(ev, ctx));
-      batch.tollArrive = hs[0] && !ev.waived ? hs[0].cue('arrive') : null;
-      if (fast) return;
-      const payer = vs.players[ev.payerId]!;
-      const owner = vs.players[ev.ownerId]!;
-      await Promise.all([stage.showToll({ payer, owner, amount: ev.amount, festival: ev.festival, waived: ev.waived, multiplier: ev.multiplier }), ...hs]);
-      return;
-    }
-    case 'TakenOver': {
-      const [h] = fire(view, planFx(ev, ctx));
-      if (!fast) void h!.cue('stamp').then(() => stage.stamp(t('g.takeover.done'), 'bad'));
-      // Sirens → stamp impact → the ownership frame swaps on the 'frame' cue.
-      await h!.cue('frame');
-      vs.properties[ev.spaceIndex]!.owner = ev.buyerId;
-      render(view, vs);
-      await h;
-      await groupMoment(view, vs, ev.buyerId, ev.spaceIndex, fast);
       return;
     }
     case 'TakeoverBlocked':
@@ -515,38 +455,6 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       fire(view, planFx(ev, ctx));
       if (!fast) await stage.toast(t('g.debt.settled'), 600, 'good', 'check');
       return;
-    case 'BuildingSold':
-      fire(view, planFx(ev, ctx));
-      return;
-    case 'PropertySold': {
-      const steps = planFx(ev, ctx);
-      vs.properties[ev.spaceIndex]!.owner = null;
-      vs.properties[ev.spaceIndex]!.level = 0;
-      render(view, vs);
-      fire(view, steps);
-      if (!fast) await board.pulseSpace(ev.spaceIndex, 'shake');
-      return;
-    }
-    case 'PropertyTransferred': {
-      const steps = planFx(ev, ctx);
-      batch.transfers++;
-      const pr = vs.properties[ev.spaceIndex]!;
-      pr.owner = ev.to;
-      pr.level = (ev.to === null ? 0 : ev.level) as Level;
-      render(view, vs);
-      fire(view, steps);
-      if (!fast) await wait(90);
-      return;
-    }
-    case 'Bankrupt': {
-      vs.players[ev.playerId]!.bankrupt = true;
-      render(view, vs);
-      const hs = fire(view, planFx(ev, ctx));
-      if (fast) return;
-      // The crack preset plays the bankrupt sound, heavy haptic and the shake.
-      await Promise.all([...hs, view.panel(ev.playerId)?.breakApart(), stage.stamp(t('g.bankrupt'), 'bad')]);
-      return;
-    }
     case 'AuctionStarted':
       fire(view, planFx(ev, ctx));
       if (!fast) await stage.toast(t('g.auction.started'), 700, 'gold', spaceIcon(boardOf(vs)[ev.spaceIndex]!));

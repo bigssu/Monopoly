@@ -503,7 +503,7 @@ test.describe('human play (clicking real controls)', () => {
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
-  test('toll moment: payer card + receiver panel flash; soft timer auto-pass is announced', async ({ page }) => {
+  test('toll moment: money cut-in + receiver panel flash; soft timer auto-pass is announced', async ({ page }) => {
     test.setTimeout(90_000);
     const logs = watchConsole(page);
     await boot(page);
@@ -522,10 +522,13 @@ test.describe('human play (clicking real controls)', () => {
     const s = await getState(page);
     const owner = (s.current + 2) % 4;
     await page.locator('.st-prompt [data-action="Roll"]').click();
-    await expect(page.locator('.toll-card')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator(`.pp[data-pid="${owner}"] .pp-card`)).toHaveClass(/flash-up/, { timeout: 3000 });
-    await expect(page.locator(`.pp[data-pid="${owner}"] .pp-float.is-up`)).toHaveCount(1, { timeout: 3000 });
+    // The toll is a money cut-in (MONEY-EVENTS §11): payer's coins → the city → the owner's pile.
+    await expect(page.locator('.money-stage.is-live')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.money-stage .mw.is-on')).toHaveCount(2, { timeout: 5000 });
+    await page.waitForTimeout(1200);
     await page.screenshot({ path: `${SHOTS}/human-toll-1600x1000.png` });
+    // When it hands back, the owner's panel counts up.
+    await expect(page.locator(`.pp[data-pid="${owner}"] .pp-card`)).toHaveClass(/flash-up/, { timeout: 8000 });
     await waitIdle(page);
 
     // Soft timer: a 2 s timer on the takeover/build prompt → ring visible, then auto-pass + toast.
