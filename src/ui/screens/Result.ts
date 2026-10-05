@@ -16,7 +16,8 @@ import { rotateStart } from '@/ui/shell/setupModel';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { createFx } from '@/ui/fx/vfx';
-import { prefs } from '@/ui/shell/prefs';
+import { fxCanvasFor, prefs } from '@/ui/shell/prefs';
+import { isNative } from '@/ui/shell/capacitor';
 import { anim, gridTimeout, noMotion } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
@@ -207,6 +208,9 @@ registerScreen('result', (root, { state }) => {
   card.addEventListener('transitionend', () => card.classList.remove('is-turning'));
 
   // Confetti on the VFX canvas engine (one canvas, freed when the last piece lands: idle zero).
+  // The Android app keeps canvas effects off unless chosen in Settings (white boxes on some
+  // WebViews, docs/PERFORMANCE.md) and then paints them on the main thread: same rule as the game.
+  const canvasFx = fxCanvasFor(prefs.get(), isNative());
   const vfx = createFx({
     layer: fx,
     getLayerRect: () => fx.getBoundingClientRect(),
@@ -218,7 +222,8 @@ registerScreen('result', (root, { state }) => {
     getSpaceRect: () => ({ x: 0, y: 0, width: 0, height: 0 }),
     getPanelRect: () => null,
     getSeat: () => 'S',
-    quality: prefs.get().fxQuality,
+    quality: canvasFx?.quality ?? 'off',
+    ...(canvasFx && !canvasFx.worker ? { worker: false } : {}),
   });
   sfx.play('win');
   void anim(hero, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
@@ -227,7 +232,7 @@ registerScreen('result', (root, { state }) => {
   });
   // After the screen's entry (its layout settles first); decided now, like every animation of the
   // mount (speed 0 / reduced motion at mount = no confetti, even if the speed changes 60 ms later).
-  const cancelConfetti = noMotion() ? () => {} : gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
+  const cancelConfetti = noMotion() || !canvasFx ? () => {} : gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
   // Awards pop in one by one (anticipation: hidden until their beat; overshoot on arrival); the
   // graph lines draw themselves after the hero lands.
   const cancels: Array<() => void> = [];

@@ -63,6 +63,16 @@ export function fxQualityOn(p: Pick<Prefs, 'fxQuality' | 'fxNative'>, native: bo
   return native && !p.fxNative ? 'off' : p.fxQuality;
 }
 
+/**
+ * Canvas-effect engine options for a screen outside the game (the Result confetti): the platform's
+ * quality (`fxQualityOn`) and, in the Android app, the main-thread painter (no OffscreenCanvas
+ * worker), like the game screen. Null: no canvas at all.
+ */
+export function fxCanvasFor(p: Pick<Prefs, 'fxQuality' | 'fxNative'>, native: boolean): { quality: FxQualityPref; worker: boolean } | null {
+  const quality = fxQualityOn(p, native);
+  return quality === 'off' ? null : { quality, worker: !native };
+}
+
 export const DEALER_PREFS = ['off', 'min', 'normal', 'full'] as const;
 export type DealerPref = (typeof DEALER_PREFS)[number];
 
