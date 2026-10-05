@@ -62,6 +62,8 @@ chmod +x gradlew
 # 결과: android/app/build/outputs/apk/debug/LandPoly-debug.apk (앱 표시 이름: Land Poly)
 
 adb install -r app/build/outputs/apk/debug/LandPoly-debug.apk
+# With the per-machine Gradle property `landPolyApkCopyDir`, each build is also copied there as
+# LandPoly-<version>-<yyyyMMdd-HHmm>-debug.apk (version + build time).
 adb shell am start -n com.bigssu.lotandroll/.MainActivity
 ```
 

@@ -50,16 +50,24 @@ android {
             output.outputFileName = "LandPoly-${variant.buildType.name}.apk"
         }
         // Optional, per machine: copy every built APK to a folder named by the Gradle property
-        // `landPolyApkCopyDir` (set it in ~/.gradle/gradle.properties; never committed).
+        // `landPolyApkCopyDir` (set it in ~/.gradle/gradle.properties; never committed). The copy is
+        // named by version and build time (LandPoly-0.1.0-20261005-1421-debug.apk) so builds in that
+        // folder can be told apart; the Gradle output keeps its fixed name for scripts and CI.
         def copyDir = project.findProperty('landPolyApkCopyDir')
         if (copyDir) {
             variant.assembleProvider.configure { task ->
                 task.doLast {
-                    project.copy {
-                        from(variant.outputs.collect { it.outputFile })
-                        into(copyDir)
+                    variant.outputs.collect { it.outputFile }.each { apk ->
+                        // The APK's own time, so re-running an up-to-date build does not add a duplicate.
+                        def stamp = new java.text.SimpleDateFormat('yyyyMMdd-HHmm').format(new Date(apk.lastModified()))
+                        def name = apk.name.replaceFirst(/^LandPoly-/, "LandPoly-${variant.versionName}-${stamp}-")
+                        project.copy {
+                            from(apk)
+                            into(copyDir)
+                            rename { name }
+                        }
+                        logger.lifecycle("APK copied to ${copyDir}/${name}")
                     }
-                    logger.lifecycle("APK copied to ${copyDir}")
                 }
             }
         }
