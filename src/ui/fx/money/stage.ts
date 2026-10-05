@@ -5,7 +5,8 @@
  *   .money-stage   root: static vignette + dim (opacity-composited only while live)
  *     .ms-hero     the zoomed hero picture (city, plot, vault, bank…), leaning back by a
  *                  foreshortened 2D scale (no 3D: see money.css)
- *     .ms-wallets  four wallet piles, one per seat edge, rotated to face their seat (over the hero)
+ *     .ms-wallets  four wallet piles, one per seat edge, rotated to face their seat (over the hero);
+ *                  fixed view (`MoneyHost.upright`): upright, each standing on its seat's panel
  *     .ms-fg       plaques, one-shot sprites, the flying-coin pool
  *
  * Extra compositor layers while a scene runs: the root only (= 1); idle: 0.
@@ -22,7 +23,7 @@ import { CoinPool, type Pt } from './coins';
 import type { Tier } from './denom';
 import { easeOutCubic } from './denom';
 import { CoinSound } from './sound';
-import { SEAT_ROT, Wallet, type TweenHost } from './wallet';
+import { SEAT_ROT, Wallet, walletGeom, type TweenHost, type UprightSlide } from './wallet';
 import type { MoneyAnimName as FxAnimName } from '@/content/fx/money-manifest';
 import '@/styles/money.css';
 
@@ -59,6 +60,12 @@ export interface MoneyHost {
   camera?: BoardCamera;
   /** z-index of the stage (default 45: above the board and FX canvas, below menus). */
   zIndex?: number;
+  /**
+   * Fixed view (src/ui/orientation.ts, one human vs CPUs): the whole cut-in faces S — hero,
+   * plaques, stamps, wallet labels — while wallets still stand at their seat's edge and coins fly
+   * between the real seats. Collect-from-all shows one total instead of one per seat.
+   */
+  upright?: boolean;
 }
 
 /** Stage geometry for the current scene (stage-local CSS px). */
@@ -351,7 +358,22 @@ export class MoneyStage implements TweenHost {
     return { x: r.x - this.origin.x, y: r.y - this.origin.y, w: r.w, h: r.h };
   }
 
-  /** Where a seat's wallet stands: on the screen edge, on the board's axis. */
+  /** True when the cut-in faces S whatever the seat (fixed view). */
+  get upright(): boolean {
+    return !!this.host.upright;
+  }
+
+  /** The seat the cut-in's composition for `seat` faces (S in the fixed view). */
+  face(seat: Seat): Seat {
+    return this.host.upright ? 'S' : seat;
+  }
+
+  /** Rotation of content that faces `seat` (0 in the fixed view). */
+  rot(seat: Seat): number {
+    return SEAT_ROT[this.face(seat)];
+  }
+
+  /** Where a seat's wallet stands (its bottom-centre): on the screen edge, on the board's axis. */
   seatAnchor(seat: Seat): Pt {
     const { W, H, S, c } = this.geom;
     const m = Math.max(4, S * 0.012);
@@ -476,11 +498,32 @@ export class MoneyStage implements TweenHost {
 
   // ------------------------------------------------------------------ parts
 
+  /**
+   * Fixed view: an upright wallet stands on its seat's panel (the side columns, where that
+   * player's cash is shown; clear of the hero), kept on screen, and slides out past the nearer
+   * side edge. Null without a panel rect (then it stands on its edge like the table model).
+   */
+  private uprightSpot(seat: Seat): { anchor: Pt; slide: UprightSlide } | null {
+    const r = this.host.seatRect?.(seat);
+    if (!r) return null;
+    const { W, H, S, c, coin } = this.geom;
+    const m = Math.max(4, S * 0.012);
+    const g = walletGeom(coin);
+    const l = this.local(r);
+    const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+    const x = clamp(l.x + l.w / 2, m + g.w / 2, Math.max(m + g.w / 2, W - m - g.w / 2));
+    const y = clamp(l.y + l.h / 2 + g.h / 2, Math.min(H - m, m + g.h), H - m);
+    const left = x < c.x;
+    return { anchor: { x, y }, slide: { out: { x: left ? -1 : 1, y: 0 }, hide: (left ? x : W - x) + g.w / 2 + 24 } };
+  }
+
   /** Set up and raise a seat's wallet. */
   wallet(seat: Seat, cash: number, color: string, raise = true): Wallet {
     const w = this.wallets[seat];
     if (!w.visible) {
-      w.setup({ seat, color, cash, anchor: this.seatAnchor(seat), coin: this.geom.coin });
+      const up = this.host.upright ? this.uprightSpot(seat) : null;
+      const slide: UprightSlide | undefined = up?.slide ?? (this.host.upright ? { out: { x: 0, y: 1 }, hide: walletGeom(this.geom.coin).h + 24 } : undefined);
+      w.setup({ seat, color, cash, anchor: up?.anchor ?? this.seatAnchor(seat), coin: this.geom.coin, upright: slide });
       if (raise) void w.enter(this);
     }
     return w;
@@ -624,7 +667,7 @@ export class MoneyStage implements TweenHost {
     const s = this.stamp;
     s.textContent = text;
     s.className = `ms-stamp is-${tone}`;
-    const rot = SEAT_ROT[seat] - 12;
+    const rot = this.rot(seat) - 12;
     await this.tween(ms, (u) => {
       const k = u < 0.6 ? 2.4 - 1.5 * (u / 0.6) : 0.9 + 0.1 * ((u - 0.6) / 0.4);
       s.style.transform = `translate(${at.x.toFixed(1)}px,${at.y.toFixed(1)}px) translate(-50%,-50%) rotate(${rot}deg) scale(${k.toFixed(3)})`;

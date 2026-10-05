@@ -30,6 +30,14 @@ const MAX_VIS = 15;
 
 export const SEAT_ROT: Record<Seat, number> = { S: 0, E: -90, N: 180, W: 90 };
 
+const DOWN: Pt = { x: 0, y: 1 };
+
+/** An upright wallet (fixed view): where it slides to hide (unit, screen = wallet frame) and how far. */
+export interface UprightSlide {
+  out: Pt;
+  hide: number;
+}
+
 export interface WalletGeom {
   /** Coin width (CSS px). */
   coin: number;
@@ -85,6 +93,13 @@ export class Wallet {
   private lastWrite = -Infinity;
   anchor: Pt = { x: 0, y: 0 };
   rot = 0;
+  /**
+   * Direction (wallet frame, unit) the pile slides to hide past its screen edge. Facing its seat
+   * that is local +y (straight down below the edge); an upright wallet on a side edge (fixed view,
+   * src/ui/orientation.ts) slides sideways instead.
+   */
+  private out: Pt = DOWN;
+  private hideBy = 0;
   g: WalletGeom = walletGeom(40);
   /** Rise offset (px along the wallet's local +y; 0 = in place). */
   private rise = 0;
@@ -107,11 +122,13 @@ export class Wallet {
   }
 
   /** Set up for a scene: seat, colour, cash, geometry; hidden below its edge until `enter`. */
-  setup(o: { seat: Seat; color: string; cash: number; anchor: Pt; coin: number }): void {
+  setup(o: { seat: Seat; color: string; cash: number; anchor: Pt; coin: number; upright?: UprightSlide }): void {
     this.seat = o.seat;
     this.color = o.color;
     this.anchor = o.anchor;
-    this.rot = SEAT_ROT[o.seat];
+    this.rot = o.upright ? 0 : SEAT_ROT[o.seat];
+    this.out = o.upright?.out ?? DOWN;
+    this.hideBy = o.upright?.hide ?? 0;
     this.g = walletGeom(o.coin);
     this.pile = pileOf(o.cash);
     this.shown = this.target = Math.max(0, Math.round(o.cash));
@@ -153,12 +170,12 @@ export class Wallet {
   }
 
   private hiddenRise(): number {
-    return this.g.h + 24;
+    return this.out === DOWN ? this.g.h + 24 : this.hideBy;
   }
 
   /** Local point (x from the wallet's centre, y up from its bottom edge) → stage point. */
   local(x: number, yUp: number): Pt {
-    const v = rotate(x, -yUp + this.rise, this.rot);
+    const v = this.out === DOWN ? rotate(x, -yUp + this.rise, this.rot) : rotate(x + this.out.x * this.rise, -yUp + this.out.y * this.rise, this.rot);
     return { x: this.anchor.x + v.x, y: this.anchor.y + v.y };
   }
 
@@ -194,7 +211,7 @@ export class Wallet {
     const s = this.el.style;
     s.transform =
       `translate(${(this.anchor.x - g.w / 2).toFixed(1)}px,${(this.anchor.y - g.h).toFixed(1)}px) rotate(${this.rot}deg)` +
-      ` translateY(${this.rise.toFixed(1)}px)` +
+      (this.out === DOWN ? ` translateY(${this.rise.toFixed(1)}px)` : ` translate(${(this.out.x * this.rise).toFixed(1)}px,${(this.out.y * this.rise).toFixed(1)}px)`) +
       (this.bumpK !== 1 ? ` scale(${this.bumpK.toFixed(3)})` : '');
   }
 

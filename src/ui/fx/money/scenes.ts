@@ -25,7 +25,7 @@ import {
   type Flight, type FlightRange, type Metal, type Tier,
 } from './denom';
 import { SEAT_UP, SEATS, type MoneyStage, type SpaceArt } from './stage';
-import { SEAT_ROT, rotate, type Wallet } from './wallet';
+import { rotate, type Wallet } from './wallet';
 import './strings';
 
 export interface Party {
@@ -314,12 +314,14 @@ function cityCard(a: SpaceArt, frame: string | null): string {
 
 /**
  * Zoom the hero in (from small and leaning back) facing `seat`: 10 frames with an overshoot that
- * settles (slow out; the picture lands, it does not slide in).
+ * settles (slow out; the picture lands, it does not slide in). Every helper here that places or
+ * turns something "for a seat" goes through `x.st.face` / `x.st.rot`: in the fixed view
+ * (src/ui/orientation.ts) the composition faces S whoever acts; wallets keep their real seats.
  */
 async function heroIn(x: Ctx, html: string, seat: Seat, cls: string, o: Partial<{ s: number; rx: number; at: Pt }> = {}): Promise<void> {
   const g = x.st.geom;
   const at = o.at ?? g.c;
-  x.st.setHero(html, { x: at.x, y: at.y, s: 0.5, rz: SEAT_ROT[seat], rx: 40, o: 0 }, cls);
+  x.st.setHero(html, { x: at.x, y: at.y, s: 0.5, rz: x.st.rot(seat), rx: 40, o: 0 }, cls);
   await x.st.poseTo({ s: o.s ?? 1, rx: o.rx ?? 14, o: 1 }, f(10), (u) => easeOutBack(u, 1.4));
 }
 
@@ -337,7 +339,10 @@ function heroPunch(x: Ctx, k = 1.04, frames = 3): void {
 function frontOf(x: Ctx, seat: Seat, d = 0.42): Pt {
   const { c, hero } = x.st.geom;
   if (!d) return c;
-  const v = rotate(hero * 0.5, hero * 0.36, SEAT_ROT[seat]);
+  // Fixed view: the wallets stand on the side panels and there is one plaque, so it takes the
+  // front-centre, under the hero (clear of the S panel's wallet and of every coin path).
+  if (x.st.upright) return { x: c.x, y: c.y + hero * 0.47 };
+  const v = rotate(hero * 0.5, hero * 0.36, x.st.rot(seat));
   return { x: c.x + v.x, y: c.y + v.y };
 }
 
@@ -357,7 +362,7 @@ function revealPlaque(x: Ctx, i: number, seat: Seat, at: Pt, o: PlaqueOpts): Pro
   const amount = o.amount === undefined ? null : o.amount;
   p.set({ title: o.title ?? '', amount: amount === null ? null : 0, sign: o.sign ?? '', tone: o.tone });
   if (amount !== null) void p.count(x.c, amount, f(BEATS_F.plaque - 1));
-  return x.st.tween(f(BEATS_F.plaque), (u) => p.place(at, SEAT_ROT[seat], 0.35 + 0.65 * easeOutBack(u, 2.2), Math.min(1, u * 2.5)));
+  return x.st.tween(f(BEATS_F.plaque), (u) => p.place(at, x.st.rot(seat), 0.35 + 0.65 * easeOutBack(u, 2.2), Math.min(1, u * 2.5)));
 }
 
 /** The coins about to leave lift and shimmer (anticipation) before the first one goes. */
@@ -377,7 +382,7 @@ function idleGlints(x: Ctx, ms: number, seat: Seat): void {
   const spots = [0.3, 0.75, 0.15, 0.6];
   const n = Math.max(1, Math.floor(ms / f(14)));
   for (let k = 0; k < n; k++) {
-    const a = spots[k % spots.length]! * Math.PI * 2 + SEAT_ROT[seat];
+    const a = spots[k % spots.length]! * Math.PI * 2 + x.st.rot(seat);
     void x.c.after(f(4) + k * f(14)).then(() =>
       x.st.fx('sparkle4', { x: g.c.x + Math.cos(a) * g.hero * 0.36, y: g.c.y + Math.sin(a) * g.hero * 0.3 }, { scale: g.hero / 330, tint: '#FFF2B8', fps: 14 }),
     );
@@ -557,7 +562,7 @@ export function purchase(st: MoneyStage, a: PurchaseArgs): MoneyPlay {
       await x.at(10);
       const g = x.st.geom;
       for (let k = 0; k < 2; k++) {
-        await x.st.swing('hammer', lotPoint(x, a.seat, -0.12), SEAT_ROT[a.seat], { scale: g.hero / 230, ms: f(8), onHit: () => {
+        await x.st.swing('hammer', lotPoint(x, a.seat, -0.12), x.st.rot(a.seat), { scale: g.hero / 230, ms: f(8), onHit: () => {
           x.st.sound.cue('build', { pitch: 1.35 });
           x.st.sound.buzz('medium');
         } });
@@ -603,7 +608,7 @@ export function purchase(st: MoneyStage, a: PurchaseArgs): MoneyPlay {
 
 /** Where on the lot coins land (a little in front of centre, toward the actor). */
 function lotPoint(x: Ctx, seat: Seat, d: number): Pt {
-  const u = SEAT_UP[seat];
+  const u = SEAT_UP[x.st.face(seat)];
   const { c, hero } = x.st.geom;
   return { x: c.x - u.x * hero * d, y: c.y - u.y * hero * d };
 }
@@ -664,7 +669,7 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
     const g = x.st.geom;
     for (let k = 0; k < hits; k++) {
       void x.c.after(f(5)).then(() => x.st.fx('dust_puff', site(), { scale: g.hero / 230, tint: '#E9D3B0', fps: 18 }));
-      await x.st.swing('hammer', lotPoint(x, a.seat, -0.05), SEAT_ROT[a.seat], {
+      await x.st.swing('hammer', lotPoint(x, a.seat, -0.05), x.st.rot(a.seat), {
         scale: g.hero / (a.level === 4 ? 170 : 210),
         ms: f(8),
         onHit: () => {
@@ -914,12 +919,14 @@ export function collectFromAll(st: MoneyStage, a: CollectArgs): MoneyPlay {
         }, flights, { start: t0 + 3 * k, stagger: 2, sid: k, travelF: 13, cueDepart: k === 0 });
       }),
     );
-    // The total pops for every seat (four plaques around the vault), the vault trembles …
+    // The total pops for every seat (four plaques around the vault; the fixed view: one, facing
+    // S), the vault trembles …
     x.st.sound.cue('toll');
-    const spots = SEATS.map((s, i) => ({ s, i, at: frontOf(x, s, 0.56) }));
+    const spots = (x.st.upright ? (['S'] as const) : SEATS).map((s, i) => ({ s, i, at: frontOf(x, s, 0.56) }));
+    const mine = x.st.face(a.receiver.seat);
     await Promise.all(
       spots.map((sp) =>
-        revealPlaque(x, sp.i, sp.s, sp.at, { title: sp.s === a.receiver.seat ? t('m.collect.total', { n: total.toLocaleString() }) : a.title ?? t('m.collect'), amount: total }),
+        revealPlaque(x, sp.i, sp.s, sp.at, { title: sp.s === mine ? t('m.collect.total', { n: total.toLocaleString() }) : a.title ?? t('m.collect'), amount: total }),
       ),
     );
     await tremble(x, 5, 5);
@@ -996,7 +1003,7 @@ export function receive(st: MoneyStage, a: ReceiveArgs): MoneyPlay {
   const tier = a.tier ?? maxTier('M', tierFor(a.amount));
   return runScene(st, a.kind, tier, a, async (x) => {
     const w = walletOf(x, { seat: a.seat, cash: a.cash, color: a.playerColor });
-    const src = x.st.toward(a.seat, -0.12);
+    const src = x.st.toward(x.st.face(a.seat), -0.12);
     void heroIn(x, a.kind === 'pot' ? icon('pot') : bank(), a.seat, 'is-place', { s: 0.62, rx: 8, at: src });
     const front = frontOf(x, a.seat, 0.25);
     if (a.kind !== 'pot') x.st.sound.cue('pass-start');
@@ -1008,7 +1015,7 @@ export function receive(st: MoneyStage, a: ReceiveArgs): MoneyPlay {
     await x.c.after(f(BEATS_F.lift - 3));
     const flights = flightsForAmount(a.amount, { min: 8, max: a.kind === 'pot' ? 12 : 10 });
     // Coins burst up out of the bank in a fountain (away from me, fanned ±55°) and rain into my pile.
-    const away = SEAT_UP[a.seat];
+    const away = SEAT_UP[x.st.face(a.seat)];
     const fan = (i: number): Pt => {
       const k = ((i * 7) % 11) / 10 - 0.5;
       const ang = Math.atan2(-away.y, -away.x) + k * 1.9;
@@ -1096,7 +1103,7 @@ export function bankruptcy(st: MoneyStage, a: BankruptcyArgs): MoneyPlay {
     const legs: Promise<void>[] = [];
     const t0 = x.c.t / f(1);
     legs.push(
-      stream(x, { wallet: dw }, cw ? { wallet: cw, sound: 'receive' } : { point: () => x.st.toward(a.debtor.seat, -0.45), sound: 'sink' }, flights, { start: t0, stagger: 3, sid: 0 }).then(() => undefined),
+      stream(x, { wallet: dw }, cw ? { wallet: cw, sound: 'receive' } : { point: () => x.st.toward(x.st.face(a.debtor.seat), -0.45), sound: 'sink' }, flights, { start: t0, stagger: 3, sid: 0 }).then(() => undefined),
     );
     // Deeds flip one by one (stagger 5 f) into the creditor's colour (grey for the bank).
     const els = [...x.st.heroIn.querySelectorAll<HTMLElement>('.mh-card')];
