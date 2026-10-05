@@ -59,7 +59,9 @@ async function start(page: Page, o: { humans: string[]; seed: number; speed: num
 const ANGLE_OF = `(el) => {
   const t = getComputedStyle(el).transform;
   if (!t || t === 'none') return 0;
-  const m = t.match(/matrix\\(([^)]+)\\)/);
+  // matrix3d too (a money hero tilted back in 3D, MONEY-EVENTS §13): rotateX leaves the x-axis
+  // column alone, so its first two entries still give the turn about the screen normal.
+  const m = t.match(/matrix(?:3d)?\\(([^)]+)\\)/);
   if (!m) return NaN;
   const [a, b] = m[1].split(',').map(Number);
   const d = Math.round((Math.atan2(b, a) * 180) / Math.PI);
