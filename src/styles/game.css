@@ -31,7 +31,7 @@
 
 /* ≡ menu (top-left, upright) */
 .menu-slot { position: absolute; z-index: 30; }
-.menu-btn {
+.menu-btn, .pause-btn {
   width: 100%;
   height: 100%;
   border-radius: 14px;
@@ -43,8 +43,10 @@
   cursor: pointer;
   transition: background var(--t-fast), transform var(--t-release) var(--ease-spring);
 }
-.menu-btn .ico { width: 50%; height: 50%; }
-.menu-btn:active { transform: scale(0.94); background: rgba(255, 255, 255, 0.16); }
+.menu-btn .ico, .pause-btn .ico { width: 50%; height: 50%; }
+.menu-btn:active, .pause-btn:active { transform: scale(0.94); background: rgba(255, 255, 255, 0.16); }
+/* Pause: right of the menu button, same size, gold so it reads as "stop the game". */
+.pause-btn { position: absolute; left: calc(100% + 8px); top: 0; border-color: rgba(242, 182, 51, 0.55); background: rgba(242, 182, 51, 0.16); color: #FFD66B !important; }
 
 .menu-overlay {
   position: fixed;
@@ -307,7 +309,7 @@
 .rs-rotate .ico { width: 18px; height: 18px; }
 .rs-rotate:active { background: rgba(255, 255, 255, 0.24); }
 @media (prefers-reduced-motion: reduce) {
-  .rs-card.is-turning { transition: none; }
+  :root:not([data-motion="full"]) .rs-card.is-turning { transition: none; }
 }
 
 @media (max-height: 520px) {

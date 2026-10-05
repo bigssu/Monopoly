@@ -19,7 +19,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, endSkip, frame, gamePace, instant, onFrame, skip } from '@/ui/fx/time';
+import { animSpeed, endSkip, frame, gamePace, instant, onFrame, setHeld, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -274,11 +274,15 @@ export class GameController {
     this.paused = true;
     this.cancelCpu();
     this.view.stage.clearTimer();
+    // A running turn freezes too (animations, holds, the dealer), not just the next decision.
+    setHeld(true, this.view.table);
+    this.view.dealer.hush();
   }
 
   resume(): void {
     if (!this.paused) return;
     this.paused = false;
+    setHeld(false);
     if (!this.busy) this.advance();
   }
 
@@ -305,6 +309,7 @@ export class GameController {
 
   dispose(): void {
     this.disposed = true;
+    setHeld(false);
     this.cancelCpu();
     this.flushIdle();
   }

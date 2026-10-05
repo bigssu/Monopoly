@@ -42,6 +42,13 @@ export const BEAT = {
   bankruptSilence: 400,
   /** The game-over stamp lingers before the result screen. */
   finale: 1100,
+  /** Anticipation: after the total is read, a breath before the token sets off. */
+  beforeMove: 300,
+  /** A change on the board or a panel (bought, built, taken over, card kept…) is seen before the
+   * next one starts: the events whose own animation the sequencer does not wait for. */
+  change: 400,
+  /** The last change settles before the next decision's buttons pop in. */
+  beforePrompt: 300,
 } as const;
 
 /** Durations (ms) shared with tokens.css. */

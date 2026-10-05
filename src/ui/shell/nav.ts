@@ -10,6 +10,7 @@ const FADE_MS = 260;
 
 function reducedMotion(): boolean {
   if (document.documentElement.classList.contains('native-webview')) return true;
+  if (document.documentElement.dataset.motion === 'full') return false;
   try {
     return matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch {

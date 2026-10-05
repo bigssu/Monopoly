@@ -24,7 +24,7 @@ import { currentScreen, showScreen } from '@/ui/router';
 import { exitApp, hideNativeSplash, initNative, isNative, setNativeFrameRate } from '@/ui/shell/capacitor';
 import { toast } from '@/ui/shell/dialog';
 import { handleBack } from '@/ui/shell/nav';
-import { anim, calibrateFrameGrid, frameGrid, installCssAnimationQuantizer, onFrame, setFrameRate, setPace, setTurnRest, sleep } from '@/ui/fx/time';
+import { anim, calibrateFrameGrid, frameGrid, installCssAnimationQuantizer, onFrame, setFrameRate, setFullMotion, setPace, setTurnRest, sleep } from '@/ui/fx/time';
 import { installAmbientCalm, runningAmbient } from '@/ui/fx/ambient';
 import { clearSavedGame, loadSavedGame, SAVE_BACKUP_KEY, SAVE_KEY, saveGame } from '@/ui/shell/persist';
 import { prefs, PREFS_KEY, type Prefs } from '@/ui/shell/prefs';
@@ -45,15 +45,21 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | void> {
 
 const synth = new SynthSfx();
 
+const PACE_SCALE = 1.5;
+
 function applyPrefs(p: Readonly<Prefs>): void {
   setLang(p.lang);
   synth.setMuted(!p.sound);
   synth.setVolume(p.volume);
   haptics.setEnabled(p.haptics);
   setFrameRate(p.batterySaver ? 30 : 60);
-  setPace(p.gamePace);
+  // Every pace step holds 1.5× longer than its number (players found even the slowest too fast).
+  setPace(p.gamePace * PACE_SCALE);
   setMusicEnabled(p.music && p.sound);
   setTurnRest(p.turnPause);
+  setFullMotion(p.motion === 'full');
+  // CSS reduce-motion rules are gated on this (base.css / tokens.css / game.css / stage.css).
+  document.documentElement.dataset.motion = p.motion;
   void setNativeFrameRate(p.batterySaver ? 30 : 60);
 }
 

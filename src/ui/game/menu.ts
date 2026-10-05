@@ -1,6 +1,7 @@
 /**
  * In-game "≡" menu (top-left, upright — whoever reaches for it can read it at a glance).
- * Rules · sound / haptics toggles · save & quit · resign (with confirm).
+ * Rules · sound / haptics toggles · save & quit · resign (with confirm). The pause button next to it
+ * opens the same sheet as a pause screen (title "paused", Resume first).
  */
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
@@ -22,9 +23,11 @@ export interface MenuHandlers {
 
 export class GameMenu {
   readonly button: HTMLButtonElement;
+  readonly pauseButton: HTMLButtonElement;
   readonly overlay: HTMLElement;
   private sheet: HTMLElement;
   private open = false;
+  private paused = false;
   private lastToggle = 0;
   private trap: FocusTrap | null = null;
 
@@ -32,6 +35,9 @@ export class GameMenu {
     this.button = h('button', { class: 'menu-btn', type: 'button', 'aria-label': t('g.menu') });
     this.button.append(iconEl('menu', 'ico'));
     this.button.addEventListener('click', () => this.toggle());
+    this.pauseButton = h('button', { class: 'pause-btn', type: 'button', 'aria-label': t('g.pause') });
+    this.pauseButton.append(iconEl('pause', 'ico'));
+    this.pauseButton.addEventListener('click', () => this.show(true));
     this.sheet = h('div', { class: 'menu-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('g.menu') });
     this.overlay = h('div', { class: 'menu-overlay' }, this.sheet);
     this.overlay.addEventListener('click', (e) => {
@@ -52,9 +58,11 @@ export class GameMenu {
     else this.show();
   }
 
-  show(): void {
+  /** `paused`: opened as the pause screen (pause button / timer tap). */
+  show(paused = false): void {
     if (this.open) return;
     this.open = true;
+    this.paused = paused;
     sfx.play('tap');
     this.renderMain();
     this.overlay.classList.add('is-open');
@@ -112,8 +120,10 @@ export class GameMenu {
   private renderMain(): void {
     const p = safePrefs();
     this.sheet.innerHTML = '';
+    const resume = this.item('play', t('g.menu.resume'), () => this.close(), 'is-primary');
     this.sheet.append(
-      h('div', { class: 'menu-title' }, h('span', { text: t('g.menu') }), this.closeBtn()),
+      h('div', { class: 'menu-title' }, h('span', { text: t(this.paused ? 'g.paused' : 'g.menu') }), this.closeBtn()),
+      ...(this.paused ? [resume] : []),
       this.item('help', t('g.menu.rules'), () => {
         this.close();
         this.hnd.onRules();
@@ -143,7 +153,7 @@ export class GameMenu {
         this.hnd.onSaveQuit();
       }),
       this.item('close', t('g.menu.resign'), () => this.renderConfirm(), 'is-danger'),
-      this.item('play', t('g.menu.resume'), () => this.close(), 'is-primary'),
+      ...(this.paused ? [] : [resume]),
     );
     if (this.open) this.trap?.activate();
   }

@@ -28,7 +28,7 @@ import type { GameView } from '@/ui/game/view';
 import { isDevHook, money, spaceIcon } from '@/ui/game/util';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
-import { animSpeed, sleep, turnRest, wait } from './time';
+import { animSpeed, sleep, turnRest, wait, whenRunning } from './time';
 import { BEAT } from './motion';
 import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
@@ -38,6 +38,12 @@ const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide 
 
 /** Dev (?dev=1): a User Timing mark per event, so perf traces can say what a long frame was doing. */
 const MARK = typeof window !== 'undefined' && isDevHook();
+
+/** Events that change the board / a panel without the sequencer waiting on their animation. */
+const CHANGE_BEATS: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
+  'PassedStart', 'PropertyBought', 'Built', 'TakenOver', 'CardKept', 'CardUsed', 'ExpressGranted', 'Escaped',
+  'FestivalSet', 'TravelDeclined', 'BuildingSold', 'PropertySold', 'AuctionBid', 'AuctionDropped',
+]);
 
 /** Per-batch state shared between events (toll arrival → receiver float, transfer count, previous event). */
 interface Batch {
@@ -58,6 +64,8 @@ export async function playEvents(
   const fast = animSpeed() === 0;
   const batch: Batch = { tollArrive: null, transfers: 0, prev: null };
   for (const ev of events) {
+    // Paused: the next event waits for resume.
+    await whenRunning();
     if (!alive()) return;
     try {
       if (MARK) performance.mark(`lr:${ev.type}`);
@@ -70,6 +78,10 @@ export async function playEvents(
       if (!fast) view.director.onEvent(ev, vs, 'before');
       await step(view, vs, ev, fast, batch);
       if (!fast) view.director.onEvent(ev, vs, 'after');
+      // Pacing: a held beat after a change whose own animation is not awaited, so one thing
+      // happens at a time and each can be seen (holds follow the game pace).
+      // Not before a finale: it has its own beats, and a tap must skip it from the first frame.
+      if (!fast && CHANGE_BEATS.has(ev.type) && next.phase.kind !== 'gameOver') await sleep(BEAT.change);
     } catch (e) {
       // An animation must never break the game loop.
       console.error('[animate]', ev.type, e);
@@ -79,6 +91,7 @@ export async function playEvents(
   if (!alive()) return;
   // The next prompt waits for a big moment (landmark, takeover, monopoly…) to finish its beats.
   await settleBig(view);
+  if (!fast && events.length) await sleep(BEAT.beforePrompt);
   if (!alive()) return;
   view.render(next);
 }
@@ -221,6 +234,8 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         await sleep(BEAT.islandFail);
       }
       if (ev.express) void stage.toast(t('g.express'), 500, 'gold', 'hub-rail');
+      // Anticipation: a breath between reading the total and the token setting off.
+      if (!fast && ev.steps > 0) await sleep(BEAT.beforeMove);
       return;
     }
     case 'TokenMoved': {

@@ -6,7 +6,7 @@ const REQUIRED = {
   LANDMARK_ICONS: 'city-manila city-hanoi city-cairo city-nairobi city-capetown city-lima city-mexicocity city-buenosaires city-istanbul city-athens city-madrid city-berlin city-rome city-london city-dubai city-singapore city-tokyo city-newyork city-seoul hub-port hub-airport hub-rail hub-space corner-start corner-island corner-festival corner-tour space-event space-tax space-donation',
   TOKEN_ICONS: 'car rocket cat robot crown star ufo dino whale boot camera teapot',
   BUILDING_ICONS: 'villa building hotel landmark festival-marker pot coin dice-face-1 dice-face-2 dice-face-3 dice-face-4 dice-face-5 dice-face-6 cards-escape cards-freepass cards-shield',
-  UI_ICONS: 'menu close settings sound-on sound-off vibrate help play restart home chevron-left chevron-right check cpu human rotate plus minus trophy timer save',
+  UI_ICONS: 'menu close settings sound-on sound-off vibrate help play pause restart home chevron-left chevron-right check cpu human rotate plus minus trophy timer save',
   LOGO_SVG: 'logo',
 };
 const VOID = new Set(['path', 'circle', 'rect', 'ellipse', 'line', 'polygon', 'polyline']);

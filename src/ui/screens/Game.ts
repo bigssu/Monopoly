@@ -90,8 +90,8 @@ registerScreen('game', (root, props) => {
   document.addEventListener('visibilitychange', onVisibility);
   if (view.layout?.portrait || document.hidden) ctrl.pause();
 
-  ctrl.onPauseRequest = () => menu.show();
-  view.menuSlot.append(menu.button);
+  ctrl.onPauseRequest = () => menu.show(true);
+  view.menuSlot.append(menu.button, menu.pauseButton);
   view.root.append(menu.overlay);
 
   const onBack = (e: Event): void => {

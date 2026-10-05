@@ -4,7 +4,7 @@
  */
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, D, instant, isSkipping, onFrame } from '@/ui/fx/time';
+import { anim, animSpeed, isSkipping, onFrame } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, svg } from '@/ui/game/util';
 import { EASE } from '@/ui/fx/motion';
@@ -380,7 +380,9 @@ export class Dice {
    */
   private tumble(spins: [Spin, Spin]): Promise<void> {
     this.stopTumble?.();
-    if (instant() || typeof document === 'undefined') return Promise.resolve();
+    // Not `instant()`: the dice roll even under reduced motion (it is the game's one key reveal and
+    // players asked to see it); only speed 0 (tests) skips it.
+    if (animSpeed() === 0 || typeof document === 'undefined') return Promise.resolve();
     // Sizes from the layout variables (--ds = max(38px, 3.3 --u), gap 1.3 --u, --u = --board / 32)
     // so a roll never forces a synchronous layout.
     const board = parseFloat(document.documentElement.style.getPropertyValue('--board')) || 0;
@@ -409,7 +411,8 @@ export class Dice {
     if (!ctx || typeof ctx.roundRect !== 'function') return Promise.resolve();
     const sp = sprites(ds, k);
     let dirty: [number, number, number, number][] = [];
-    const duration = D(900);
+    // ~1 s of tumbling before the result shows (not `D()`, which is 0 under reduced motion).
+    const duration = 1000 / animSpeed();
     const centres = [0, 1].map((i) => padX + ds / 2 + i * (ds + gap));
     const cy = padTop + ds / 2;
     let elapsed = 0;
@@ -422,7 +425,7 @@ export class Dice {
       dirty = [];
       let running = false;
       spins.forEach((spin, i) => {
-        const t = Math.min(1, Math.max(0, (elapsed - D(spin.delay)) / duration));
+        const t = Math.min(1, Math.max(0, (elapsed - spin.delay / animSpeed()) / duration));
         if (t < 1) running = true;
         const e = ROLL_EASE(t);
         const [ty, sx, sy] = bounceAt(t);

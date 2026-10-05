@@ -76,17 +76,17 @@ export function turnRest(): Promise<void> {
   return sleep(turnRestMs / pace);
 }
 
-let reducedSetting = false;
-/** App setting "reduce animations" (prefs). */
-export function setReducedMotion(on: boolean): void {
-  reducedSetting = on;
+let fullMotion = false;
+/** App setting "animations: always on" (prefs.motion = 'full'): ignore the device's reduce-motion. */
+export function setFullMotion(on: boolean): void {
+  fullMotion = on;
 }
 /**
  * prefers-reduced-motion or the app setting: no canvas FX (static highlight + sound, docs/VFX.md
  * §8.3). Separate from `instant()`, which also covers speed 0 (tests: nothing at all).
  */
 export function reducedMotion(): boolean {
-  return reducedSetting || !!reducedQuery?.matches;
+  return !fullMotion && !!reducedQuery?.matches;
 }
 
 /** True when animations should be skipped entirely. */
@@ -110,6 +110,8 @@ interface Sleeper {
   resolve: () => void;
   /** Unregisters the grid-frame wait (frame budget), if armed. */
   stopTick: (() => void) | null;
+  /** Time left while the game is paused (see `setHeld`). */
+  left?: number;
 }
 const sleepers = new Set<Sleeper>();
 const running = new Set<Animation>();
@@ -168,8 +170,55 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     const s: Sleeper = { id: 0 as unknown as ReturnType<typeof setTimeout>, end: clockNow() + d, resolve, stopTick: null };
     sleepers.add(s);
-    arm(s, d);
+    if (held) s.left = d;
+    else arm(s, d);
   });
+}
+
+/**
+ * Game paused (menu / pause button / app hidden): DOM animations and holds freeze where they are
+ * and continue from there on resume; the sequencer waits (`whenRunning`) before its next event.
+ * ponytail: canvas VFX tails and the dice tumble (own frame steps) finish while paused; they last
+ * about a second. Freeze the shared frame clock too if that ever shows.
+ */
+let held = false;
+/** Only animations inside this element freeze (the game table, not the pause menu above it). */
+let heldScope: Element | null = null;
+let heldWaiters: Array<() => void> = [];
+const inScope = (a: Animation): boolean => {
+  const el = (a.effect as KeyframeEffect | null)?.target;
+  return !!el && !!heldScope?.contains(el) && !manualAnims.has(a);
+};
+export function setHeld(on: boolean, scope: Element | null = null): void {
+  if (on === held) return;
+  held = on;
+  heldScope = on ? scope : heldScope;
+  const now = clockNow();
+  if (on) {
+    for (const a of running) if (inScope(a)) a.pause();
+    for (const s of sleepers) {
+      clearTimeout(s.id);
+      s.stopTick?.();
+      s.stopTick = null;
+      s.left = Math.max(0, s.end - now);
+    }
+    return;
+  }
+  for (const a of running) if (inScope(a) && a.playState === 'paused') a.play();
+  heldScope = null;
+  for (const s of [...sleepers]) {
+    const left = s.left ?? 0;
+    s.left = undefined;
+    s.end = now + left;
+    arm(s, left);
+  }
+  const w = heldWaiters;
+  heldWaiters = [];
+  w.forEach((f) => f());
+}
+/** Resolves at once, or when the game is resumed. */
+export function whenRunning(): Promise<void> {
+  return held ? new Promise((r) => heldWaiters.push(r)) : Promise.resolve();
 }
 
 /**
@@ -233,6 +282,7 @@ export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyfram
     if ((stepped || q) && !manual) alignToGrid(a);
   }
   if (skipping) a.playbackRate = SKIP_RATE;
+  if (held && !manual && inScope(a)) a.pause();
   if (manual) {
     a.pause();
     a.currentTime = 0;
@@ -282,6 +332,7 @@ export function flushAll(): void {
   for (const a of [...running]) a.cancel();
   running.clear();
   skipping = false;
+  setHeld(false);
 }
 
 /** Next budgeted frame (resolves immediately when instant). */

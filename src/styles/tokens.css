@@ -80,5 +80,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-stage: 0ms; --t-press: 0ms; --t-release: 0ms; --t-enter: 0ms; --t-exit: 0ms; }
+  :root:not([data-motion="full"]) { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-stage: 0ms; --t-press: 0ms; --t-release: 0ms; --t-enter: 0ms; --t-exit: 0ms; }
 }

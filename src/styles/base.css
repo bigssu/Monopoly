@@ -195,7 +195,7 @@ h1, h2, h3, h4, .display, .num {
   outline: none;
 }
 /* Press (motion.ts): squash in fast while held; each element's own transition springs it back. */
-:is(.btn, .menu-btn, .menu-item, .rs-btn, .seg-opt, .chip.is-toggle, .seat-player, .seat-join, .se-name, .se-token, .se-color, .pbtn, .pick-row, .tg-cell):active {
+:is(.btn, .menu-btn, .pause-btn, .menu-item, .rs-btn, .seg-opt, .chip.is-toggle, .seat-player, .seat-join, .se-name, .se-token, .se-color, .pbtn, .pick-row, .tg-cell):active {
   transition-duration: var(--t-press);
   transition-timing-function: var(--ease-out);
 }
@@ -329,7 +329,7 @@ h1, h2, h3, h4, .display, .num {
 @keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion="full"]) *, :root:not([data-motion="full"]) *::before, :root:not([data-motion="full"]) *::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;

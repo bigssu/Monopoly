@@ -31,7 +31,12 @@ export interface Prefs {
   dealer: DealerPref;
   /** Background music on/off (follows `sound` and `volume` too). */
   music: boolean;
+  /** Animations: follow the device's reduce-motion setting, or always play in full. */
+  motion: MotionPref;
 }
+
+export const MOTION_PREFS = ['system', 'full'] as const;
+export type MotionPref = (typeof MOTION_PREFS)[number];
 
 export const DEALER_PREFS = ['off', 'min', 'normal', 'full'] as const;
 export type DealerPref = (typeof DEALER_PREFS)[number];
@@ -39,7 +44,7 @@ export type DealerPref = (typeof DEALER_PREFS)[number];
 export const TURN_PAUSES = [1000, 1500, 2000, 3000] as const;
 export type TurnPausePref = (typeof TURN_PAUSES)[number];
 
-export const GAME_PACES = [2.5, 2, 1.5, 1] as const;
+export const GAME_PACES = [3, 2.5, 2, 1.5, 1] as const;
 export type GamePacePref = (typeof GAME_PACES)[number];
 
 export type FxQualityPref = 'auto' | 'high' | 'low' | 'off';
@@ -59,7 +64,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, motion: 'system' };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -79,6 +84,7 @@ function sanitize(raw: unknown): Prefs {
     turnPause: TURN_PAUSES.includes(r.turnPause as TurnPausePref) ? (r.turnPause as TurnPausePref) : d.turnPause,
     dealer: DEALER_PREFS.includes(r.dealer as DealerPref) ? (r.dealer as DealerPref) : d.dealer,
     music: typeof r.music === 'boolean' ? r.music : d.music,
+    motion: MOTION_PREFS.includes(r.motion as MotionPref) ? (r.motion as MotionPref) : d.motion,
   };
 }
 

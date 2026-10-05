@@ -12,7 +12,7 @@ import { confirmDialog, openDialog, toast } from '@/ui/shell/dialog';
 import { markdownToHtml } from '@/ui/shell/markdown';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, savedGameSummary } from '@/ui/shell/persist';
-import { DEALER_PREFS, GAME_PACES, prefs, TURN_PAUSES, type DealerPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
+import { DEALER_PREFS, GAME_PACES, MOTION_PREFS, prefs, TURN_PAUSES, type DealerPref, type MotionPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
 import { segmented, switcher } from '@/ui/shell/widgets';
 import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
 import { version } from '../../../package.json';
@@ -130,6 +130,13 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       { label: t('settings.dealer'), focusKey: 'dealer' },
     );
 
+    const motion = segmented<MotionPref>(
+      MOTION_PREFS.map((v) => ({ value: v, label: t(`settings.motion.${v}`) })),
+      p.motion,
+      (v) => prefs.set({ motion: v }),
+      { label: t('settings.motion'), focusKey: 'motion' },
+    );
+
     const rest = segmented<TurnPausePref>(
       TURN_PAUSES.map((v) => ({ value: v, label: t('settings.restSec', { n: v / 1000 }) })),
       p.turnPause,
@@ -156,6 +163,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       row('human', t('settings.dealer'), dealer, t('settings.dealerHint')),
       row('play', t('settings.pace'), pace, t('settings.paceHint')),
       row('timer', t('settings.rest'), rest, t('settings.restHint')),
+      row(SPARKLE_SVG, t('settings.motion'), motion, t('settings.motionHint')),
       row('timer', t('settings.timer'), timer, t('settings.timerHint')),
       row(
         BATTERY_SVG,
