@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+Picking the work up on another machine or in a cloud session? Read `docs/HANDOFF.md` first: the current state, what is verified, what the user is waiting on, and facts about the user's devices that the code does not show.
+
 ## Project Structure & Module Organization
 
 Lot & Roll is an offline, pass-and-play board game built with framework-free TypeScript, Vite, and Capacitor for Android.

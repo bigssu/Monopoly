@@ -238,7 +238,7 @@ CI에서 서명된 AAB/APK를 받는 방법은 6장을 참고하세요.
 | 워크플로 | 파일 | 트리거 | 하는 일 |
 |---|---|---|---|
 | CI | `.github/workflows/ci.yml` | push, PR | Node 22, `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, Playwright e2e(실패해도 통과) 후 `e2e/__screenshots__` 업로드 |
-| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `land-poly-debug-apk` 아티팩트. 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `land-poly-release-apk` 업로드 |
+| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `LandPoly-<버전>-<날짜>-<시각>-debug` 아티팩트(KST). 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `land-poly-release-apk` 업로드 |
 
 - `android/` 폴더가 아직 저장소에 없으면 Android 워크플로는 안내 메시지를 출력하고 성공(exit 0)으로 끝납니다.
 - 사용한 액션 태그: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-java@v6`,

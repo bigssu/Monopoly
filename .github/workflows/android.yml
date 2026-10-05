@@ -89,12 +89,22 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
+      # The artifact carries the version and build time (KST) so builds can be told apart.
+      - name: Name the APK by version and build time
+        if: steps.detect.outputs.has_android == 'true'
+        id: apk
+        run: |
+          version=$(grep -o 'versionName "[^"]*"' android/app/build.gradle | head -1 | cut -d'"' -f2)
+          name="LandPoly-${version}-$(TZ=Asia/Seoul date +%Y%m%d-%H%M)-debug"
+          cp android/app/build/outputs/apk/debug/LandPoly-debug.apk "$RUNNER_TEMP/$name.apk"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
       - name: Upload debug APK
         if: steps.detect.outputs.has_android == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: land-poly-debug-apk
-          path: android/app/build/outputs/apk/debug/LandPoly-debug.apk
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ runner.temp }}/${{ steps.apk.outputs.name }}.apk
           if-no-files-found: error
           retention-days: 14
 
