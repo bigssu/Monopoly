@@ -108,12 +108,24 @@ function build(size: SpacesPerSide): SpaceGeom[] {
   return out;
 }
 
-const profiles = new Map<SpacesPerSide, readonly SpaceGeom[]>();
-export function getBoardGeometry(size: SpacesPerSide = 7): readonly SpaceGeom[] {
-  let geom = profiles.get(size);
+/**
+ * Fixed view (src/ui/orientation.ts: one human, drawn at S): the top row would print upside-down
+ * for that reader, so it is turned to read upright from S (rot 0), and the two top corners lean
+ * like the bottom ones (±45°). The side columns keep reading along their edge (sideways, never
+ * upside-down). Same rects, so hit areas, tokens and effects stay where they were.
+ */
+function upright(g: SpaceGeom): SpaceGeom {
+  if (g.corner) return Math.abs(g.rot) === 135 ? { ...g, rot: Math.sign(g.rot) * 45 } : g;
+  return g.edge === 'N' ? { ...g, rot: 0 } : g;
+}
+
+const profiles = new Map<string, readonly SpaceGeom[]>();
+export function getBoardGeometry(size: SpacesPerSide = 7, uprightTop = false): readonly SpaceGeom[] {
+  const key = `${size}${uprightTop ? 'u' : ''}`;
+  let geom = profiles.get(key);
   if (!geom) {
-    geom = build(size);
-    profiles.set(size, geom);
+    geom = uprightTop ? build(size).map(upright) : build(size);
+    profiles.set(key, geom);
   }
   return geom;
 }
@@ -131,8 +143,8 @@ export function localToBoard(g: SpaceGeom, lx: number, ly: number): { x: number;
 }
 
 /** Where a token stands on a space (board units), for `n` tokens sharing it. */
-export function tokenSpot(index: number, slot: number, n: number, size: SpacesPerSide = 7): { x: number; y: number } {
-  const g = getBoardGeometry(size)[index]!;
+export function tokenSpot(index: number, slot: number, n: number, size: SpacesPerSide = 7, uprightTop = false): { x: number; y: number } {
+  const g = getBoardGeometry(size, uprightTop)[index]!;
   const a = g.corner ? 95 : 80;
   const baseY = g.corner ? 30 : -18;
   const offsets: Array<[number, number]> =

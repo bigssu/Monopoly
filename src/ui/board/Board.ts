@@ -464,11 +464,15 @@ export class Board {
   private readonly board: readonly SpaceDef[];
   private readonly geom: readonly SpaceGeom[];
 
-  constructor(players: readonly Player[], private onTap: (index: number) => void, size: SpacesPerSide = 7) {
+  /**
+   * `uprightTop`: the fixed view (src/ui/orientation.ts) prints the top row upright for the one
+   * reader at S (geometry.ts `upright`); the table model prints every side facing outward.
+   */
+  constructor(players: readonly Player[], private onTap: (index: number) => void, size: SpacesPerSide = 7, private readonly uprightTop = false) {
     this.players = players;
     this.size = size;
     this.board = getBoard(size);
-    this.geom = getBoardGeometry(size);
+    this.geom = getBoardGeometry(size, uprightTop);
     this.el = h('div', { class: 'board' });
     this.svgEl = document.createElementNS(NS, 'svg');
     this.svgEl.setAttribute('viewBox', `0 0 ${VB} ${VB}`);
@@ -989,7 +993,7 @@ export class Board {
       pids.sort((a, b) => a - b);
       pids.forEach((pid, slot) => {
         const tk = this.tokens.get(pid)!;
-        const spot = tokenSpot(pos, slot, pids.length, this.size);
+        const spot = tokenSpot(pos, slot, pids.length, this.size, this.uprightTop);
         const shared = pids.length > 1;
         if (shared !== tk.shared) {
           tk.shared = shared;
@@ -1026,7 +1030,7 @@ export class Board {
     }
     for (let n = 0; n < path.length; n++) {
       const idx = path[n]!;
-      const spot = tokenSpot(idx, 0, 1, this.size);
+      const spot = tokenSpot(idx, 0, 1, this.size, this.uprightTop);
       const dx = (tk.x - spot.x) * this.k;
       const dy = (tk.y - spot.y) * this.k;
       this.setTokenXY(tk, spot.x, spot.y);
@@ -1079,7 +1083,7 @@ export class Board {
     tk.moving = true;
     tk.root.classList.add('is-moving');
     this.layoutTokens(true);
-    const spot = tokenSpot(to, 0, 1, this.size);
+    const spot = tokenSpot(to, 0, 1, this.size, this.uprightTop);
     const dx = (tk.x - spot.x) * this.k;
     const dy = (tk.y - spot.y) * this.k;
     this.setTokenXY(tk, spot.x, spot.y);
