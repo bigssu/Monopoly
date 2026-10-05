@@ -456,6 +456,9 @@ export class Board {
   private baseKey = '';
   private baseGen = 0;
   private baseTimer = 0;
+  /** First-base swap in progress: spaces below this index use the base (see setBase). */
+  private swapLimit = Infinity;
+  private stopSwap: (() => void) | null = null;
   private sized = false;
   private lastVs: GameState | null = null;
   private a11yLang = '';
@@ -556,6 +559,8 @@ export class Board {
 
   dispose(): void {
     this.disposed = true;
+    this.stopSwap?.();
+    this.stopSwap = null;
     window.clearTimeout(this.baseTimer);
     if (this.baseUrl) URL.revokeObjectURL(this.baseUrl);
     this.baseUrl = '';
@@ -627,7 +632,32 @@ export class Board {
     const had = !!this.baseImg;
     this.baseImg = img;
     this.el.classList.toggle('has-base', !!img);
-    if (had !== !!img && this.lastVs) this.render(this.lastVs);
+    if (had !== !!img && this.lastVs) {
+      // The first base: swap the live SVG spaces for hit areas a third of the board per clock frame.
+      // Swapping all at once was the longest Layout of the game's mount (1,000+ SVG objects, 93-128 ms
+      // at 4x CPU, docs/PERFORMANCE.md "라운드 2"); the base image under them shows the same spaces.
+      if (img && !had && animSpeed() > 0) {
+        const step = Math.ceil(this.board.length / 3);
+        this.swapLimit = 0;
+        this.stopSwap?.();
+        this.stopSwap = onFrame(() => {
+          if (this.disposed) return false;
+          this.swapLimit += step;
+          const done = this.swapLimit >= this.board.length;
+          if (done) {
+            this.swapLimit = Infinity;
+            this.stopSwap = null;
+          }
+          if (this.lastVs) this.render(this.lastVs);
+          return !done;
+        });
+      } else {
+        this.stopSwap?.();
+        this.stopSwap = null;
+        this.swapLimit = Infinity;
+        this.render(this.lastVs);
+      }
+    }
   }
 
   /** Board-unit → px scale. */
@@ -661,7 +691,7 @@ export class Board {
         ring: rings.get(i) ?? null,
         lang,
       };
-      const hit = based && isBare(v);
+      const hit = based && i < this.swapLimit && isBare(v);
       const sig = hit ? 'hit' : `${v.owner}|${v.level}|${v.festival}|${v.pot}|${v.lang}`;
       const grp = this.groups[i]!;
       if (sig !== this.sigs[i]) {

@@ -17,7 +17,8 @@ import {
 import { getCard } from '@/content/cards';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, gridTimeout, headless, onFrame } from '@/ui/fx/time';
-import { chip, groupColor, h, iconEl, setPlayerVars, spaceIcon, svgNode } from '@/ui/game/util';
+import { chip, groupColor, h, iconEl, iconId, setPlayerVars, spaceIcon, svgNode } from '@/ui/game/util';
+import { atlasNode } from '@/ui/game/iconAtlas';
 import { playerColor } from '@/content/palette';
 import { EASE } from '@/ui/fx/motion';
 
@@ -28,6 +29,12 @@ const setsFor = (size: SpacesPerSide): readonly (readonly number[])[] => [...GRO
 
 export class PlayerPanel {
   readonly el: HTMLElement;
+  /** Draw the set-square pictures not drawn yet: from the atlas once it is ready, else the sprite. */
+  fillIcons(): void {
+    for (const [ico, id] of this.slotIcons) ico.append(atlasNode(iconId(id)) ?? svgNode(id));
+    this.slotIcons = [];
+  }
+
   /** The set grid was tapped (the dealer explains it). */
   onSetsTap: (() => void) | null = null;
   private cardEl: HTMLElement;
@@ -35,6 +42,8 @@ export class PlayerPanel {
   private assets: HTMLElement;
   private chips: HTMLElement;
   private slots: Map<number, HTMLElement>;
+  /** Set-square pictures still to draw (see `fillIcons`). */
+  private slotIcons: Array<[HTMLElement, string]> = [];
   private badges: HTMLElement;
   private rank: HTMLElement;
   private floats: HTMLElement;
@@ -92,7 +101,15 @@ export class PlayerPanel {
         const sp = this.board[i]!;
         const slot = h('span', { class: `slot${sp.kind === 'hub' ? ' is-hub' : ''}` });
         // Each square shows its city's landmark (or the hub): faded until it is mine.
-        slot.append(iconEl(spaceIcon(sp), 'ico slot-ico'), h('span', { class: 'slot-mark' }));
+        // From the icon atlas (one element each). Until the game's atlas is ready they stay empty and
+        // `fillIcons` draws them: 28 sprite <use> shadow trees per panel made the panels most of the
+        // game's first layout (docs/PERFORMANCE.md "라운드 2").
+        const ico = h('span', { class: 'ico slot-ico', 'aria-hidden': 'true' });
+        const id = spaceIcon(sp);
+        const bm = atlasNode(iconId(id));
+        if (bm) ico.append(bm);
+        else this.slotIcons.push([ico, id]);
+        slot.append(ico, h('span', { class: 'slot-mark' }));
         slot.style.setProperty('--gc', groupColor(sp) ?? '#7B8AA3');
         slot.style.setProperty('--g', String(g + 1));
         slot.style.setProperty('--k', String(k + 1));

@@ -17,7 +17,7 @@ import { sfx, type SfxName } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { playerColor } from '@/content/palette';
 import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
-import { h, iconEl, isDevHook, prepareGameIcons } from './util';
+import { h, iconEl, isDevHook, prepareGameIcons, primeIconTints } from './util';
 import { disposeIconAtlas } from './iconAtlas';
 import { fxQualityOn, prefs } from '@/ui/shell/prefs';
 import { isNative } from '@/ui/shell/capacitor';
@@ -87,6 +87,8 @@ export class GameView {
   private state: GameState;
 
   constructor(state: GameState) {
+    // Before any of the game's DOM exists (see primeIconTints).
+    primeIconTints();
     this.state = state;
     this.orient = orientationFor(state.players);
     this.seats = state.players.map((p) => this.orient.seat(p.seat));
@@ -310,7 +312,10 @@ export class GameView {
     placeRect(this.board.el, L.board);
     this.board.setSize(L.board.w);
     // Reuse the game's fixed 1K icon atlas across viewport and DPR changes.
-    void prepareGameIcons(this.state.players, (L.board.w / 32) * 2.8, getBoard((this.state.settings.spacesPerSide ?? 7) as SpacesPerSide));
+    const fill = (): void => {
+      for (const p of this.panels.values()) p.fillIcons();
+    };
+    void prepareGameIcons(this.state.players, (L.board.w / 32) * 2.8, getBoard((this.state.settings.spacesPerSide ?? 7) as SpacesPerSide)).then(fill, fill);
     for (const p of this.state.players) {
       const box = L.seats[this.orient.seat(p.seat)];
       const panel = this.panels.get(p.id)!;

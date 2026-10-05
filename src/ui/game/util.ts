@@ -151,13 +151,21 @@ export const TINT: { ink?: string; ink3?: string } = {};
  * buildings in the player / theme colors they are shown in. The legacy `iconPx` hint is retained
  * for callers; the atlas now uses a fixed 1024px texture independent of viewport size and DPR.
  */
+/**
+ * Read the ink tokens the icon tints use (once per session). Call it before a big subtree is
+ * inserted: `getComputedStyle` right after the game screen was appended forced its whole first
+ * layout synchronously inside the mount (docs/PERFORMANCE.md "라운드 2").
+ */
+export function primeIconTints(): void {
+  if (TINT.ink || typeof document === 'undefined') return;
+  const root = getComputedStyle(document.documentElement);
+  TINT.ink = root.getPropertyValue('--ink').trim() || undefined;
+  TINT.ink3 = root.getPropertyValue('--ink-3').trim() || undefined;
+}
+
 export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, iconPx: number, board?: readonly SpaceDef[]): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();
-  if (!TINT.ink) {
-    const root = getComputedStyle(document.documentElement);
-    TINT.ink = root.getPropertyValue('--ink').trim() || undefined;
-    TINT.ink3 = root.getPropertyValue('--ink-3').trim() || undefined;
-  }
+  primeIconTints();
   const entries: AtlasEntry[] = [];
   const spaceIds = board ? board.map(spaceIcon) : ICON_IDS;
   for (const id of new Set(spaceIds)) if (/^(city|hub|corner|space)-/.test(id) || id === 'coin' || id.startsWith('dice-face-')) entries.push({ id });
