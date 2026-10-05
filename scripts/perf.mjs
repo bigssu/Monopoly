@@ -168,7 +168,14 @@ async function trace(page, cdp, fn, extra = []) {
   const complete = (e) => e.ph === 'X' || e.ph === 'B' || e.ph === 'I' || e.ph === 'i' || e.ph === 'n';
   const pick = (name, where) => events.filter((e) => e.name === name && complete(e) && where(e));
   const layouts = pick('Layout', onMain);
+  const ts = (list) => list.map((e) => e.ts / 1000).sort((a, b) => a - b);
   return {
+    // Timestamps (ms, trace clock) for the active-fps and cut-in splits below.
+    drawTs: ts(pick('DrawFrame', inRenderer)),
+    swapTs: ts(events.filter((e) => e.name === 'Display::DrawAndSwap' && complete(e))),
+    paintTs: ts(pick('Paint', inRenderer)),
+    rasterTs: ts(pick('RasterTask', inRenderer)),
+    marks: events.filter((e) => e.cat?.includes('blink.user_timing') && e.name.startsWith('perf:')).map((e) => [e.name, e.ts / 1000]).sort((a, b) => a[1] - b[1]),
     sec: wall,
     layout: layouts.length,
     layoutMaxMs: r1(Math.max(0, ...layouts.map((e) => (e.dur || 0) / 1000))),
@@ -189,19 +196,51 @@ async function taskMs(cdp) {
   return (metrics.find((m) => m.name === 'TaskDuration')?.value ?? 0) * 1000;
 }
 
-/** A trace window + LayerTree repaint count + main-thread task time. */
-async function measureWindow(page, cdp, ms) {
+/**
+ * Presented frames per second WHILE THE SCREEN CHANGES: frame intervals up to `STILL_GAP_MS` count
+ * as animation; longer gaps are still holds (the game's pacing: reading time, the turn rest, the
+ * dice result hold), where zero idle load means no frames at all. Averaging those holds in made a
+ * correctly capped game read ~20 fps (docs/PERFORMANCE.md "라운드 2").
+ */
+const STILL_GAP_MS = 200;
+function activeRate(ts) {
+  let n = 0;
+  let ms = 0;
+  for (let i = 1; i < ts.length; i++) {
+    const d = ts[i] - ts[i - 1];
+    if (d <= STILL_GAP_MS) {
+      n++;
+      ms += d;
+    }
+  }
+  return { fps: ms > 0 ? r1((n * 1000) / ms) : 0, activeSec: r1(ms / 1000) };
+}
+
+/**
+ * A trace window + LayerTree repaint count + main-thread task time.
+ * `layerTree: false` leaves the LayerTree agent off: with it on, Chromium repaints and re-rasters
+ * EVERY layer on any commit that changes a layer property — a compositor-only opacity change of a
+ * `will-change` element read paint 4 / raster 44 with the agent and 0 / 0 without (measured,
+ * docs/PERFORMANCE.md "라운드 2"). Windows that contain such changes (the decorative window: the
+ * dealer's bubble fading out) count Paint / Raster without it; `layerPainted` is then null.
+ */
+async function measureWindow(page, cdp, ms, { layerTree = true } = {}) {
   await cdp.send('Performance.enable');
   let painted = 0;
   const onPaint = () => painted++;
-  cdp.on('LayerTree.layerPainted', onPaint);
-  await cdp.send('LayerTree.enable');
+  if (layerTree) {
+    cdp.on('LayerTree.layerPainted', onPaint);
+    await cdp.send('LayerTree.enable');
+  }
   const t0 = await taskMs(cdp);
   const tr = await trace(page, cdp, () => page.waitForTimeout(ms));
   const task = (await taskMs(cdp)) - t0;
-  await cdp.send('LayerTree.disable').catch(() => {});
-  cdp.off('LayerTree.layerPainted', onPaint);
-  return { ...tr, layerPainted: painted, taskMs: Math.round(task) };
+  if (layerTree) {
+    await cdp.send('LayerTree.disable').catch(() => {});
+    cdp.off('LayerTree.layerPainted', onPaint);
+  }
+  const { drawTs, swapTs, paintTs, rasterTs, marks, ...rest } = tr;
+  return { ...rest, layerPainted: layerTree ? painted : null, taskMs: Math.round(task) };
 }
 
 // ------------------------------------------------------------------------------------ boot
@@ -233,10 +272,11 @@ if (CFG.phases.includes('boot')) {
 // ------------------------------------------------------------------------------------ idle (B)
 const CALM_WAIT_MS = 12000; // decorative loops end ~10 s after the last input / their start
 const idleVerdict = (r) => r.layout === 0 && r.paint === 0 && r.raster === 0 && r.style <= 1 && r.raf === 0 && r.timers === 0 && r.layerPainted === 0 && r.taskMs < 100;
-const decoVerdict = (r) => r.layout === 0 && r.paint === 0 && r.raster === 0 && r.layerPainted === 0;
+const decoVerdict = (r) => r.layout === 0 && r.paint === 0 && r.raster === 0 && (r.layerPainted ?? 0) === 0;
 async function idlePair(page, cdp, label) {
-  // Decorative window: from ~1.5 s after the screen settled until the loops stop.
-  const deco = await measureWindow(page, cdp, 7000);
+  // Decorative window: from ~1.5 s after the screen settled until the loops stop. Without the
+  // LayerTree agent (see measureWindow): it forces a full repaint on compositor-only changes.
+  const deco = await measureWindow(page, cdp, 7000, { layerTree: false });
   deco.pass = decoVerdict(deco);
   await page.waitForTimeout(Math.max(0, CALM_WAIT_MS - 1500 - 7000));
   const calm = await measureWindow(page, cdp, 10000);
@@ -294,8 +334,13 @@ async function capRun(saver) {
   const task = (await taskMs(cdp)) - t0;
   await ctx.close();
   const per = (n) => r1(n / tr.sec);
-  // Presented = the more of renderer DrawFrames and display swaps (docs/PERFORMANCE.md §2).
-  return { fps: per(Math.max(tr.drawFrames, tr.swaps)), drawFramesPerSec: per(tr.drawFrames), swapsPerSec: per(tr.swaps), taskMsPerSec: per(task), paintsPerSec: per(tr.paint), rasterPerSec: per(tr.raster), stylePerSec: per(tr.style), rafPerSec: per(tr.raf) };
+  // Presented = the more of renderer DrawFrames and display swaps (docs/PERFORMANCE.md §2), while
+  // the screen changes (activeRate); `windowFps` is the plain average over the window, still holds
+  // included (info).
+  const ad = activeRate(tr.drawTs);
+  const as = activeRate(tr.swapTs);
+  const act = as.fps > ad.fps ? as : ad;
+  return { fps: act.fps, activeSec: act.activeSec, stillSec: r1(tr.sec - act.activeSec), windowFps: per(Math.max(tr.drawFrames, tr.swaps)), drawFramesPerSec: per(tr.drawFrames), swapsPerSec: per(tr.swaps), taskMsPerSec: per(task), paintsPerSec: per(tr.paint), rasterPerSec: per(tr.raster), stylePerSec: per(tr.style), rafPerSec: per(tr.raf) };
 }
 if (CFG.phases.includes('cap')) {
   const on = await capRun(true);
@@ -475,9 +520,11 @@ if (CFG.phases.includes('layers')) {
   cdp.on('LayerTree.layerTreeDidChange', onTree);
   await cdp.send('DOM.getDocument', { depth: 0 });
   await cdp.send('LayerTree.enable');
-  const tr = await trace(page, cdp, () => page.waitForTimeout(CFG.layerSeconds * 1000));
+  await markCutIns(page);
+  const tr = await trace(page, cdp, () => page.waitForTimeout(CFG.layerSeconds * 1000), ['blink.user_timing']);
   await cdp.send('LayerTree.disable').catch(() => {});
   cdp.off('LayerTree.layerTreeDidChange', onTree);
+  const cutAgent = cutInSplit(tr);
   // What the peak-memory layers were (node + class), largest first.
   const peakLayersList = [];
   for (const l of [...peakTree].sort((a, b) => b.width * b.height - a.width * a.height).slice(0, 12)) {
@@ -497,13 +544,79 @@ if (CFG.phases.includes('layers')) {
     peakLayerMemoryMB: r1(peakMB),
     paintsPerSec: r1(tr.paint / tr.sec),
     rasterPerSec: r1(tr.raster / tr.sec),
+    withLayerTreeAgent: cutAgent,
     layoutMaxMs: tr.layoutMaxMs,
     peakMemoryLayers: peakLayersList,
     peakMemoryDuring: peakDuring,
     moneyTier: tier0 ? { start: `${tier0.tier} ×${tier0.scale}${tier0.tilt ? ' 3D' : ' 2D'} (${tier0.source})`, budgetMB: tier0.budgetMB, end: await page.evaluate(() => { const m = window.__lotAndRoll.money(); return m ? `${m.tier} ×${m.scale}${m.tilt ? ' 3D' : ' 2D'} (${m.source}; cut-ins ${m.health.join(',')})` : '-'; }).catch(() => '-') } : null,
   };
-  log('layers', JSON.stringify(out.layers));
   await ctx.close();
+  // Paint/s: the same seeded game again WITHOUT the LayerTree agent (it repaints every layer on any
+  // commit that changes a layer property, which during a cut-in is every frame), split outside /
+  // inside the money cut-ins (docs/PERFORMANCE.md "라운드 2": a cut-in's coins are script-driven by
+  // design; the play budget applies outside them, cut-ins have their own).
+  {
+    const { ctx, page, cdp } = await newPage();
+    await page.goto(base + DEV);
+    await onTitle(page);
+    await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
+    await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
+    await page.waitForTimeout(2500);
+    await markCutIns(page);
+    const tp = await trace(page, cdp, () => page.waitForTimeout(CFG.layerSeconds * 1000), ['blink.user_timing']);
+    Object.assign(out.layers, { paintsPerSecNoAgent: r1(tp.paint / tp.sec), ...cutInSplit(tp) });
+    await ctx.close();
+  }
+  log('layers', JSON.stringify(out.layers));
+}
+
+/** Mark the money cut-ins on the trace clock (User Timing marks perf:money-live / perf:money-park). */
+async function markCutIns(page) {
+  await page.evaluate(() => {
+    const el = document.querySelector('.money-stage');
+    if (!el) return;
+    let live = el.classList.contains('is-live');
+    if (live) performance.mark('perf:money-live');
+    new MutationObserver(() => {
+      const now = el.classList.contains('is-live');
+      if (now !== live) performance.mark(now ? 'perf:money-live' : 'perf:money-park');
+      live = now;
+    }).observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+}
+
+/**
+ * Split a trace's Paint / RasterTask counts into "outside money cut-ins" and "inside" by the
+ * perf:money-live / perf:money-park marks. The window spans from the first to the last trace event
+ * that counts (frames, paints), so a window without cut-ins reproduces the plain average.
+ */
+function cutInSplit(tr) {
+  const all = [...tr.drawTs, ...tr.paintTs];
+  const t0 = all.length ? Math.min(...all) : 0;
+  const t1 = t0 + tr.sec * 1000;
+  const spans = [];
+  let open = null;
+  for (const [name, t] of tr.marks) {
+    if (name === 'perf:money-live' && open === null) open = t;
+    if (name === 'perf:money-park' && open !== null) {
+      spans.push([open, t]);
+      open = null;
+    }
+  }
+  if (open !== null) spans.push([open, t1]);
+  const inCut = (t) => spans.some(([a, b]) => t >= a && t < b);
+  const liveMs = spans.reduce((a, [x, y]) => a + Math.max(0, Math.min(y, t1) - Math.max(x, t0)), 0);
+  const outMs = Math.max(1, tr.sec * 1000 - liveMs);
+  const pIn = tr.paintTs.filter(inCut).length;
+  const rIn = tr.rasterTs.filter(inCut).length;
+  return {
+    cutIns: spans.length,
+    cutInSec: r1(liveMs / 1000),
+    paintsPerSecPlay: r1(((tr.paintTs.length - pIn) * 1000) / outMs),
+    paintsPerSecCutIn: liveMs > 0 ? r1((pIn * 1000) / liveMs) : null,
+    rasterPerSecPlay: r1(((tr.rasterTs.length - rIn) * 1000) / outMs),
+    rasterPerSecCutIn: liveMs > 0 ? r1((rIn * 1000) / liveMs) : null,
+  };
 }
 
 // ------------------------------------------------------------------------------------ mount
@@ -846,8 +959,9 @@ await browser.close();
 const rows = [];
 const gate = (name, pass, value) => rows.push({ name, pass: !!pass, value });
 if (out.cap) {
-  gate('A  presented fps, battery saver ON, no throttle: 26-34', out.cap.on.fps >= 26 && out.cap.on.fps <= 34, `${out.cap.on.fps} fps`);
-  gate('A  presented fps, battery saver OFF, no throttle: >= 55', out.cap.off.fps >= 55, `${out.cap.off.fps} fps`);
+  const capV = (c) => `${c.fps} fps while animating (${c.activeSec} s; still holds ${c.stillSec} s; window average ${c.windowFps})`;
+  gate('A  presented fps, battery saver ON, no throttle: 26-34', out.cap.on.fps >= 26 && out.cap.on.fps <= 34, capV(out.cap.on));
+  gate('A  presented fps, battery saver OFF, no throttle: >= 55', out.cap.off.fps >= 55, capV(out.cap.off));
 }
 if (out.idle) {
   for (const k of ['game', 'title', 'result']) {
@@ -855,7 +969,7 @@ if (out.idle) {
     const c = r.calm;
     gate(`B  idle zero, ${k}: 10 s calm window`, c.pass, `layout ${c.layout}, paint ${c.paint}, raster ${c.raster}, style ${c.style}, rAF ${c.raf}, timers ${c.timers}, layerPainted ${c.layerPainted}, task ${c.taskMs} ms`);
     const d = r.decorative;
-    gate(`B  decorative loops compositor-only, ${k}`, d.pass, `layout ${d.layout}, paint ${d.paint}, raster ${d.raster}, layerPainted ${d.layerPainted} (${d.drawFrames} compositor frames)`);
+    gate(`B  decorative loops compositor-only, ${k}`, d.pass, `layout ${d.layout}, paint ${d.paint}, raster ${d.raster} (${d.drawFrames} compositor frames; LayerTree agent off)`);
   }
 }
 if (out.play) {
@@ -873,7 +987,9 @@ if (out.layers) {
   // Per money tier (docs/MONEY-EVENTS.md §12): low 100 MB, mid 150 MB, high 250 MB; 100 MB without a stage.
   const budget = L.moneyTier?.budgetMB ?? 100;
   gate(`C  peak layer memory <= ${budget} MB (money tier ${L.moneyTier?.start ?? '-'})`, L.peakLayerMemoryMB <= budget, `${L.peakLayerMemoryMB} MB`);
-  gate('C  Paint <= 20/s (4x play)', L.paintsPerSec <= 20, `${L.paintsPerSec}/s`);
+  // Outside money cut-ins (play) <= 20/s; inside them (coins are script-driven by design) <= 40/s.
+  gate('C  Paint <= 20/s (4x play, outside money cut-ins)', L.paintsPerSecPlay <= 20, `${L.paintsPerSecPlay}/s (LayerTree agent off; with it on, as before round 2: ${L.withLayerTreeAgent.paintsPerSecPlay}/s outside, ${L.paintsPerSec}/s whole window)`);
+  gate('C  Paint <= 40/s inside money cut-ins (4x)', L.paintsPerSecCutIn === null || L.paintsPerSecCutIn <= 40, L.paintsPerSecCutIn === null ? 'no cut-in in the window' : `${L.paintsPerSecCutIn}/s over ${L.cutIns} cut-ins, ${L.cutInSec} s (raster ${L.rasterPerSecCutIn}/s vs ${L.rasterPerSecPlay}/s outside; agent on: ${L.withLayerTreeAgent.paintsPerSecCutIn}/s)`);
   gate('C  no forced layout > 50 ms during play', L.layoutMaxMs <= 50, `max Layout ${L.layoutMaxMs} ms`);
 }
 if (out.boot) gate('C  boot to Title painted <= 1500 ms (4x)', out.boot.medianTitlePaintedMs <= 1500, `${out.boot.medianTitlePaintedMs} ms`);
