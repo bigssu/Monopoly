@@ -1,4 +1,4 @@
-# Google Play 스토어 등록정보 — Land Poly (랜드폴리)
+# Google Play 스토어 등록정보 — Money Poly (머니폴리)
 
 Play Console 기본 스토어 등록정보를 위한 문구와 에셋 초안입니다.
 기본 언어는 한국어(ko-KR), 추가 언어는 영어(en-US)를 권장합니다.
@@ -18,7 +18,7 @@ Play Console 기본 스토어 등록정보를 위한 문구와 에셋 초안입�
 ### 앱 이름 (최대 30자)
 
 ```text
-Land Poly - 태블릿 보드게임
+Money Poly - 태블릿 보드게임
 ```
 
 ### 간단한 설명 (최대 80자)
@@ -30,7 +30,7 @@ Land Poly - 태블릿 보드게임
 ### 자세한 설명 (최대 4000자)
 
 ```text
-태블릿 한 대를 테이블 한가운데 놓고 둘러앉으세요. Land Poly는 최대 4명이 한 화면을 돌려 쓰는 패스 앤 플레이 도시 수집 보드게임입니다. 주사위를 굴려 세계 19개 도시를 사고, 짓고, 뺏고, 한 판을 20~30분 안에 끝냅니다. 인터넷도, 계정도, 광고도 필요 없습니다.
+태블릿 한 대를 테이블 한가운데 놓고 둘러앉으세요. Money Poly는 최대 4명이 한 화면을 돌려 쓰는 패스 앤 플레이 도시 수집 보드게임입니다. 주사위를 굴려 세계 19개 도시를 사고, 짓고, 뺏고, 한 판을 20~30분 안에 끝냅니다. 인터넷도, 계정도, 광고도 필요 없습니다.
 
 ■ 내 차례가 오면 무대가 나를 향해 돌아요
 게임판 한가운데 무대(스테이지)가 지금 차례인 사람 쪽으로 부드럽게 회전합니다. 주사위, 구매 카드, 이벤트 카드가 모두 내 방향으로 바로 서서 나타나니, 거꾸로 된 글씨를 읽을 일이 없어요. 각자의 자리에는 내 방향을 향한 패널이 있어 자금과 보유 도시를 한눈에 볼 수 있습니다.
@@ -56,12 +56,12 @@ Land Poly - 태블릿 보드게임
 • 비행기, 캠핑, 카페 등 인터넷이 없는 곳에서 놀 거리가 필요한 분
 
 ■ 광고 없음 / 인앱 결제 없음 / 완전 오프라인
-Land Poly는 데이터를 수집하지 않습니다. 계정도 로그인도 필요 없고, 게임 저장은 기기 안에만 남습니다.
+Money Poly는 데이터를 수집하지 않습니다. 계정도 로그인도 필요 없고, 게임 저장은 기기 안에만 남습니다.
 
 ■ 태블릿에 최적화
 10~13인치 태블릿에서 가장 멋지게 보이도록 만들었습니다. 가로 화면 전용이며, 작은 태블릿이나 가로 모드의 폰에서도 즐길 수 있어요.
 
-주사위를 굴리고, 도시를 모으고, 마지막에 웃는 사람이 되어 보세요. Land Poly와 함께하는 테이블 위의 세계 여행!
+주사위를 굴리고, 도시를 모으고, 마지막에 웃는 사람이 되어 보세요. Money Poly와 함께하는 테이블 위의 세계 여행!
 
 문의: sungwooksukr@gmail.com
 ```
@@ -73,7 +73,7 @@ Land Poly는 데이터를 수집하지 않습니다. 계정도 로그인도 필�
 ### App name (max 30)
 
 ```text
-Land Poly: Tablet Board Game
+Money Poly: Tablet Board Game
 ```
 
 ### Short description (max 80)
@@ -85,7 +85,7 @@ One tablet, 2-4 players, 20 minutes. A world-city board game. Offline, no ads.
 ### Full description (max 4000)
 
 ```text
-Put one tablet in the middle of the table and gather around it. Land Poly is a pass-and-play city-collecting board game for up to four players sharing a single screen. Roll the dice, buy, build and take over cities across the globe, and finish a game in 20-30 minutes. No internet, no account, no ads.
+Put one tablet in the middle of the table and gather around it. Money Poly is a pass-and-play city-collecting board game for up to four players sharing a single screen. Roll the dice, buy, build and take over cities across the globe, and finish a game in 20-30 minutes. No internet, no account, no ads.
 
 ■ The stage turns to face whoever's turn it is
 The center of the board, the stage, smoothly rotates toward the player who has to act. Dice, purchase cards and event cards always appear right side up for you, so nobody has to read upside-down text. Every seat has its own panel facing that player, showing cash and owned cities at a glance.
@@ -111,7 +111,7 @@ The center of the board, the stage, smoothly rotates toward the player who has t
 • Trips, camping and cafes where there is no signal
 
 ■ No ads. No in-app purchases. Fully offline.
-Land Poly collects no data. There is no login, and your saved game stays on your device.
+Money Poly collects no data. There is no login, and your saved game stays on your device.
 
 ■ Made for tablets
 Designed to look its best on 10-13 inch tablets in landscape, and it also runs on smaller tablets and phones in landscape.
@@ -217,5 +217,5 @@ Play 스토어에는 별도 키워드 필드가 없으므로, 아래 단어를 *
 
 ## 6. 출시 노트 (What's new) 예시
 
-- ko: `첫 출시! 태블릿 하나로 2~4명이 즐기는 세계 도시 보드게임 Land Poly를 만나보세요.`
-- en: `First release! Enjoy Land Poly, a world-city board game for 2-4 players on a single tablet.`
+- ko: `첫 출시! 태블릿 하나로 2~4명이 즐기는 세계 도시 보드게임 Money Poly를 만나보세요.`
+- en: `First release! Enjoy Money Poly, a world-city board game for 2-4 players on a single tablet.`

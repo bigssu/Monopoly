@@ -95,8 +95,8 @@ jobs:
         id: apk
         run: |
           version=$(grep -o 'versionName "[^"]*"' android/app/build.gradle | head -1 | cut -d'"' -f2)
-          name="LandPoly-${version}-$(TZ=Asia/Seoul date +%Y%m%d-%H%M)-debug"
-          cp android/app/build/outputs/apk/debug/LandPoly-debug.apk "$RUNNER_TEMP/$name.apk"
+          name="MoneyPoly-${version}-$(TZ=Asia/Seoul date +%Y%m%d-%H%M)-debug"
+          cp android/app/build/outputs/apk/debug/MoneyPoly-debug.apk "$RUNNER_TEMP/$name.apk"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug APK
@@ -174,8 +174,8 @@ jobs:
       - name: Upload release APK
         uses: actions/upload-artifact@v7
         with:
-          name: land-poly-release-apk
-          path: android/app/build/outputs/apk/release/LandPoly-release.apk
+          name: money-poly-release-apk
+          path: android/app/build/outputs/apk/release/MoneyPoly-release.apk
           if-no-files-found: error
           retention-days: 30
 

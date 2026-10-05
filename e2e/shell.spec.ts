@@ -163,7 +163,7 @@ test.describe('start a game', () => {
     await expect(page.locator('.settings-title')).toHaveText('Settings');
     await page.keyboard.press('Escape');
     await expect(page.locator('#app[data-screen="title"]')).toBeVisible();
-    await expect(page.locator('.title-word')).toHaveText('Land Poly');
+    await expect(page.locator('.title-word')).toHaveText('Money Poly');
     await page.setViewportSize({ width: 800, height: 450 });
     await page.screenshot({ path: `${SHOTS}/shell-title-en-800x450.png` });
     await page.click('[data-action="new"]');

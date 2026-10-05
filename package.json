@@ -1,9 +1,9 @@
 {
-  "name": "land-poly",
+  "name": "money-poly",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Land Poly (랜드폴리) — pass-and-play property trading board game for one tablet",
+  "description": "Money Poly (머니폴리) — pass-and-play property trading board game for one tablet",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

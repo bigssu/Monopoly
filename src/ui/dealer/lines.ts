@@ -71,7 +71,6 @@ export const SITUATIONS: Record<string, Situation> = {
     priority: P.end,
     expr: 'cheer',
     takes: [
-      ['랜드폴리에 오신 걸 환영해요! 오늘의 부자는 과연 누가 될까요?', 'Welcome to Land Poly! Who will be the richest today?'],
       ['자, 신나는 땅따먹기 여행을 시작해 볼까요? 다들 준비됐죠?', "Let's start our land-grabbing trip! Everyone ready?"],
       ['안녕하세요! 오늘 진행을 맡은 딜러예요. 재밌게 놀아 봐요!', "Hi! I'm your dealer today. Let's have fun!"],
     ],

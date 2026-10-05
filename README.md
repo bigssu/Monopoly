@@ -1,6 +1,6 @@
-# Land Poly (랜드폴리)
+# Money Poly (머니폴리)
 
-![Land Poly 앱 아이콘](docs/assets/launcher-mark-256.png)
+![Money Poly 앱 아이콘](docs/assets/launcher-mark-256.png)
 
 **태블릿 한 대를 테이블 한가운데 놓고 2~4명이 둘러앉아 즐기는 20~30분짜리 도시 수집 보드게임.**
 주사위를 굴려 기본 19개, 확장 보드에서는 최대 27개 도시를 사고, 짓고, 인수하세요. 내 차례가 되면 게임판 한가운데의 무대(스테이지)가
@@ -56,7 +56,7 @@ npm run dev          # http://localhost:5173  (가로 태블릿 크기 창 권�
 npm ci
 npm run build
 npx cap sync android
-cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/LandPoly-debug.apk
+cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/MoneyPoly-debug.apk
 ```
 
 JDK 21, Android SDK 36, 릴리스 서명, 버전 관리, Google Play 제출 체크리스트는 **[docs/RELEASE.md](docs/RELEASE.md)** 를 보세요.
@@ -101,7 +101,7 @@ android/      Capacitor Android 프로젝트 (npx cap add android 로 생성)
 
 ## English
 
-**Land Poly** is a fast (20-30 min), fully offline **pass-and-play** city-collecting board game for one tablet lying flat
+**Money Poly** is a fast (20-30 min), fully offline **pass-and-play** city-collecting board game for one tablet lying flat
 on a table with 2-4 people around it. Roll the dice, buy, build and take over 19 world cities. The central stage rotates to
 face whoever's turn it is, so nobody reads upside-down text. No ads, no accounts, no network, no analytics.
 

@@ -125,7 +125,7 @@ export function mountVfxDemo(root: HTMLElement, o: { size?: number } = {}): Demo
   const inner = el('div', 'vd-inner');
   const d = 460 * k;
   Object.assign(inner.style, { left: `${d}px`, top: `${d}px`, width: `${size - 2 * d}px`, height: `${size - 2 * d}px` });
-  inner.textContent = 'LAND POLY';
+  inner.textContent = 'MONEY POLY';
   board.append(inner);
   table.append(board);
   const panels = new Map<PlayerId, HTMLElement>();

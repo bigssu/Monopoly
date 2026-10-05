@@ -202,7 +202,7 @@ if (!splashOnly && !process.argv.includes('--no-play')) {
     await shot(wrap(logoBox(512), `body{width:512px;height:512px;background:${iconBg}}`), 512, 512));
 
   const fonts = path.join(root, 'public', 'fonts', 'fonts.css');
-  const tmp = path.join(os.tmpdir(), 'land-poly-feature-graphic.html');
+  const tmp = path.join(os.tmpdir(), 'money-poly-feature-graphic.html');
   fs.writeFileSync(tmp, `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="file://${fonts}">
 <style>
 html,body{margin:0}
@@ -221,10 +221,10 @@ h1{margin:0;font-weight:400;font-size:108px;line-height:1.05;letter-spacing:1px;
 </style>
 <div class="glow"></div>
 <div class="logo">${logoBox(400)}</div>
-<div class="txt"><h1>Land Poly</h1><div class="en">랜드폴리</div><div class="tag">한 대의 태블릿, 네 명의 여행자<br>One tablet · 2–4 players</div></div>
+<div class="txt"><h1>Money Poly</h1><div class="en">머니폴리</div><div class="tag">한 대의 태블릿, 네 명의 여행자<br>One tablet · 2–4 players</div></div>
 <div class="bar"></div>`);
   const png = stripAlpha(await shot(null, 1024, 500, { file: tmp }));
-  const ok = await page.evaluate(() => document.fonts.check("40px 'Jua'", '랜드폴리'));
+  const ok = await page.evaluate(() => document.fonts.check("40px 'Jua'", '머니폴리'));
   console.log('Jua loaded for Hangul:', ok);
   write(path.join(assets, 'feature-graphic-1024x500.png'), png);
 }

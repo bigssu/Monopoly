@@ -2,11 +2,11 @@
 
 ## Source of truth
 
-**Status: Active (2026-10-04).** This file governs Land Poly's product UI and accessibility. `docs/DESIGN.md` remains the rules/content specification; `docs/UI-CONTRACT.md` documents implementation boundaries. Evidence: `README.md`, `docs/RELEASE.md`, `docs/PLAY_LISTING.md`, `src/ui/screens/`, `src/ui/board/`, `src/ui/stage/`, `src/styles/`, and Playwright screenshots at 1600×1000 and 800×450. Physical Android rendering is unverified because no target tablet is connected.
+**Status: Active (2026-10-04).** This file governs Money Poly's product UI and accessibility. `docs/DESIGN.md` remains the rules/content specification; `docs/UI-CONTRACT.md` documents implementation boundaries. Evidence: `README.md`, `docs/RELEASE.md`, `docs/PLAY_LISTING.md`, `src/ui/screens/`, `src/ui/board/`, `src/ui/stage/`, `src/styles/`, and Playwright screenshots at 1600×1000 and 800×450. Physical Android rendering is unverified because no target tablet is connected.
 
 ## Brand
 
-Playful, readable tabletop travel game. Use **Land Poly / 랜드폴리** consistently, with original city and travel imagery. Trust comes from clear offline/no-ads messaging, visible rules, save controls, and honest prompts. Avoid references or visual mimicry of other board-game brands. Verify rights to the owner-supplied launcher image before store submission.
+Playful, readable tabletop travel game. Use **Money Poly / 머니폴리** consistently, with original city and travel imagery. Trust comes from clear offline/no-ads messaging, visible rules, save controls, and honest prompts. Avoid references or visual mimicry of other board-game brands. Verify rights to the owner-supplied launcher image before store submission.
 
 ## Product goals
 

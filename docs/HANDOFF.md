@@ -33,7 +33,7 @@
 - 움직임·타이밍·속도를 건드리면 `e2e/pacing.spec.ts`를 본다. 상태가 아니라 화면에 보이는 것(주사위 흔들림,
   굴림 약 1초 뒤 결과, 말이 칸마다 지나가는지, 턴 길이)을 네 환경에서 잰다.
 - **APK는 푸시하면 GitHub Actions가 만든다**(`.github/workflows/android.yml`). 저장소 → Actions → "Android" 실행 →
-  Artifacts에서 `LandPoly-<버전>-<날짜>-<시각>-debug`를 받는다(zip 안에 APK). 사용자는 빌드를 구분할 수 있게
+  Artifacts에서 `MoneyPoly-<버전>-<날짜>-<시각>-debug`를 받는다(zip 안에 APK). 사용자는 빌드를 구분할 수 있게
   이름에 버전과 날짜가 들어가기를 원한다.
 - 음성·효과음·음악·딜러 스프라이트 생성 스크립트(`scripts/dealer`, `scripts/sound`)는 API 키가 필요하다
   (ElevenLabs, Gemini). 키는 사용자 PC의 환경변수에만 있다. 키가 없는 곳에서는 생성 작업을 하지 않는다.

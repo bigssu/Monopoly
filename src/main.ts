@@ -1,5 +1,5 @@
 /**
- * Land Poly — app boot: styles, strings, screens, audio/haptics, preferences, native bridges.
+ * Money Poly — app boot: styles, strings, screens, audio/haptics, preferences, native bridges.
  */
 import '@/styles/index.css';
 import '@/i18n/shell';

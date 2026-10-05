@@ -51,7 +51,7 @@ if (!bundle) fail('dist/assets has no index-*.js');
 if (!webOnly) {
   step('cap sync', 'npx cap sync android');
   step('apk', win ? '.\\gradlew.bat assembleDebug' : './gradlew assembleDebug', path.join(root, 'android'));
-  const apk = path.join(root, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'LandPoly-debug.apk');
+  const apk = path.join(root, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'MoneyPoly-debug.apk');
   if (!existsSync(apk)) fail(`${apk} was not produced`);
   // Windows ships bsdtar (reads zip); elsewhere unzip.
   const list = execSync(win ? `"${process.env.SystemRoot}\\System32\\tar.exe" -tf "${apk}"` : `unzip -Z1 "${apk}"`, { encoding: 'utf8', maxBuffer: 64 << 20 });

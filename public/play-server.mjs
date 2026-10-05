@@ -36,7 +36,7 @@ function listen(port) {
   server.once('error', (e) => (e.code === 'EADDRINUSE' ? listen(port + 1) : console.error(e)));
   server.listen(port, '127.0.0.1', () => {
     const url = `http://127.0.0.1:${port}/`;
-    console.log(`Land Poly: ${url}  (close this window to stop)`);
+    console.log(`Money Poly: ${url}  (close this window to stop)`);
     exec(process.platform === 'win32' ? `start "" ${url}` : `open ${url}`);
   });
 }

@@ -1,7 +1,7 @@
-# 릴리스 가이드 — Land Poly (랜드폴리)
+# 릴리스 가이드 — Money Poly (머니폴리)
 
 Google Play 배포를 위한 빌드, 서명, 버전 관리, Play Console 체크리스트를 정리한 문서입니다.
-앱 ID는 기존 설치본의 저장 데이터와 업데이트 경로를 유지하기 위해 `com.bigssu.lotandroll`로 두고, 표시 이름은 `Land Poly`로 사용합니다.
+앱 ID는 기존 설치본의 저장 데이터와 업데이트 경로를 유지하기 위해 `com.bigssu.lotandroll`로 두고, 표시 이름은 `Money Poly`로 사용합니다.
 **앱 ID와 `androidScheme`(기본 `https`)은 첫 출시 후 절대 바꾸지 마세요.** 앱 ID를 바꾸면 다른 앱이 되고,
 scheme을 바꾸면 저장 데이터(localStorage)의 origin이 달라져 저장된 게임이 사라진 것처럼 보입니다.
 
@@ -59,19 +59,19 @@ Run 버튼으로 에뮬레이터/실기기에 설치합니다. 가로 전용이�
 cd android
 chmod +x gradlew
 ./gradlew assembleDebug --no-daemon
-# 결과: android/app/build/outputs/apk/debug/LandPoly-debug.apk (앱 표시 이름: Land Poly)
+# 결과: android/app/build/outputs/apk/debug/MoneyPoly-debug.apk (앱 표시 이름: Money Poly)
 
-adb install -r app/build/outputs/apk/debug/LandPoly-debug.apk
-# With the per-machine Gradle property `landPolyApkCopyDir`, each build is also copied there as
-# LandPoly-<version>-<yyyyMMdd-HHmm>-debug.apk (version + build time).
+adb install -r app/build/outputs/apk/debug/MoneyPoly-debug.apk
+# With the per-machine Gradle property `moneyPolyApkCopyDir`, each build is also copied there as
+# MoneyPoly-<version>-<yyyyMMdd-HHmm>-debug.apk (version + build time).
 adb shell am start -n com.bigssu.lotandroll/.MainActivity
 ```
 
 웹 코드를 고칠 때마다 `npm run build && npx cap sync android` 를 다시 실행해야 앱에 반영됩니다.
 기기별 흰 화면 진단에는 `./gradlew clean assembleDebug -PsoftwareWebView=true`로 WebView
 소프트웨어 레이어 APK를 만들 수 있습니다. 일반 빌드는 이 옵션 없이 하드웨어 경로를 사용합니다.
-두 빌드 모두 Gradle 출력 이름이 `LandPoly-debug.apk`이므로, 소프트웨어판을
-`LandPoly-software-debug.apk`로 복사해 보관한 뒤 일반판을 빌드하세요.
+두 빌드 모두 Gradle 출력 이름이 `MoneyPoly-debug.apk`이므로, 소프트웨어판을
+`MoneyPoly-software-debug.apk`로 복사해 보관한 뒤 일반판을 빌드하세요.
 두 APK는 같은 앱 ID와 Debug 서명이므로 설치 전에 필요한 진행 상황을 저장하세요.
 
 ---
@@ -164,13 +164,13 @@ android {
 cd android
 ./gradlew bundleRelease assembleRelease --no-daemon
 # AAB: app/build/outputs/bundle/release/app-release.aab
-# APK: app/build/outputs/apk/release/LandPoly-release.apk   (keystore.properties 없으면 서명되지 않음)
+# APK: app/build/outputs/apk/release/MoneyPoly-release.apk   (keystore.properties 없으면 서명되지 않음)
 ```
 
 서명 검증:
 
 ```bash
-$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/LandPoly-release.apk
+$ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/MoneyPoly-release.apk
 keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab
 ```
 
@@ -238,7 +238,7 @@ CI에서 서명된 AAB/APK를 받는 방법은 6장을 참고하세요.
 | 워크플로 | 파일 | 트리거 | 하는 일 |
 |---|---|---|---|
 | CI | `.github/workflows/ci.yml` | push, PR | Node 22, `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, Playwright e2e(실패해도 통과) 후 `e2e/__screenshots__` 업로드 |
-| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `LandPoly-<버전>-<날짜>-<시각>-debug` 아티팩트(KST). 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `land-poly-release-apk` 업로드 |
+| Android | `.github/workflows/android.yml` | push(모든 브랜치), 수동 실행 | JDK 21, `cap sync`, `./gradlew assembleDebug` -> `MoneyPoly-<버전>-<날짜>-<시각>-debug` 아티팩트(KST). 시크릿이 모두 있으면 `release` 잡이 `bundleRelease assembleRelease` 후 `app-release-aab`, `money-poly-release-apk` 업로드 |
 
 - `android/` 폴더가 아직 저장소에 없으면 Android 워크플로는 안내 메시지를 출력하고 성공(exit 0)으로 끝납니다.
 - 사용한 액션 태그: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-java@v6`,
@@ -329,7 +329,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.bigssu.lotandroll',
-  appName: 'Land Poly',
+  appName: 'Money Poly',
   webDir: 'dist',
   server: { androidScheme: 'https' },            // 절대 바꾸지 말 것 (localStorage origin)
   android: { allowMixedContent: false, backgroundColor: '#1E2A3A' },
@@ -522,7 +522,7 @@ cd android && ./gradlew clean bundleRelease --no-daemon
 - [ ] `git status` 에 `*.keystore`, `*.jks`, `keystore.properties` 가 없다.
 - [ ] `versionCode` 와 `versionName` 이 올라갔다.
 - [ ] 스토어 문구에 Monopoly / 부루마블 / 모두의마블 등 타사 명칭이 없다 (`docs/research/02-ip-licensing-research.md`).
-- [ ] "Land Poly / 랜드폴리" 이름의 상표를 조사하고, 사용자 제공 아이콘의 캐릭터·보드 요소에 대한 사용 권리를 확인했다 (`docs/DESIGN.md` C1).
+- [ ] "Money Poly / 머니폴리" 이름의 상표를 조사하고, 사용자 제공 아이콘의 캐릭터·보드 요소에 대한 사용 권리를 확인했다 (`docs/DESIGN.md` C1).
 - [ ] 오픈소스/폰트 고지: `docs/THIRD_PARTY_LICENSES.md` (Noto Sans KR, Jua = SIL OFL 1.1) 를 앱 내 설정 > 라이선스 화면 또는 스토어 소개에서 안내.
 
 

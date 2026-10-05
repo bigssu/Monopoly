@@ -4,7 +4,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // (a different scheme changes the WebView origin and makes saved games disappear).
 const config: CapacitorConfig = {
   appId: 'com.bigssu.lotandroll',
-  appName: 'Land Poly',
+  appName: 'Money Poly',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
