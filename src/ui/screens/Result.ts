@@ -1,5 +1,6 @@
 /**
- * Result screen: the celebration card is rotated to face the winner's seat.
+ * Result screen: the celebration card is rotated to face the winner's seat (fixed view, one human
+ * vs CPUs: faces S, no rotate pill — src/ui/orientation.ts).
  * Ranking rows with cash/property asset bars, awards revealed one by one, an assets-over-time
  * graph, game stats, "다시 하기" / "타이틀로".
  */
@@ -20,6 +21,7 @@ import { anim, gridTimeout, noMotion } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { DUR, EASE } from '@/ui/fx/motion';
+import { orientationFor } from '@/ui/orientation';
 
 const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];
 /** Vertical px kept free at the bottom (S edge) for the rotate pill. */
@@ -157,16 +159,18 @@ registerScreen('result', (root, { state }) => {
     stats,
     h('div', { class: 'rs-btns' }, again, home),
   );
-  const card = h('div', { class: 'rs-card', 'data-seat': winner.seat }, hero, side);
+  const orient = orientationFor(state.players);
+  const card = h('div', { class: 'rs-card', 'data-seat': orient.face(winner.seat) }, hero, side);
   const fx = h('div', { class: 'fx-layer' });
   // Always-upright pill on the S edge: turns the card toward the next seat so everyone at the
   // table can read the ranking (cycles through the occupied seats S → E → N → W).
-  const seats = SEAT_CYCLE.filter((x) => state.players.some((p) => p.seat === x));
+  // The fixed view has one reader (S): nothing to turn toward.
+  const seats = orient.fixed ? ['S' as Seat] : SEAT_CYCLE.filter((x) => state.players.some((p) => p.seat === x));
   const rotate = h('button', { class: 'rs-rotate', type: 'button', 'aria-label': t('r.rotate') }, iconEl('rotate', 'ico'), h('span', { text: t('r.rotate') }));
-  const screen = h('div', { class: 'result' }, card, seats.length > 1 ? rotate : null, fx);
+  const screen = h('div', { class: 'result', 'data-view': orient.mode }, card, seats.length > 1 ? rotate : null, fx);
   root.append(screen);
 
-  let seat: Seat = winner.seat;
+  let seat: Seat = orient.face(winner.seat);
   let angle = SEAT_ANGLE[seat];
   let size = { W: window.innerWidth, H: window.innerHeight };
   const room = seats.length > 1 ? PILL_ROOM : 0;

@@ -6,11 +6,14 @@
  * controller dispatches at the release. The lift and exit play on under the decision's own
  * animation. Which control each action maps to: `handTarget.ts`. Timings: `HAND` in fx/motion.ts.
  *
- * Coordinates: the hand lives in a board-sized layer rotated like the Stage (SEAT_ANGLE of the
- * acting seat, about the board centre = the Stage centre), so "up" points into the board from
- * that seat and the hand's bottom edge is the seat's edge. The target's client rect is read once
- * (after the Stage has stopped turning and the prompt has come in) and mapped into that frame;
- * after that only transform / opacity animate. Plain DOM, no canvas (the Android WebView draws
+ * Coordinates: the hand lives in a board-sized layer rotated to the CPU's drawn seat (SEAT_ANGLE
+ * of `HandPress.seat`, about the board centre = the Stage centre), so "up" points into the board
+ * from that seat and the hand's bottom edge is the seat's edge. The target's client rect is read
+ * once (after the Stage has stopped turning and the prompt has come in) and mapped into that
+ * frame; after that only transform / opacity animate. The mapping only assumes the target is
+ * axis-aligned on screen, so it holds both when the Stage has turned to the same seat (table
+ * model) and when it stays upright for S while the hand comes from another edge (fixed view,
+ * src/ui/orientation.ts): the target's size in the layer frame swaps by the LAYER's angle. Plain DOM, no canvas (the Android WebView draws
  * effect canvases as white boxes, docs/HANDOFF.md).
  *
  * Time policy (fx/time.ts): tweens through `anim` (speed, skip ×5, pause freezes them, reduced
@@ -66,6 +69,7 @@ export const handDev: HandDev | null = typeof window !== 'undefined' && isDevHoo
 export interface HandPress {
   state: GameState;
   action: Action;
+  /** The CPU's drawn seat (src/ui/orientation.ts): the edge the hand comes from. */
   seat: Seat;
   /** The CPU player's color (cuff, ring, board outline). */
   color: string;

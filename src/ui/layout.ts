@@ -13,6 +13,9 @@
  *
  * Every panel still sits on its own seat's edge of the table (S at the bottom, N at the top,
  * E on the right, W on the left) and faces it. An absent seat lets its column-mate grow.
+ * Fixed view (src/ui/orientation.ts, one human vs CPUs): `upright` keeps every panel at 0° — the
+ * same boxes, but E / N / W lay out like S (narrow and tall) so the one reader at S never tilts
+ * their head. Seats passed in are drawn seats (already remapped).
  * `--board` is set on <html>; everything else scales with `--u` (= board / 32).
  */
 import type { Seat } from '@/engine';
@@ -47,7 +50,7 @@ export interface GameLayout {
 
 export const MENU_SIZE = 48;
 
-export function computeLayout(W: number, H: number, seats: ReadonlySet<Seat>): GameLayout {
+export function computeLayout(W: number, H: number, seats: ReadonlySet<Seat>, upright = false): GameLayout {
   const portrait = H > W;
   const pad = Math.round(clamp(Math.min(W, H) * 0.014, 6, 20));
   const minSide = clamp(W * 0.17, 150, 520);
@@ -61,8 +64,8 @@ export function computeLayout(W: number, H: number, seats: ReadonlySet<Seat>): G
 
   const out: Partial<Record<Seat, SeatBox>> = {};
   const box = (seat: Seat, x: number, y: number, h: number): void => {
-    const rot = SEAT_ANGLE[seat];
-    const side = seat === 'E' || seat === 'W';
+    const rot = upright ? 0 : SEAT_ANGLE[seat];
+    const side = !upright && (seat === 'E' || seat === 'W');
     out[seat] = {
       seat,
       x,

@@ -262,12 +262,14 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       stage.setTurn(p, vs);
       stage.dice.show(vs.lastDice);
       board.setActiveToken(ev.playerId);
+      // Fixed view (one human vs CPUs): faces S every turn, so it never turns (src/ui/orientation.ts).
+      const face = view.orient.face(p.seat);
       if (fast) {
-        void stage.rotateTo(p.seat);
+        void stage.rotateTo(face);
         return;
       }
       fire(view, steps);
-      await Promise.all([stage.rotateTo(p.seat), stage.announce()]);
+      await Promise.all([stage.rotateTo(face), stage.announce()]);
       // Staging: let the turn banner read before anything else moves.
       await sleep(BEAT.turnBanner);
       return;
@@ -484,7 +486,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       const p = vs.players[ev.playerId]!;
       // Camera: punch in on the one space that would end the game.
       board.zoomPunch(ev.missing, 1.18);
-      void edgeToast(board.overlay, view.seats, p, spaceIcon(boardOf(vs)[ev.missing]!), playerColor(p.colorId).hex);
+      void edgeToast(board.overlay, view.orient.readers(vs.players.map((q) => q.seat)), p, spaceIcon(boardOf(vs)[ev.missing]!), playerColor(p.colorId).hex);
       await sleep(BEAT.oneAway);
       return;
     }
@@ -513,8 +515,9 @@ const cardTitle = (id: string | null): string | undefined => (id ? loc(getCard(i
 /** Start the stage scene for a planned money group (cash in `vs` = before the events). */
 function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean): M.MoneyPlay {
   const st = view.money;
-  const party = (pid: PlayerId): M.Party => ({ seat: vs.players[pid]!.seat, cash: vs.players[pid]!.cash, color: view.colorOf(pid) });
-  const me = (pid: PlayerId) => ({ seat: vs.players[pid]!.seat, cash: vs.players[pid]!.cash, playerColor: view.colorOf(pid) });
+  // Drawn seats (wallets, coin endpoints); what the cut-in faces is the stage's call (`upright`).
+  const party = (pid: PlayerId): M.Party => ({ seat: view.orient.seat(vs.players[pid]!.seat), cash: vs.players[pid]!.cash, color: view.colorOf(pid) });
+  const me = (pid: PlayerId) => ({ seat: view.orient.seat(vs.players[pid]!.seat), cash: vs.players[pid]!.cash, playerColor: view.colorOf(pid) });
   const name = (i: number): string => loc(boardOf(vs)[i]!.short);
   switch (sc.kind) {
     case 'purchase':

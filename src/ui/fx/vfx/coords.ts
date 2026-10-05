@@ -47,8 +47,13 @@ export interface CoordSource {
   getSpaceRect(i: number): RectLike;
   /** Client rect of a player's panel (null when unknown / gone). */
   getPanelRect(id: PlayerId): RectLike | null;
-  /** Seat of a player. */
+  /** Seat of a player (where their panel is drawn). */
   getSeat(id: PlayerId): Seat;
+  /**
+   * Seat that effects for a player face (rotated sprites, "up" offsets). Defaults to `getSeat`;
+   * the fixed view (src/ui/orientation.ts) faces everything to S.
+   */
+  getFaceSeat?(id: PlayerId): Seat;
   /** Client rect of the stage (board centre square); defaults to the inner board square. */
   getStageRect?(): RectLike;
 }
@@ -64,6 +69,7 @@ export interface PanelAnchor extends Pt {
   /** Centre of the panel. */
   cx: number;
   cy: number;
+  /** The seat the effects face (see `CoordSource.getFaceSeat`). */
   seat: Seat;
   /** Unit vector from the panel towards the board centre. */
   dir: readonly [number, number];
@@ -81,6 +87,7 @@ export interface Coords {
   space(i: number): SpaceAnchor;
   /** Panel anchor: the point on the panel's board-facing edge (R3: effects emit toward the board). */
   panel(id: PlayerId): PanelAnchor;
+  /** The seat effects for a player face. */
   seat(id: PlayerId): Seat;
   /** Board centre. */
   center(): Pt;
@@ -102,13 +109,14 @@ export function createCoords(src: CoordSource): Coords {
   const panels = new Map<PlayerId, PanelAnchor>();
   const fromClient = (x: number, y: number): Pt => ({ x: x - L.x, y: y - L.y });
   const center = (): Pt => fromClient(B.x + B.width / 2, B.y + B.height / 2);
+  const face = (id: PlayerId): Seat => (src.getFaceSeat ? src.getFaceSeat(id) : src.getSeat(id));
   return {
     u,
     width: L.width,
     height: L.height,
     fromClient,
     center,
-    seat: (id) => src.getSeat(id),
+    seat: face,
     space(i) {
       let a = spaces.get(i);
       if (!a) {
@@ -122,8 +130,8 @@ export function createCoords(src: CoordSource): Coords {
     panel(id) {
       let a = panels.get(id);
       if (!a) {
-        const seat = src.getSeat(id);
-        const dir = SEAT_DIR[seat];
+        const dir = SEAT_DIR[src.getSeat(id)];
+        const seat = face(id);
         const r = src.getPanelRect(id);
         const c = center();
         let cx: number;

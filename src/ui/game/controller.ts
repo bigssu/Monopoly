@@ -102,10 +102,11 @@ export class GameController {
     return this.busy;
   }
 
+  /** The seat the Stage faces now: the acting player's (S in the fixed view, src/ui/orientation.ts). */
   private actingSeat() {
     const ph = this.state.phase;
     const pid = ph.kind === 'gameOver' ? ph.result.winnerId : ph.playerId;
-    return this.state.players[pid]!.seat;
+    return this.view.orient.face(this.state.players[pid]!.seat);
   }
 
   private async play(prev: GameState, events: GameEvent[], next: GameState): Promise<void> {
@@ -192,7 +193,7 @@ export class GameController {
     const p = s.players[pid]!;
     const { stage } = this.view;
     this.clearPromptUi();
-    void stage.rotateTo(p.seat);
+    void stage.rotateTo(this.view.orient.face(p.seat));
     // The new prompt goes in on the next 30 Hz frame, not in the frame that just took the last
     // event's DOM changes (landing token, board space, panels) and the old prompt's removal:
     // together they were one 35-60 ms frame at 4x CPU throttle (docs/PERFORMANCE.md).
@@ -242,7 +243,7 @@ export class GameController {
     const alive = (): boolean => !this.disposed && !this.busy && this.state === snapshot;
     this.cpuActing = true;
     try {
-      await this.view.hand.press({ state: snapshot, action: a, seat: p.seat, color: this.view.colorOf(p.id), alive });
+      await this.view.hand.press({ state: snapshot, action: a, seat: this.view.orient.seat(p.seat), color: this.view.colorOf(p.id), alive });
       await whenRunning();
     } finally {
       this.cpuActing = false;

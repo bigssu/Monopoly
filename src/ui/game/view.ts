@@ -25,6 +25,7 @@ import { Dealer } from '@/ui/dealer/Dealer';
 import { MoneyStage, type Rect as MoneyRect } from '@/ui/fx/money';
 import { groupColor, spaceIcon } from './util';
 import { DealerDirector } from '@/ui/dealer/director';
+import { orientationFor, type Orientation } from '@/ui/orientation';
 
 /** Dev A/B knob `?dev=1&fxpool=6.12` (canvas size classes, present.ts SLOT_CLASSES). */
 function devPool(): number[] | null {
@@ -63,6 +64,9 @@ export class GameView {
    * parked off-screen by a transform while idle (no layer, no timer).
    */
   readonly money: MoneyStage;
+  /** Fixed view (one human vs CPUs) or the table-top model: src/ui/orientation.ts. */
+  readonly orient: Orientation;
+  /** Drawn seats of the players (engine seats remapped by `orient`). */
   readonly seats: Seat[];
   layout: GameLayout | null = null;
   /** Called when the device flips between portrait and landscape. */
@@ -74,11 +78,12 @@ export class GameView {
 
   constructor(state: GameState) {
     this.state = state;
-    this.seats = state.players.map((p) => p.seat);
-    this.root = h('div', { class: 'game' });
+    this.orient = orientationFor(state.players);
+    this.seats = state.players.map((p) => this.orient.seat(p.seat));
+    this.root = h('div', { class: 'game', 'data-view': this.orient.mode });
     this.table = h('div', { class: 'table' });
     const spacesPerSide = (state.settings.spacesPerSide ?? 7) as SpacesPerSide;
-    this.board = new Board(state.players, (i) => this.showInfo(i), spacesPerSide);
+    this.board = new Board(state.players, (i) => this.showInfo(i), spacesPerSide, this.orient.fixed);
     this.stage = new Stage();
     this.board.stageHost.append(this.stage.el);
     this.hand = new CpuHand(this.board, this.stage);
@@ -88,6 +93,7 @@ export class GameView {
     this.table.append(this.board.el);
     for (const p of state.players) {
       const panel = new PlayerPanel(p, spacesPerSide);
+      panel.el.dataset.seat = this.orient.seat(p.seat);
       panel.onSetsTap = () => {
         if (!this.director.explainSets()) void this.stage.toast(t('g.panel.setsHelp'), 2200, 'info');
       };
@@ -104,7 +110,8 @@ export class GameView {
       getBoardRect: () => this.rect('board', () => this.board.el.getBoundingClientRect()),
       getSpaceRect: (i) => this.board.spaceRect(i, this.rect('board', () => this.board.el.getBoundingClientRect())),
       getPanelRect: (id) => (this.panels.has(id) ? this.rect(`p${id}`, () => this.panels.get(id)!.clientRect()) : null),
-      getSeat: (id) => this.state.players[id]?.seat ?? 'S',
+      getSeat: (id) => this.seatOf(id),
+      getFaceSeat: (id) => this.faceOf(id),
       getStageRect: () => this.rect('stage', () => this.stage.el.getBoundingClientRect()),
       getPlayerColor: (id) => this.colorOf(id),
       sfx: (name, o) => this.playSfx(name, o),
@@ -171,12 +178,13 @@ export class GameView {
     const camOff = mcam !== '2d' && mcam !== '3d';
     const stage: MoneyStage = new MoneyStage({
       parent: this.root,
+      upright: this.orient.fixed,
       boardRect: () => {
         const r = boardRect();
         return { x: r.x, y: r.y, w: r.width, h: r.height };
       },
       seatRect: (seat) => {
-        const p = this.state.players.find((q) => q.seat === seat);
+        const p = this.state.players.find((q) => this.orient.seat(q.seat) === seat);
         const r = p ? this.rects.get(`p${p.id}`) : undefined;
         return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
       },
@@ -222,7 +230,7 @@ export class GameView {
     // Effects hold client positions: drop them on resize / rotation (they last ~1-2 s).
     this.stopFx();
     this.rects.clear();
-    const L = computeLayout(W, H, new Set(this.seats));
+    const L = computeLayout(W, H, new Set(this.seats), this.orient.fixed);
     // These viewport-relative boxes are already known from the layout. Reading them back from
     // the DOM during the first turn's FX forces the freshly mounted board through layout again.
     const b = L.board;
@@ -241,7 +249,7 @@ export class GameView {
     // Reuse the game's fixed 1K icon atlas across viewport and DPR changes.
     void prepareGameIcons(this.state.players, (L.board.w / 32) * 2.8, getBoard((this.state.settings.spacesPerSide ?? 7) as SpacesPerSide));
     for (const p of this.state.players) {
-      const box = L.seats[p.seat];
+      const box = L.seats[this.orient.seat(p.seat)];
       const panel = this.panels.get(p.id)!;
       if (box) {
         this.rects.set(`p${p.id}`, new DOMRect(box.x, box.y, box.w, box.h));
@@ -270,6 +278,18 @@ export class GameView {
 
   showInfo(i: number): void {
     this.stage.showInfo(spaceInfo(this.state, i));
+  }
+
+  /** Where a player is drawn (their panel's edge; the CPU hand and coins come from there). */
+  seatOf(pid: PlayerId): Seat {
+    const p = this.state.players[pid];
+    return p ? this.orient.seat(p.seat) : 'S';
+  }
+
+  /** The seat content for a player faces: their own (table) or S (fixed view). */
+  faceOf(pid: PlayerId): Seat {
+    const p = this.state.players[pid];
+    return p ? this.orient.face(p.seat) : 'S';
   }
 
   panel(pid: PlayerId): PlayerPanel | undefined {
