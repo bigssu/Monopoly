@@ -23,6 +23,11 @@ export interface SpriteDef {
   k?: number;
   /** True when content is meant to run to the sprite box edge (sweeps / fading lines); silences the baker's clip warning. */
   edgeOk?: boolean;
+  /** Keep the whole nominal box (no alpha trim): every frame is a same-size cell, so a DOM element can step
+   *  frames with `background-position` without showing neighbours. */
+  fixedBox?: boolean;
+  /** Also bake frame 0 as a standalone repeatable image `public/fx/tile-<name>.webp` (`background-repeat`). */
+  tile?: boolean;
   /** One SVG document per frame; viewBox must be `0 0 w h`. */
   svg: (i: number, n: number) => string;
 }

@@ -32,11 +32,11 @@ export async function launchChromium() {
 }
 
 /** Bundle the TypeScript sprite generators with esbuild (already a Vite dependency) and import them. */
-export async function loadSprites() {
+export async function loadSprites(entry = 'src/content/fx/sprites.ts') {
   const require = createRequire(import.meta.url);
   const esbuild = require('esbuild');
   const res = await esbuild.build({
-    entryPoints: [resolve(ROOT, 'src/content/fx/sprites.ts')],
+    entryPoints: [resolve(ROOT, entry)],
     bundle: true,
     write: false,
     format: 'esm',

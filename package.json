@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "fx:atlas": "node scripts/fx/bake.mjs",
+    "fx:atlas": "node scripts/fx/bake.mjs && node scripts/fx/bake-money.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "sim": "tsx scripts/balance.ts",
     "e2e": "playwright test",
