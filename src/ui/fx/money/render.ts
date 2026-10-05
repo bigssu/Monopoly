@@ -11,7 +11,7 @@
  * | tier | render scale | 3D tilt + board camera | peak layer memory budget |
  * |------|--------------|------------------------|--------------------------|
  * | high | 1.0          | on                     | 250 MB                   |
- * | mid  | 0.75         | on if P ≤ 4.1 M (§12.3)| 150 MB                   |
+ * | mid  | 0.75         | tilt if P ≤ 4.1 M (§12.3), no camera | 150 MB     |
  * | low  | 0.5          | off (2D)               | 100 MB                   |
  *
  * Auto tier (`pickTier`), from `navigator.deviceMemory` (GB, Chrome rounds it to 0.25 … 8; 8 means
@@ -117,7 +117,10 @@ export function resolveRender(o: { auto: MoneyTier; pixels?: number; stepDown?: 
     source = o.stepDown ? `auto −${o.stepDown}` : 'auto';
   }
   const tilt = o.fx3d === 'on' ? true : o.fx3d === 'off' ? false : tier3d(tier, o.pixels ?? 0);
-  return { tier, scale: TIER_SCALE[tier], tilt, camera: tilt, budgetMB: TIER_BUDGET_MB[tier], source };
+  // Mid keeps the hero tilt but not the board camera: the tilted board under a 3D cut-in added the
+  // overlap layer that made 21 at the cut-in's first frame (gate ≤ 20, docs/PERFORMANCE.md "라운드 2").
+  const camera = tilt && tier !== 'mid';
+  return { tier, scale: TIER_SCALE[tier], tilt, camera, budgetMB: TIER_BUDGET_MB[tier], source };
 }
 
 // ------------------------------------------------------------------------------------ safety net

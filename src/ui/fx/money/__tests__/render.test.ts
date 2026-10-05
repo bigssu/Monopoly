@@ -46,6 +46,9 @@ describe('resolveRender', () => {
     expect(resolveRender({ auto: 'high', res: 'low', dev: 'mid' })).toMatchObject({ tier: 'mid', source: 'dev' });
     expect(resolveRender({ auto: 'low', fx3d: 'on' })).toMatchObject({ tilt: true, camera: true });
     expect(resolveRender({ auto: 'high', fx3d: 'off' })).toMatchObject({ tilt: false, camera: false });
+    // Mid: the hero tilts, the board camera stays off (peak layers ≤ 20, PERFORMANCE.md "라운드 2").
+    expect(resolveRender({ auto: 'mid', pixels: 1280 * 800 * 1.5 * 1.5 })).toMatchObject({ tier: 'mid', tilt: true, camera: false });
+    expect(resolveRender({ auto: 'mid', fx3d: 'on' })).toMatchObject({ tilt: true, camera: false });
   });
 
   it('3D: always on high, on mid only up to 4.1 M device pixels, never on low', () => {

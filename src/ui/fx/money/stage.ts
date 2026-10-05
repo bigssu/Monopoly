@@ -491,6 +491,8 @@ export class MoneyStage implements TweenHost {
     }
     this.live = true;
     this.root.classList.add('is-live');
+    // The game under the cut-in drops what it does not need (stage.css: the dealer's layers).
+    this.host.parent.classList.add('is-money-live');
     this.dim.style.opacity = String(dim);
     if (!wasLive) {
       const k = this.scale;
@@ -576,12 +578,18 @@ export class MoneyStage implements TweenHost {
     for (const p of this.plaques) p.hide();
     this.heroIn.textContent = '';
     this.hero.style.opacity = '0';
+    // Drop the 3D context too: a tilted hero (and what is squashed above it) kept two layers alive
+    // off-screen between cut-ins. `measure()` sets both again for the next scene.
+    this.hero.style.transform = '';
+    this.scaler.classList.remove('is-3d');
+    this.scaler.style.perspective = '';
     this.stamp.className = 'ms-stamp';
     this.stamp.textContent = '';
     this.stamp.style.opacity = '0';
     for (const n of this.fxNodes) this.resetFx(n);
     this.fxFree = [...this.fxNodes];
     this.root.classList.remove('is-live');
+    this.host.parent.classList.remove('is-money-live');
     this.root.style.opacity = '';
     this.root.style.transform = '';
     const was = this.live;
