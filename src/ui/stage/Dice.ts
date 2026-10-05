@@ -6,7 +6,7 @@ import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, D, headless, isSkipping, onFrame } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
-import { h, svg } from '@/ui/game/util';
+import { h } from '@/ui/game/util';
 import { EASE } from '@/ui/fx/motion';
 
 const PIPS: Record<number, Array<[number, number]>> = {
@@ -358,9 +358,11 @@ export class Dice {
     await this.tumble([this.dice[0].plan(a, 0, 1), this.dice[1].plan(b, 60, -1)]);
     sfx.play('dice-land');
     haptic('light');
-    this.readout.innerHTML =
-      `<span class="dr-face">${svg(`dice-face-${a}`)}</span><span class="dr-face">${svg(`dice-face-${b}`)}</span>` +
-      `<b class="dr-total">${total}</b>`;
+    // The total sits BESIDE the dice (a badge to the right), never over or under them: the
+    // dice themselves show the faces, so a player can see doubles at a glance. The old readout
+    // (mini faces + total below the pair) overlapped the dice whenever a prompt squeezed the
+    // dice area on a tablet.
+    this.readout.innerHTML = `<b class="dr-total">${total}</b>`;
     if (doubles) {
       this.el.classList.add('is-doubles');
       sfx.play('doubles');
