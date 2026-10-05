@@ -76,7 +76,8 @@ describe('money cut-in beats (≥ 3 s, anticipation, still hold)', () => {
       expect(r.at.done! - r.at.settle!).toBeLessThanOrEqual(11);
       // A repeated event of the same kind in a turn plays shorter, but never under the floor.
       const t = await run(fn, kind);
-      expect(t.frames / 30, `${name} ×0.7`).toBeGreaterThanOrEqual(MIN_SCENE_MS / 1000 - 0.05);
+      // (The requirement is 3.0 s; MIN_SCENE_MS = 3.1 s leaves a margin.)
+      expect(t.frames / 30, `${name} ×0.7: ${(t.frames / 30).toFixed(2)} s`).toBeGreaterThanOrEqual(3.0);
       expect(t.frames).toBeLessThanOrEqual(r.frames);
     });
   }

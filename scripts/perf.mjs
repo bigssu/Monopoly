@@ -75,6 +75,8 @@ const CFG = {
   json: opt('json', null),
   /** Extra dev query for every game page, e.g. `--query mcam=3d` (money cut-in board camera). */
   query: opt('query', null),
+  /** Viewport (CSS px), e.g. `--viewport 1280x800 --dpr 1.5` (money tiers per device, MONEY-EVENTS §12). */
+  viewport: String(opt('viewport', '1600x1000')).split('x').map(Number),
 };
 const DEV = '/?dev=1' + (CFG.query ? `&${CFG.query}` : '');
 if (opt('full', false) && !CFG.phases.includes('full')) CFG.phases.push('full');
@@ -123,11 +125,12 @@ if (!CFG.url) {
   if (!up) throw new Error(`preview server did not start on ${base} (run \`npx vite build\` first)`);
 }
 const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
-const out = { cpuThrottle: `${CFG.throttle}x`, dpr: CFG.dpr, viewport: [1600, 1000], chromium: browser.version() };
+const [VW, VH] = CFG.viewport;
+const out = { cpuThrottle: `${CFG.throttle}x`, dpr: CFG.dpr, viewport: [VW, VH], chromium: browser.version() };
 const log = (...a) => console.error(...a);
 
 async function newPage(throttle = CFG.throttle) {
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: CFG.dpr });
+  const ctx = await browser.newContext({ viewport: { width: VW, height: VH }, deviceScaleFactor: CFG.dpr });
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
   if (throttle > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
@@ -438,6 +441,8 @@ if (CFG.phases.includes('layers')) {
   await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, true), 20260929));
   await page.waitForFunction(() => window.__lotAndRoll.getState(), null, { timeout: 30000 });
   await page.waitForTimeout(2500);
+  // The money stage's render tier for this device (MONEY-EVENTS §12): its layer-memory budget is the gate.
+  const tier0 = await page.evaluate(() => window.__lotAndRoll.money?.() ?? null);
   const counts = [];
   let peak = 0;
   let peakMB = 0;
@@ -495,6 +500,7 @@ if (CFG.phases.includes('layers')) {
     layoutMaxMs: tr.layoutMaxMs,
     peakMemoryLayers: peakLayersList,
     peakMemoryDuring: peakDuring,
+    moneyTier: tier0 ? { start: `${tier0.tier} ×${tier0.scale}${tier0.tilt ? ' 3D' : ' 2D'} (${tier0.source})`, budgetMB: tier0.budgetMB, end: await page.evaluate(() => { const m = window.__lotAndRoll.money(); return m ? `${m.tier} ×${m.scale}${m.tilt ? ' 3D' : ' 2D'} (${m.source}; cut-ins ${m.health.join(',')})` : '-'; }).catch(() => '-') } : null,
   };
   log('layers', JSON.stringify(out.layers));
   await ctx.close();
@@ -864,7 +870,9 @@ if (out.layers) {
   const L = out.layers;
   gate('C  peak layers <= 20 (4x play)', L.peakLayers <= 20, `${L.peakLayers} (median ${L.medianLayers})`);
   gate('C  median layers <= 25', L.medianLayers <= 25, `${L.medianLayers}`);
-  gate('C  peak layer memory <= 100 MB', L.peakLayerMemoryMB <= 100, `${L.peakLayerMemoryMB} MB`);
+  // Per money tier (docs/MONEY-EVENTS.md §12): low 100 MB, mid 150 MB, high 250 MB; 100 MB without a stage.
+  const budget = L.moneyTier?.budgetMB ?? 100;
+  gate(`C  peak layer memory <= ${budget} MB (money tier ${L.moneyTier?.start ?? '-'})`, L.peakLayerMemoryMB <= budget, `${L.peakLayerMemoryMB} MB`);
   gate('C  Paint <= 20/s (4x play)', L.paintsPerSec <= 20, `${L.paintsPerSec}/s`);
   gate('C  no forced layout > 50 ms during play', L.layoutMaxMs <= 50, `max Layout ${L.layoutMaxMs} ms`);
 }

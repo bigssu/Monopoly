@@ -2,14 +2,21 @@
  * The money stage (docs/MONEY-EVENTS.md §2): ONE full-screen layer for money cut-ins, created once,
  * parked off-screen by a transform while idle (no show/hide paint, no compositor layer, no timers).
  *
- *   .money-stage   root: static vignette + dim (opacity-composited only while live)
- *     .ms-hero     the zoomed hero picture (city, plot, vault, bank…), leaning back by a
- *                  foreshortened 2D scale (no 3D: see money.css)
- *     .ms-wallets  four wallet piles, one per seat edge, rotated to face their seat (over the hero);
- *                  fixed view (`MoneyHost.upright`): upright, each standing on its seat's panel
- *     .ms-fg       plaques, one-shot sprites, the flying-coin pool
+ *   .money-stage   root: positions + fades the stage (opacity), parked off-screen while idle
+ *     .ms-scaler   THE compositor layer while live: laid out at render scale s × the screen and
+ *                  scaled by 1/s (`will-change: transform`), so Chromium rasterizes it at s × the
+ *                  device resolution — s² of the memory (render.ts, MONEY-EVENTS §12)
+ *       .ms-dim      static vignette + dim
+ *       .ms-hero     the zoomed hero picture (city, plot, vault, bank…); with 3D on it tilts back
+ *                    (rotateX, its own layer), else a foreshortened 2D scale
+ *       .ms-top      (3D: its own layer above the hero, raster scale held like the scaler's)
+ *         .ms-wallets  four wallet piles, one per seat edge, rotated to face their seat (over the hero);
+ *                      fixed view (`MoneyHost.upright`): upright, each standing on its seat's panel
+ *         .ms-fg       plaques, one-shot sprites, the flying-coin pool
  *
- * Extra compositor layers while a scene runs: the root only (= 1); idle: 0.
+ * All stage geometry (`geom`, `local()`) is in the scaler's px (= screen px × s).
+ * Extra compositor layers while a scene runs: the scaler (2D) or scaler + hero + the squashed
+ * wallets / coins above it (3D); idle: 0.
  *
  * The stage knows nothing about the game: the wiring injects a host (rect providers for the seat
  * panels / board / tiles, space art, and a board-camera callback). Everything moves on one
@@ -185,10 +192,14 @@ export class Plaque {
 }
 
 const N_FX = 8;
+/** Frames the stage holds at its small layout size so its layers rasterize there (render scale < 1). */
+export const RASTER_HOLD_F = 3;
 const N_PLAQUES = 4;
 
 export class MoneyStage implements TweenHost {
   readonly root: HTMLElement;
+  /** The scaled container (render scale, MONEY-EVENTS §12). */
+  readonly scaler: HTMLElement;
   readonly dim: HTMLElement;
   readonly wallets: Record<Seat, Wallet>;
   readonly hero: HTMLElement;
@@ -213,6 +224,15 @@ export class MoneyStage implements TweenHost {
   private played = new Set<string>();
   /** Diagnostics: scenes run, last scene's peak flying coins. */
   stats = { scenes: 0, peakFlying: 0, peakNodes: 0 };
+  /** Render scale of the stage's layer (1 = device resolution; render.ts tiers). */
+  scale = 1;
+  /** The hero tilts back in 3D (and the scaler keeps a perspective). */
+  tilt = false;
+  private pending: { scale: number; tilt: boolean } | null = null;
+  /** Called with each scene-clock step's JS ms and the real ms since the previous step (frame health). */
+  monitor: ((stepMs: number, gapMs: number) => void) | null = null;
+  /** Called when a cut-in has gone down (not when kept up for a follow-up). */
+  onCutInEnd: (() => void) | null = null;
 
   constructor(readonly host: MoneyHost) {
     const doc = host.parent.ownerDocument;
@@ -222,6 +242,7 @@ export class MoneyStage implements TweenHost {
       return e;
     };
     this.root = el('money-stage');
+    this.scaler = el('ms-scaler');
     this.root.setAttribute('aria-hidden', 'true');
     if (host.zIndex !== undefined) this.root.style.zIndex = String(host.zIndex);
     this.dim = el('ms-dim');
@@ -253,7 +274,12 @@ export class MoneyStage implements TweenHost {
     }
     this.coins = new CoinPool(this.fg, () => this.clock);
     // Wallets over the hero: a zoomed-in hero reaches into the seat edges; the piles stay readable.
-    this.root.append(this.dim, this.hero, walletLayer, this.fg);
+    // Wallets and coins in one container: with 3D on it is the one layer above the tilted hero, and
+    // `will-change` holds its raster scale too (money.css).
+    const top = el('ms-top');
+    top.append(walletLayer, this.fg);
+    this.scaler.append(this.dim, this.hero, top);
+    this.root.append(this.scaler);
     host.parent.append(this.root);
     void loadMoneyAtlas();
   }
@@ -334,28 +360,59 @@ export class MoneyStage implements TweenHost {
 
   // ------------------------------------------------------------------ lifecycle
 
+  /**
+   * Render scale and 3D for the next cut-in (a cut-in in progress keeps its own: it is measured once).
+   * Takes effect at once when the stage is parked.
+   */
+  setRender(o: { scale: number; tilt: boolean }): void {
+    const scale = Math.min(1, Math.max(0.25, o.scale));
+    if (this.live) this.pending = { scale, tilt: o.tilt };
+    else {
+      this.scale = scale;
+      this.tilt = o.tilt;
+    }
+  }
+
   /** Measure the layout (one rect read per scene). */
   measure(): StageGeom {
+    if (this.pending) {
+      this.scale = this.pending.scale;
+      this.tilt = this.pending.tilt;
+      this.pending = null;
+    }
+    const k = this.scale;
     const pr = this.host.parent.getBoundingClientRect();
     this.origin = { x: pr.left, y: pr.top };
-    const W = pr.width || (typeof innerWidth === 'number' ? innerWidth : 1600);
-    const H = pr.height || (typeof innerHeight === 'number' ? innerHeight : 1000);
+    const W0 = pr.width || (typeof innerWidth === 'number' ? innerWidth : 1600);
+    const H0 = pr.height || (typeof innerHeight === 'number' ? innerHeight : 1000);
+    // The scaler is laid out at k × the screen and scaled back up (MONEY-EVENTS §12).
+    const sc = this.scaler.style;
+    sc.width = `${(W0 * k).toFixed(1)}px`;
+    sc.height = `${(H0 * k).toFixed(1)}px`;
+    // Scale 1 first: see `open()` (the raster scale is fixed by the first raster at this size).
+    sc.transform = '';
+    sc.perspective = this.tilt ? `${Math.round(1200 * k)}px` : '';
+    this.scaler.classList.toggle('is-3d', this.tilt);
+    const W = W0 * k;
+    const H = H0 * k;
     const S = Math.min(W, H);
     const b = this.host.boardRect?.() ?? null;
-    const c = b ? { x: b.x - pr.left + b.w / 2, y: b.y - pr.top + b.h / 2 } : { x: W / 2, y: H / 2 };
+    const c = b ? { x: (b.x - pr.left + b.w / 2) * k, y: (b.y - pr.top + b.h / 2) * k } : { x: W / 2, y: H / 2 };
     // Zoomed in to fill the screen (MONEY-EVENTS §11): wallet coins ≈ 9 % of the short side (a
     // readable pile ≈ 18–25 % tall at its seat edge), the hero box 80 % (its picture ≈ 60–65 %).
-    const coin = Math.round(Math.min(120, Math.max(30, S * 0.09)));
-    const hero = Math.round(S * 0.8);
+    const S0 = S / k;
+    const coin = Math.min(120, Math.max(30, S0 * 0.09)) * k;
+    const hero = Math.round(S0 * 0.8 * k);
     this.geom = { W, H, S, c, coin, hero };
     this.coins.center = c;
-    this.root.style.setProperty('--pu', `${Math.max(9, S * 0.026).toFixed(1)}px`);
+    this.root.style.setProperty('--pu', `${(Math.max(9, S0 * 0.026) * k).toFixed(2)}px`);
     return this.geom;
   }
 
   /** Client rect → stage-local rect. */
   local(r: Rect): Rect {
-    return { x: r.x - this.origin.x, y: r.y - this.origin.y, w: r.w, h: r.h };
+    const k = this.scale;
+    return { x: (r.x - this.origin.x) * k, y: (r.y - this.origin.y) * k, w: r.w * k, h: r.h * k };
   }
 
   /** True when the cut-in faces S whatever the seat (fixed view). */
@@ -405,6 +462,7 @@ export class MoneyStage implements TweenHost {
     this.releaseClock();
     this.clock = new MoneyClock();
     this.clock.factor = factor;
+    this.clock.monitor = this.monitor;
     this.coins.hidden = this.reduced();
     this.coins.seed(4242 + this.stats.scenes * 17);
     this.coins.peakFlying = 0;
@@ -421,8 +479,25 @@ export class MoneyStage implements TweenHost {
     this.root.classList.add('is-live');
     this.dim.style.opacity = String(dim);
     if (!wasLive) {
-      this.root.style.opacity = '0';
-      void this.tween(f(5), (u) => (this.root.style.opacity = String(easeOutCubic(u))));
+      const k = this.scale;
+      if (k < 1 && !this.reduced()) {
+        // Render scale (MONEY-EVENTS §12.2, measured with scripts/fx/money-raster.mjs): Chromium picks a
+        // layer's raster scale at its first raster and keeps it for `will-change: transform` layers.
+        // So the stage first shows (all but transparent) at its small layout size for RASTER_HOLD_F
+        // frames, and only then is scaled up by 1/k: it stays rasterized at k × the device resolution
+        // (k² of the memory). Laid out small and scaled at once, it was rasterized at full resolution.
+        this.root.style.opacity = '0.01';
+        const c = this.clock;
+        void c.until(f(RASTER_HOLD_F)).then(() => {
+          if (this.clock !== c) return;
+          this.scaler.style.transform = `scale(${(1 / k).toFixed(5)})`;
+          void this.tween(f(5), (u) => (this.root.style.opacity = String(Math.max(0.01, easeOutCubic(u)))));
+        });
+      } else {
+        this.scaler.style.transform = k === 1 ? '' : `scale(${(1 / k).toFixed(5)})`;
+        this.root.style.opacity = '0';
+        void this.tween(f(5), (u) => (this.root.style.opacity = String(easeOutCubic(u))));
+      }
       this.host.camera?.('in', tier, f(6));
     }
     return true;
@@ -493,7 +568,14 @@ export class MoneyStage implements TweenHost {
     this.root.classList.remove('is-live');
     this.root.style.opacity = '';
     this.root.style.transform = '';
+    const was = this.live;
     this.live = false;
+    if (this.pending) {
+      this.scale = this.pending.scale;
+      this.tilt = this.pending.tilt;
+      this.pending = null;
+    }
+    if (was) this.onCutInEnd?.();
   }
 
   // ------------------------------------------------------------------ parts
@@ -508,13 +590,13 @@ export class MoneyStage implements TweenHost {
     if (!r) return null;
     const { W, H, S, c, coin } = this.geom;
     const m = Math.max(4, S * 0.012);
-    const g = walletGeom(coin);
+    const g = walletGeom(coin, 20 * this.scale);
     const l = this.local(r);
     const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
     const x = clamp(l.x + l.w / 2, m + g.w / 2, Math.max(m + g.w / 2, W - m - g.w / 2));
     const y = clamp(l.y + l.h / 2 + g.h / 2, Math.min(H - m, m + g.h), H - m);
     const left = x < c.x;
-    return { anchor: { x, y }, slide: { out: { x: left ? -1 : 1, y: 0 }, hide: (left ? x : W - x) + g.w / 2 + 24 } };
+    return { anchor: { x, y }, slide: { out: { x: left ? -1 : 1, y: 0 }, hide: (left ? x : W - x) + g.w / 2 + 24 * this.scale } };
   }
 
   /** Set up and raise a seat's wallet. */
@@ -522,8 +604,8 @@ export class MoneyStage implements TweenHost {
     const w = this.wallets[seat];
     if (!w.visible) {
       const up = this.host.upright ? this.uprightSpot(seat) : null;
-      const slide: UprightSlide | undefined = up?.slide ?? (this.host.upright ? { out: { x: 0, y: 1 }, hide: walletGeom(this.geom.coin).h + 24 } : undefined);
-      w.setup({ seat, color, cash, anchor: up?.anchor ?? this.seatAnchor(seat), coin: this.geom.coin, upright: slide });
+      const slide: UprightSlide | undefined = up?.slide ?? (this.host.upright ? { out: { x: 0, y: 1 }, hide: walletGeom(this.geom.coin, 20 * this.scale).h + 24 * this.scale } : undefined);
+      w.setup({ seat, color, cash, anchor: up?.anchor ?? this.seatAnchor(seat), coin: this.geom.coin, upright: slide, minLabel: 20 * this.scale });
       if (raise) void w.enter(this);
     }
     return w;
@@ -546,10 +628,13 @@ export class MoneyStage implements TweenHost {
     const g = this.geom;
     // Lean-back without 3D: the picture is foreshortened along the facing seat's axis (cos rx), and
     // pivots on its lower part so it seems to rise as it straightens (no compositor layer).
-    const sy = h.s * Math.cos((h.rx * Math.PI) / 180);
-    this.hero.style.transform =
-      `translate(${(h.x - g.hero / 2).toFixed(1)}px,${(h.y - g.hero / 2).toFixed(1)}px) rotate(${h.rz}deg)` +
-      ` scale(${h.s.toFixed(4)},${sy.toFixed(4)})`;
+    // With 3D on (render tier, MONEY-EVENTS §12) it really tilts back (rotateX, its own layer).
+    const at = `translate(${(h.x - g.hero / 2).toFixed(1)}px,${(h.y - g.hero / 2).toFixed(1)}px) rotate(${h.rz}deg)`;
+    if (this.tilt) this.hero.style.transform = `${at} rotateX(${h.rx.toFixed(2)}deg) scale(${h.s.toFixed(4)})`;
+    else {
+      const sy = h.s * Math.cos((h.rx * Math.PI) / 180);
+      this.hero.style.transform = `${at} scale(${h.s.toFixed(4)},${sy.toFixed(4)})`;
+    }
     this.hero.style.opacity = h.o.toFixed(3);
   }
 
@@ -565,8 +650,9 @@ export class MoneyStage implements TweenHost {
   }
 
   /** Shake the whole stage (circular, direction-neutral; px, frames). */
-  shake(px: number, frames = 8): Promise<void> {
-    if (!px) return Promise.resolve();
+  shake(px0: number, frames = 8): Promise<void> {
+    if (!px0) return Promise.resolve();
+    const px = px0 * this.scale;
     return this.tween(f(frames), (u) => {
       const a = u * Math.PI * 7;
       const k = px * (1 - u) ** 2;

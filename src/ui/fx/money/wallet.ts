@@ -50,12 +50,12 @@ export interface WalletGeom {
   h: number;
 }
 
-export function walletGeom(coin: number): WalletGeom {
+export function walletGeom(coin: number, minLabel = 20): WalletGeom {
   const slice = coin * SLICE_K;
   const cap = coin * CAP_K;
   const gap = coin * 0.2;
   const pad = coin * 0.28;
-  const label = Math.max(20, coin * 0.64);
+  const label = Math.max(minLabel, coin * 0.64);
   const w = 3 * coin + 2 * gap + 2 * pad;
   const h = label + pad * 0.6 + MAX_VIS * slice + cap + pad * 0.4;
   return { coin, slice, cap, gap, pad, label, w, h };
@@ -122,14 +122,14 @@ export class Wallet {
   }
 
   /** Set up for a scene: seat, colour, cash, geometry; hidden below its edge until `enter`. */
-  setup(o: { seat: Seat; color: string; cash: number; anchor: Pt; coin: number; upright?: UprightSlide }): void {
+  setup(o: { seat: Seat; color: string; cash: number; anchor: Pt; coin: number; upright?: UprightSlide; minLabel?: number }): void {
     this.seat = o.seat;
     this.color = o.color;
     this.anchor = o.anchor;
     this.rot = o.upright ? 0 : SEAT_ROT[o.seat];
     this.out = o.upright?.out ?? DOWN;
     this.hideBy = o.upright?.hide ?? 0;
-    this.g = walletGeom(o.coin);
+    this.g = walletGeom(o.coin, o.minLabel);
     this.pile = pileOf(o.cash);
     this.shown = this.target = Math.max(0, Math.round(o.cash));
     this.countMs = 0;

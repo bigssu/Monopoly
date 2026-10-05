@@ -1,5 +1,5 @@
 /**
- * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality, game pace, turn pause, dealer).
+ * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality, game pace, turn pause, dealer, money cut-in resolution / 3D).
  *
  *   prefs.get().sound
  *   prefs.set({ volume: 0.6 })
@@ -38,7 +38,16 @@ export interface Prefs {
   fxNative: boolean;
   /** Animations: full, or reduced (no movement, same timing). The device setting is not read. */
   motion: MotionPref;
+  /** Money cut-in render resolution (docs/MONEY-EVENTS.md §12): auto by device, or forced high / low. */
+  moneyRes: MoneyResPref;
+  /** Money cut-in 3D (hero tilt + board camera): auto by device tier, or forced on / off. */
+  money3d: Money3dPref;
 }
+
+export const MONEY_RES_PREFS = ['auto', 'high', 'low'] as const;
+export type MoneyResPref = (typeof MONEY_RES_PREFS)[number];
+export const MONEY_3D_PREFS = ['auto', 'on', 'off'] as const;
+export type Money3dPref = (typeof MONEY_3D_PREFS)[number];
 
 export const MOTION_PREFS = ['full', 'reduced'] as const;
 export type MotionPref = (typeof MOTION_PREFS)[number];
@@ -80,7 +89,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full' };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto' };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -102,6 +111,8 @@ function sanitize(raw: unknown): Prefs {
     music: typeof r.music === 'boolean' ? r.music : d.music,
     fxNative: r.fxNative === true,
     motion: MOTION_PREFS.includes(r.motion as MotionPref) ? (r.motion as MotionPref) : d.motion,
+    moneyRes: MONEY_RES_PREFS.includes(r.moneyRes as MoneyResPref) ? (r.moneyRes as MoneyResPref) : d.moneyRes,
+    money3d: MONEY_3D_PREFS.includes(r.money3d as Money3dPref) ? (r.money3d as Money3dPref) : d.money3d,
   };
 }
 

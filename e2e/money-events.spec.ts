@@ -33,9 +33,9 @@ function watchConsole(page: Page): string[] {
   return errors;
 }
 
-async function boot(page: Page, w: number, h: number): Promise<void> {
+async function boot(page: Page, w: number, h: number, query = ''): Promise<void> {
   await page.setViewportSize({ width: w, height: h });
-  await page.goto('/?dev=1');
+  await page.goto(`/?dev=1${query}`);
   await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
   await page.evaluate(() => document.fonts.ready);
 }
@@ -357,6 +357,71 @@ test('CPU buy: the hand presses and leaves, then the cut-in plays (no overlap)',
   const L = await log(page);
   expect(L[0]!.scene).toBe('purchase');
   expect(errors, errors.join('\n')).toEqual([]);
+});
+
+test.describe('render tiers (MONEY-EVENTS §13)', () => {
+  test.use({ viewport: { width: 1600, height: 1000 } });
+
+  for (const tier of ['high', 'mid', 'low'] as const) {
+    test(`tier ${tier}: the cut-in plays at its render scale and parks`, async ({ page }) => {
+      test.setTimeout(90_000);
+      const errors = watchConsole(page);
+      await boot(page, 1600, 1000, `&mres=${tier}`);
+      await craft(page, 'S', TOLL);
+      const info = await page.evaluate(() => window.__lotAndRoll!.money()!);
+      expect(info.tier).toBe(tier);
+      expect(info.scale).toBe({ high: 1, mid: 0.75, low: 0.5 }[tier]);
+      const r = await act(page, 'Roll');
+      expect(r.sawStage, 'stage up').toBe(true);
+      const toll = (await log(page)).find((e) => e.scene === 'toll')!;
+      await expectWalletsMatch(page, toll);
+      await expectParked(page);
+      expect(errors, errors.join('\n')).toEqual([]);
+    });
+  }
+
+  test('low vs high: same layout, only the resolution differs (screenshots)', async ({ page }) => {
+    test.setTimeout(120_000);
+    const rects: Record<string, unknown> = {};
+    for (const tier of ['high', 'low'] as const) {
+      // 3D off on both: the high tier would tilt the hero (a different box), this compares resolution only.
+      await boot(page, 1600, 1000, `&mres=${tier}&m3d=0`);
+      await craft(page, 'S', TOLL, true);
+      await page.evaluate(() => {
+        const hook = window.__lotAndRoll!;
+        hook.manualClock(true);
+        void hook.dispatch({ type: 'Roll', playerId: hook.getState()!.current });
+      });
+      // Step to the moment the total locks in on the city (same scene frame on both tiers).
+      for (let k = 0; k < 400; k++) {
+        await page.evaluate(() => window.__lotAndRoll!.stepFrames(2));
+        const t = await page.evaluate(() => window.__lotAndRoll!.money()!.t);
+        if (t >= 1700) break;
+      }
+      writeFileSync(`${SHOTS}/money-tier-${tier}-1600x1000.png`, await page.screenshot());
+      rects[tier] = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.money-stage .mw.is-on, .money-stage .ms-hero, .money-stage .ms-plq')]
+          .filter((e) => getComputedStyle(e).opacity !== '0')
+          .map((e) => {
+            const b = e.getBoundingClientRect();
+            return [e.className.split(' ')[0], Math.round(b.x / 4), Math.round(b.y / 4), Math.round(b.width / 4), Math.round(b.height / 4)].join(' ');
+          }),
+      );
+      await page.evaluate(() => window.__lotAndRoll!.stepFrames(200));
+      await page.evaluate(() => window.__lotAndRoll!.manualClock(false));
+    }
+    // Same boxes on both tiers (units of 4 px, ±1 for text metrics at the smaller size): the stage
+    // is laid out at s × size and scaled back.
+    const lo = rects.low as string[];
+    const hi = rects.high as string[];
+    expect(lo.length).toBe(hi.length);
+    lo.forEach((r, i) => {
+      const a = r.split(' ');
+      const b = hi[i]!.split(' ');
+      expect(a[0]).toBe(b[0]);
+      for (let k = 1; k < 5; k++) expect(Math.abs(Number(a[k]) - Number(b[k])), `${r} vs ${hi[i]}`).toBeLessThanOrEqual(1);
+    });
+  });
 });
 
 // ------------------------------------------------------------------------------------- filmstrips

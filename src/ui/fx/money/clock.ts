@@ -11,7 +11,7 @@
  * The clock registers ONE frame step while something waits on it and unregisters itself when idle
  * (zero idle cost). Headless (speed 0) scenes never start a clock: they resolve at once.
  */
-import { animSpeed, gamePace, isHeld, isSkipping, onFrame, whenRunning } from '../time';
+import { animSpeed, gamePace, isHeld, isManualClock, isSkipping, onFrame, whenRunning } from '../time';
 
 /** One 30 fps frame (ms): research / spec beats are written in frames. */
 export const FRAME = 1000 / 30;
@@ -38,6 +38,8 @@ export class MoneyClock {
   t = 0;
   /** Duration multiplier of this scene (0.7 = turbo). */
   factor = 1;
+  /** Frame health (render.ts MoneyHealth): JS ms of each step and real ms since the previous one. */
+  monitor: ((stepMs: number, gapMs: number) => void) | null = null;
   private last = NaN;
   private stopTick: (() => void) | null = null;
   private ticks = new Set<SceneTick>();
@@ -108,7 +110,18 @@ export class MoneyClock {
   }
 
   private step(now: number): boolean {
-    if (!clockPerf.on) return this.stepInner(now);
+    if (this.monitor && !isManualClock()) {
+      // The first step after (re)arming has no previous frame: no gap sample (pause / resume).
+      const prev = this.last;
+      const t0 = performance.now();
+      const keep = clockPerf.on ? this.stepPerf(now) : this.stepInner(now);
+      if (!Number.isNaN(prev)) this.monitor(performance.now() - t0, now - prev);
+      return keep;
+    }
+    return clockPerf.on ? this.stepPerf(now) : this.stepInner(now);
+  }
+
+  private stepPerf(now: number): boolean {
     const t0 = performance.now();
     const keep = this.stepInner(now);
     const ms = performance.now() - t0;

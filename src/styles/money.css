@@ -1,10 +1,12 @@
-/* Money stage (src/ui/fx/money, docs/MONEY-EVENTS.md §2–§3, §11).
-   One full-screen layer, parked off-screen by a transform while idle (no layer, no paint).
-   While a scene runs the root (opacity) is the ONLY compositor layer: the hero is 2D (its lean-back
-   is a foreshortened scale) and the wallets / coins / plaques paint into the root. A 3D hero forced
-   everything above it (wallets, coins) into further full-screen layers: 211 MB peak layer memory on
-   the real board vs the 100 MB gate (§11.4). Only transform / opacity move; everything else is set
-   once per scene or per coin event. */
+/* Money stage (src/ui/fx/money, docs/MONEY-EVENTS.md §2–§3, §11–§12).
+   One layer, parked off-screen by a transform while idle (no layer, no paint). While a scene runs
+   the SCALER is the compositor layer: laid out at render scale s × the screen and scaled by 1/s with
+   `will-change: transform`, Chromium rasterizes it at its layout size × DPR (cc contents_scale =
+   DPR, measured §12.2): s² of the memory, pixels show at s < 1 (accepted). The root only fades.
+   With 3D on the hero tilts back (rotateX) and becomes its own layer, and the wallets / coins above
+   it are squashed into one more; with 3D off the hero leans back by a 2D foreshortening and the
+   scaler is the only layer. Only transform / opacity move; everything else is set once per scene
+   or per coin event. */
 
 .money-stage {
   position: absolute;
@@ -16,7 +18,24 @@
   transform: translateX(-400vw);
   --pu: 10px;
 }
-.money-stage.is-live { transform: none; will-change: opacity; }
+.money-stage.is-live { transform: none; }
+.ms-scaler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+/* Keeps the low raster scale: without it the content is painted into the page at full resolution. */
+.money-stage.is-live .ms-scaler { will-change: transform; }
+.ms-top { position: absolute; inset: 0; overflow: hidden; }
+/* Something to raster during the hold (wallets start hidden): the raster scale is chosen then. */
+.ms-top::before { content: ''; position: absolute; left: 0; top: 0; width: 2px; height: 2px; background: rgba(0, 0, 0, 0.01); }
+/* 3D: the tilted hero is a layer, so what is above it (wallets, coins, plaques) is one more; hold its
+   raster scale as well (else Chromium re-rasterizes it at full resolution, measured §12.2). */
+.money-stage.is-live .ms-scaler.is-3d .ms-top { will-change: transform; }
 
 /* Static vignette + dim (opacity set once per scene from the tier). */
 .ms-dim {

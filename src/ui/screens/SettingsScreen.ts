@@ -12,7 +12,7 @@ import { confirmDialog, openDialog, toast } from '@/ui/shell/dialog';
 import { markdownToHtml } from '@/ui/shell/markdown';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, savedGameSummary } from '@/ui/shell/persist';
-import { DEALER_PREFS, fxQualityOn, GAME_PACES, MOTION_PREFS, prefs, TURN_PAUSES, type DealerPref, type MotionPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
+import { DEALER_PREFS, fxQualityOn, GAME_PACES, MONEY_3D_PREFS, MONEY_RES_PREFS, MOTION_PREFS, prefs, TURN_PAUSES, type DealerPref, type Money3dPref, type MoneyResPref, type MotionPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
 import { isNative } from '@/ui/shell/capacitor';
 import { segmented, switcher } from '@/ui/shell/widgets';
 import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
@@ -118,6 +118,20 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       { label: t('settings.fx'), focusKey: 'effects' },
     );
 
+    // Money cut-ins (docs/MONEY-EVENTS.md §12): render resolution and 3D, auto by device.
+    const mres = segmented<MoneyResPref>(
+      MONEY_RES_PREFS.map((v) => ({ value: v, label: t(`settings.moneyRes.${v}`) })),
+      p.moneyRes,
+      (v) => prefs.set({ moneyRes: v }),
+      { label: t('settings.moneyRes'), focusKey: 'moneyRes' },
+    );
+    const m3d = segmented<Money3dPref>(
+      MONEY_3D_PREFS.map((v) => ({ value: v, label: t(`settings.money3d.${v}`) })),
+      p.money3d,
+      (v) => prefs.set({ money3d: v }),
+      { label: t('settings.money3d'), focusKey: 'money3d' },
+    );
+
     const pace = segmented<GamePacePref>(
       GAME_PACES.map((v) => ({ value: v, label: t(`settings.pace.${v}`) })),
       p.gamePace,
@@ -174,6 +188,8 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
         t('settings.batterySaverHint'),
       ),
       row(SPARKLE_SVG, t('settings.fx'), fxq, t(isNative() ? 'settings.fxHintNative' : 'settings.fxHint')),
+      row('coin', t('settings.moneyRes'), mres, t('settings.moneyResHint')),
+      row('coin', t('settings.money3d'), m3d, t('settings.money3dHint')),
     );
 
     const summary = savedGameSummary();

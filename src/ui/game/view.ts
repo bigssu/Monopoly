@@ -23,6 +23,12 @@ import { fxQualityOn, prefs } from '@/ui/shell/prefs';
 import { isNative } from '@/ui/shell/capacitor';
 import { Dealer } from '@/ui/dealer/Dealer';
 import { MoneyStage, type Rect as MoneyRect } from '@/ui/fx/money';
+import { currentDevice, devicePixels, MoneyHealth, pickTier, resolveRender, stepsBelow, type MoneyRender, type MoneyTier } from '@/ui/fx/money/render';
+
+/** Frame health of money cut-ins for the whole app session (the runtime safety net, render.ts). */
+const moneyHealth = new MoneyHealth();
+/** Tier changes the safety net made this session (dev hook). */
+const MONEY_TIER_LOG: string[] = [];
 import { groupColor, spaceIcon } from './util';
 import { DealerDirector } from '@/ui/dealer/director';
 import { orientationFor, type Orientation } from '@/ui/orientation';
@@ -67,6 +73,10 @@ export class GameView {
   /** Fixed view (one human vs CPUs) or the table-top model: src/ui/orientation.ts. */
   readonly orient: Orientation;
   /** Drawn seats of the players (engine seats remapped by `orient`). */
+  /** What the money stage renders with now (tier, scale, 3D, budget; render.ts). */
+  moneyRender: MoneyRender | null = null;
+  private moneyAuto: MoneyTier = 'mid';
+  private stopMoneyPrefs: () => void = () => {};
   readonly seats: Seat[];
   layout: GameLayout | null = null;
   /** Called when the device flips between portrait and landscape. */
@@ -162,6 +172,50 @@ export class GameView {
     );
     this.root.append(this.table, this.fx, this.menuSlot, this.rotateOverlay);
     this.money = this.createMoneyStage(spacesPerSide);
+    this.moneyAuto = pickTier(currentDevice());
+    this.updateMoneyRender();
+    this.money.onCutInEnd = () => this.judgeCutIn();
+    this.stopMoneyPrefs = prefs.onChange((n, prev) => {
+      if (n.moneyRes !== prev.moneyRes || n.money3d !== prev.money3d) this.updateMoneyRender();
+    });
+  }
+
+  /** Resolve the money stage's render tier (auto / safety net / settings / dev) and apply it. */
+  updateMoneyRender(): void {
+    const q = isDevHook() ? new URLSearchParams(location.search) : null;
+    const devTier = q?.get('mres');
+    const dev3d = q?.get('m3d');
+    const p = prefs.get();
+    const r = resolveRender({
+      auto: this.moneyAuto,
+      pixels: devicePixels(currentDevice()),
+      stepDown: moneyHealth.stepDown,
+      res: p.moneyRes,
+      fx3d: dev3d === '1' ? 'on' : dev3d === '0' ? 'off' : p.money3d,
+      dev: devTier === 'high' || devTier === 'mid' || devTier === 'low' ? devTier : null,
+    });
+    this.moneyRender = r;
+    this.money.setRender(r);
+    // The safety net judges cut-ins only while the tier is automatic.
+    this.money.monitor = r.source.startsWith('auto') ? (a, b) => moneyHealth.sample(a, b) : null;
+  }
+
+  /** A cut-in went down: the runtime safety net may step the render tier (MONEY-EVENTS §12.4). */
+  private judgeCutIn(): void {
+    if (!this.money.monitor) return;
+    const ch = moneyHealth.end(stepsBelow(this.moneyAuto));
+    moneyHealth.begin();
+    if (!ch) return;
+    const from = this.moneyRender?.tier;
+    this.updateMoneyRender();
+    MONEY_TIER_LOG.push(`${from} → ${this.moneyRender?.tier}: ${ch.reason}`);
+    if (isDevHook()) console.info(`[money] render tier ${from} → ${this.moneyRender?.tier} (${ch.reason})`);
+  }
+
+  /** Dev: the money stage's render state. */
+  moneyInfo(): { tier: MoneyTier; scale: number; tilt: boolean; camera: boolean; source: string; budgetMB: number; auto: MoneyTier; health: string[]; log: string[] } | null {
+    const r = this.moneyRender;
+    return r ? { tier: r.tier, scale: r.scale, tilt: r.tilt, camera: r.camera, source: r.source, budgetMB: r.budgetMB, auto: this.moneyAuto, health: [...moneyHealth.history], log: [...MONEY_TIER_LOG] } : null;
   }
 
   /** The money stage with its rect providers (cached layout rects) and the board camera. */
@@ -169,13 +223,11 @@ export class GameView {
     const defs = getBoard(spacesPerSide);
     const toRect = (r: { x: number; y: number; width: number; height: number }): MoneyRect => ({ x: r.x, y: r.y, w: r.width, h: r.height });
     const boardRect = (): DOMRect => this.rect('board', () => this.board.el.getBoundingClientRect());
-    // Camera (§2): OFF by default. Scaling the board under the cut-in made the board its own 27 MB
-    // compositor layer (peak layer memory 211 MB with the 3D hero vs the 100 MB gate) for a pull-back
-    // that the ≥ 0.92 vignette nearly hides (docs/MONEY-EVENTS.md §11.4). Dev knobs for measuring:
-    // `?dev=1&mcam=2d` (scale 0.92) / `mcam=3d` (+ rotateX 9°).
+    // Camera (§2): the board pulls back (2D) or also tilts back (3D) under the cut-in — on when the
+    // render tier allows it (render.ts, docs/MONEY-EVENTS.md §12). Dev override for measuring:
+    // `?dev=1&mcam=off|2d|3d`. The mode chosen at 'in' is kept for that cut-in's 'out'.
     const mcam = isDevHook() ? new URLSearchParams(location.search).get('mcam') : null;
-    const cam3d = mcam === '3d';
-    const camOff = mcam !== '2d' && mcam !== '3d';
+    let camMode: '2d' | '3d' | null = null;
     const stage: MoneyStage = new MoneyStage({
       parent: this.root,
       upright: this.orient.fixed,
@@ -193,19 +245,24 @@ export class GameView {
         const sp = defs[i];
         return sp ? { icon: spaceIcon(sp), name: loc(sp.short), color: groupColor(sp) ?? undefined } : null;
       },
-      camera: camOff
-        ? undefined
-        : (state, _tier, ms) => {
-            const el = this.board.el;
-            void stage.tween(ms, (u) => {
-              const k = state === 'in' ? u * u * (3 - 2 * u) : 1 - u * u * (3 - 2 * u);
-              el.style.transform = k <= 0.001
-                ? ''
-                : cam3d
-                  ? `perspective(1400px) rotateX(${(9 * k).toFixed(2)}deg) scale(${(1 - 0.08 * k).toFixed(4)})`
-                  : `scale(${(1 - 0.08 * k).toFixed(4)})`;
-            });
-          },
+      camera: (state, _tier, ms) => {
+        if (state === 'in') {
+          const r = this.moneyRender;
+          camMode = mcam === 'off' ? null : mcam === '2d' || mcam === '3d' ? mcam : r?.camera ? (r.tilt ? '3d' : '2d') : null;
+        }
+        const mode = camMode;
+        if (!mode) return;
+        if (state === 'out') camMode = null;
+        const el = this.board.el;
+        void stage.tween(ms, (u) => {
+          const k = state === 'in' ? u * u * (3 - 2 * u) : 1 - u * u * (3 - 2 * u);
+          el.style.transform = k <= 0.001
+            ? ''
+            : mode === '3d'
+              ? `perspective(1400px) rotateX(${(9 * k).toFixed(2)}deg) scale(${(1 - 0.08 * k).toFixed(4)})`
+              : `scale(${(1 - 0.08 * k).toFixed(4)})`;
+        });
+      },
     });
     return stage;
   }
@@ -230,6 +287,12 @@ export class GameView {
     // Effects hold client positions: drop them on resize / rotation (they last ~1-2 s).
     this.stopFx();
     this.rects.clear();
+    // The device's pixels changed (resize / rotation): re-pick the money stage's render tier.
+    const auto = pickTier(currentDevice());
+    if (auto !== this.moneyAuto) {
+      this.moneyAuto = auto;
+      this.updateMoneyRender();
+    }
     const L = computeLayout(W, H, new Set(this.seats), this.orient.fixed);
     // These viewport-relative boxes are already known from the layout. Reading them back from
     // the DOM during the first turn's FX forces the freshly mounted board through layout again.
@@ -327,6 +390,7 @@ export class GameView {
   }
 
   dispose(): void {
+    this.stopMoneyPrefs();
     this.money.destroy();
     this.board.el.style.transform = '';
     this.dealer.dispose();
