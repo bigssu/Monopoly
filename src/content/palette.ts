@@ -32,3 +32,51 @@ export const TOKEN_IDS: readonly string[] = [
 export function playerColor(id: string): PlayerColor {
   return PLAYER_COLORS.find((c) => c.id === id) ?? PLAYER_COLORS[0]!;
 }
+
+function channels(hex: string): [number, number, number] {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+}
+
+/** WCAG relative luminance of a #RRGGBB color. */
+export function luminance(hex: string): number {
+  const [r, g, b] = channels(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio of two #RRGGBB colors (1–21). */
+export function contrast(a: string, b: string): number {
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** Minimum contrast of the text on an owner-filled board space (names and prices: normal text). */
+export const OWNER_INK_CONTRAST = 4.5;
+
+/**
+ * The player's `dark` shade pushed toward black just far enough to read on the full player color
+ * (≥ 5:1, a margin over OWNER_INK_CONTRAST), so the ink still carries the color's hue.
+ */
+export function deepShade(c: PlayerColor): string {
+  const ch = channels(c.dark);
+  let out = '#000000';
+  for (let k = 0.5; k >= 0; k -= 0.05) {
+    out = `#${ch.map((v) => Math.round(v * k).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+    if (contrast(out, c.hex) >= 5) break;
+  }
+  return out;
+}
+
+/**
+ * Text on a space filled with the owner's color (board ownership fill), computed per color: white
+ * with a soft dark halo where white reaches OWNER_INK_CONTRAST, else a deep shade of the color with
+ * a soft light halo. (In the current palette white reaches at most 4.4:1 — blue — so every color
+ * takes its deep shade; the palette's own `dark` is under 2:1 on its color.)
+ */
+export function inkOn(c: PlayerColor): { ink: string; halo: string; light: boolean } {
+  if (contrast('#FFFFFF', c.hex) >= OWNER_INK_CONTRAST) return { ink: '#FFFFFF', halo: 'rgba(20, 16, 30, 0.42)', light: true };
+  return { ink: deepShade(c), halo: 'rgba(255, 255, 255, 0.3)', light: false };
+}

@@ -394,6 +394,8 @@ function idleGlints(x: Ctx, ms: number, seat: Seat): void {
 interface FinishOpts {
   keep?: boolean;
   tile?: number | null;
+  /** The hero is that tile's new building (level): it lands on the pop-out building, not the card. */
+  building?: number;
   wallets?: Wallet[];
   /** The hero's result pose (runs first; the beat lasts at least BEATS_F.result). */
   result?: () => Promise<void> | void;
@@ -431,7 +433,10 @@ async function finish(x: Ctx, o: FinishOpts): Promise<void> {
     return;
   }
   const g = x.st.geom;
-  const r = o.tile !== null && o.tile !== undefined ? x.st.host.tileRect?.(o.tile) : null;
+  const r =
+    o.tile === null || o.tile === undefined
+      ? null
+      : ((o.building ? x.st.host.buildingRect?.(o.tile, o.building) : null) ?? x.st.host.tileRect?.(o.tile) ?? null);
   const jobs: Promise<void>[] = [];
   if (r) {
     const l = x.st.local(r);
@@ -687,6 +692,7 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
     await finish(x, {
       keep: a.keep,
       tile: a.spaceIndex,
+      building: a.level,
       seat: a.seat,
       result: async () => {
         // Anticipation: the site crouches; then the building springs up past its height (≈ 18 %

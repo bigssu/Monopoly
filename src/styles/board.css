@@ -46,13 +46,24 @@
 .sp-corner-disc { stroke-width: 8; }
 .sp-corner-ring { stroke: rgba(8, 43, 55, 0.2); stroke-width: 7; stroke-dasharray: 13 12; }
 .sp-group-badge { stroke: rgba(255, 255, 255, 0.72); stroke-width: 4; }
-.sp-owner-seal { stroke: #fff; stroke-width: 7; }
+/* Owned space: the whole card in the owner's color (Board.sideSpaceMarkup); text in the per-color
+   ink from palette.inkOn (white or a deep shade) with a soft halo, the city art on a light plate. */
+.sp-bg.is-owned { stroke: rgba(255, 255, 255, 0.92); stroke-width: 8; }
+.sp-group-badge.on-owner { stroke: #fff; stroke-width: 7; }
+.sp-plate { fill: #fff; opacity: 0.9; }
+.sp-name.on-owner,
+.sp-price.on-owner {
+  fill: var(--own-ink);
+  stroke: var(--own-halo);
+  stroke-width: 9;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
 .sp-name {
   font-family: var(--font-display);
   fill: var(--ink);
   letter-spacing: -0.01em;
 }
-.sp-name.on-owner { fill: #000; }
 .sp-corner-name { fill: var(--ink); }
 .sp-price {
   font-family: var(--font-num);
@@ -64,7 +75,6 @@
 .sp-pot text { font-family: var(--font-num); font-weight: 800; }
 .sp-x2 text { font-family: var(--font-num); font-weight: 900; }
 
-/* Landmark glow: static (a pulsing SVG child would repaint the whole board SVG every frame). */
 
 /* Highlights live in an HTML layer above the SVG (Board.mark): their pulses animate opacity on
    small elements only, so the compositor runs them without repainting the board. */
@@ -208,9 +218,8 @@
 .edge-toast .et-ico svg { width: 100%; height: 100%; }
 .edge-toast .et-arrow { opacity: 0.7; }
 
-/* FX hooks (docs/VFX-WIRING.md §3): level-icon pop target, "under construction" dim, reduced-motion highlight. */
-.sp-lvl { transform-box: fill-box; transform-origin: center; }
-.sp.is-building .sp-lvl { opacity: 0.6; }
+/* FX hooks (docs/VFX-WIRING.md §3): reduced-motion highlight (the build pop / "under construction"
+   dim act on the pop-out building, .bb below). */
 .bm-hl rect,
 .bm-hl circle { stroke: var(--fx-hl, #F2B633); stroke-width: 10; }
 
@@ -234,3 +243,32 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
   pointer-events: none;
 }
+
+/* The Stage's backdrop, drawn by the board at the inner square (Board.ts): the pop-out buildings
+   stand on it, under the Stage's content. Same box as .stage-host. */
+.board > .board-stage-bg { inset: 14.375%; }
+
+/* Pop-out buildings (Board.renderBuilding, geometry.ts buildingGeom): one element per built space
+   on the card's inner edge, sticking out over the inner area. Static: positioned in % of the board,
+   rotated upright for the space's reader; the build pop steps `scale` on the icon (no layer). */
+.board-bldgs { position: absolute; inset: 0; pointer-events: none; }
+.bb { position: absolute; pointer-events: none; }
+.bb > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 92%;
+  filter:
+    drop-shadow(0 0 max(1px, calc(var(--u) * 0.04)) rgba(255, 255, 255, 0.95))
+    drop-shadow(0 calc(var(--u) * 0.06) calc(var(--u) * 0.12) rgba(0, 0, 0, 0.55));
+}
+.bb.lv4::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 226, 122, 0.85), rgba(255, 226, 122, 0));
+}
+.bb.is-building > svg { opacity: 0.6; }
+.bb.is-dim { opacity: 0.35; }

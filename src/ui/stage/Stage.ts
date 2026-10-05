@@ -59,7 +59,8 @@ export class Stage {
     const diceWrap = h('div', { class: 'st-dice' }, this.dice.el, this.thinking);
     this.diceWrap = diceWrap;
     this.rot = h('div', { class: 'stage-rot' }, top, this.rankStrip, diceWrap, this.promptSlot, this.toastLayer, this.popLayer);
-    this.el = h('div', { class: 'stage' }, h('div', { class: 'stage-bg' }), this.rot);
+    // The backdrop (`.stage-bg`) belongs to the board (Board.ts): pop-out buildings sit on it, under this.
+    this.el = h('div', { class: 'stage' }, this.rot);
     this.popLayer.addEventListener('click', () => this.hideInfo());
     this.popLayer.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {

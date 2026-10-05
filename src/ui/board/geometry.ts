@@ -170,3 +170,107 @@ export function tokenSpot(index: number, slot: number, n: number, size: SpacesPe
   const [lx, ly] = offsets[Math.min(slot, offsets.length - 1)]!;
   return localToBoard(g, lx, ly);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Pop-out buildings (docs/DESIGN.md §3 "Ownership and buildings"): a built space shows its building
+// as its own element standing on the card's INNER edge (the edge facing the Stage) and sticking
+// out into the board's inner area, like a house set on the edge of a property card.
+// ---------------------------------------------------------------------------------------------
+
+export type BuildingLevel = 1 | 2 | 3 | 4;
+
+/** Building box size per level, as a share of the side space's width (its short side). */
+export const BLD_SCALE: Readonly<Record<BuildingLevel, number>> = { 1: 0.55, 2: 0.65, 3: 0.75, 4: 0.95 };
+/** Share of a standing building's box that sits on its own card (the rest sticks out). */
+export const BLD_ON_CARD = 0.3;
+/**
+ * The furthest any building reaches into the inner area, as a share of the space width (a standing
+ * landmark). Hanging buildings are capped to it; the Stage keeps its controls clear of it
+ * (`--bld-out`, stage.css).
+ */
+export const BLD_OUT_MAX = (1 - BLD_ON_CARD) * BLD_SCALE[4];
+
+export interface BuildingGeom {
+  /** Square box in board units (the box is square, so its extent ignores `rot`). */
+  x: number;
+  y: number;
+  size: number;
+  cx: number;
+  cy: number;
+  /** Rotation (deg) that makes the building upright for its reader: the space's text rotation. */
+  rot: number;
+  /** Roof toward the board centre (base on the card), or hanging under the fixed view's top row. */
+  hanging: boolean;
+  /** How far the box reaches onto its own card from the inner edge (board units, 0 when hanging). */
+  onCard: number;
+}
+
+const INWARD: Record<Edge, [number, number]> = { S: [0, -1], N: [0, 1], W: [1, 0], E: [-1, 0] };
+
+/** Does a building on space g hang (upright for its reader, but the inner edge is below it)? */
+function hangs(g: SpaceGeom): boolean {
+  const r = (g.rot * Math.PI) / 180;
+  const [nx, ny] = INWARD[g.edge];
+  // The building's "up" after rotation r is (sin r, −cos r); standing = up points inward.
+  return Math.sin(r) * nx - Math.cos(r) * ny < 0;
+}
+
+/**
+ * Where every built space's building stands (board units; null = no building), from each space's
+ * level (0 = none; corners never build). `minSize` (board units) keeps small boards' villas from
+ * shrinking past a readable size.
+ *
+ * Next to an inner corner the two adjacent spaces' buildings would meet. When both are built, the
+ * one that sticks out further (the fixed view's top row; ties: the space after the corner) slides
+ * away from the corner along its edge until it clears the other's reach, and both shrink by the
+ * same factor if that is what it takes to keep the sliding one on its own space.
+ */
+export function buildingLayout(levels: readonly number[], size: SpacesPerSide = 7, uprightTop = false, minSize = 0): (BuildingGeom | null)[] {
+  const geom = getBoardGeometry(size, uprightTop);
+  const n = geom.length;
+  const W = geom[1]!.lw;
+  const sizes = geom.map((g, i) => {
+    const lv = Math.min(4, levels[i] ?? 0);
+    if (g.corner || lv < 1) return 0;
+    const s = Math.max(minSize, BLD_SCALE[lv as BuildingLevel] * W);
+    return hangs(g) ? Math.min(s, BLD_OUT_MAX * W) : s;
+  });
+  const out = (i: number): number => (hangs(geom[i]!) ? 1 : 1 - BLD_ON_CARD);
+  const shift = new Array<number>(n).fill(0);
+  for (let c = 0; c < n; c += size + 1) {
+    const before = (c - 1 + n) % n;
+    const after = (c + 1) % n;
+    if (!sizes[before] || !sizes[after]) continue;
+    const [a, b] = out(before) > out(after) ? [before, after] : [after, before];
+    const f = Math.min(1, W / (out(b) * sizes[b]! + sizes[a]!));
+    sizes[a]! *= f;
+    sizes[b]! *= f;
+    const reach = out(b) * sizes[b]!;
+    const slide = Math.max(0, reach - (W - sizes[a]!) / 2);
+    // Away from the corner: forward (index order) after it, backward before it.
+    shift[a] = a === after ? slide : -slide;
+  }
+  return geom.map((g, i) => {
+    const s = sizes[i]!;
+    if (!s) return null;
+    const hanging = hangs(g);
+    const on = hanging ? 0 : BLD_ON_CARD;
+    const [nx, ny] = INWARD[g.edge];
+    // Midpoint of the inner edge, and the along-edge axis pointing in index order.
+    const ex = g.edge === 'W' ? g.x + g.w : g.edge === 'E' ? g.x : g.cx;
+    const ey = g.edge === 'S' ? g.y : g.edge === 'N' ? g.y + g.h : g.cy;
+    const ax = g.edge === 'S' ? -1 : g.edge === 'N' ? 1 : 0;
+    const ay = g.edge === 'W' ? -1 : g.edge === 'E' ? 1 : 0;
+    const off = s * (0.5 - on);
+    const cx = ex + ax * shift[i]! + nx * off;
+    const cy = ey + ay * shift[i]! + ny * off;
+    return { x: cx - s / 2, y: cy - s / 2, size: s, cx, cy, rot: g.rot, hanging, onCard: on * s };
+  });
+}
+
+/** One space's building at `level` with no neighbours built (e.g. where a build cut-in lands). */
+export function buildingGeom(index: number, level: BuildingLevel, size: SpacesPerSide = 7, uprightTop = false, minSize = 0): BuildingGeom | null {
+  const levels: number[] = [];
+  levels[index] = level;
+  return buildingLayout(levels, size, uprightTop, minSize)[index] ?? null;
+}

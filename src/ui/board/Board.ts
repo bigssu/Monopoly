@@ -3,17 +3,20 @@
  * middle and an HTML token layer on top (tokens hop with the Web Animations API).
  */
 import { festivalMultiplier, getBoard, hubStep, oneAwayWarnings, type GameState, type Player, type PlayerId, type SpaceDef, type SpacesPerSide } from '@/engine';
-import { playerColor } from '@/content/palette';
+import { inkOn, playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, animSpeed, D, gridTimeout, isSkipping, noMotion, onFrame } from '@/ui/fx/time';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
-import { DEPTH, INNER, VB, getBoardGeometry, tokenSpot, type SpaceGeom } from './geometry';
+import { BLD_OUT_MAX, DEPTH, INNER, VB, buildingGeom, buildingLayout, getBoardGeometry, tokenSpot, type BuildingGeom, type BuildingLevel, type SpaceGeom } from './geometry';
 import { EASE } from '@/ui/fx/motion';
 
 const NS = 'http://www.w3.org/2000/svg';
+
+/** Pop-out building icon per level. */
+const BUILDING_ICON: Record<BuildingLevel, string> = { 1: 'villa', 2: 'building', 3: 'hotel', 4: 'landmark' };
 
 const CORNER_BG: Record<string, string> = {
   start: '#DDF3E4',
@@ -143,6 +146,8 @@ interface SpaceView {
   pot: number;
   ring: string | null;
   lang: string;
+  /** How far the space's pop-out building stands on this card (board units from the inner edge). */
+  bldOn: number;
 }
 
 function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: readonly Player[]): string {
@@ -154,68 +159,48 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   const owner = v.owner !== null ? players[v.owner] : undefined;
   const oc = owner ? playerColor(owner.colorId) : null;
   const parts: string[] = [];
+  // Ownership: the whole card takes the owner's color (DESIGN.md §3); text switches to an ink that
+  // reads on that color (palette `inkOn`), the city art sits on a light plate. The building is not
+  // drawn here: it stands on the card's inner edge as its own element (Board.renderBuilding).
   parts.push(
-    `<rect class="sp-bg" x="${m}" y="${m}" width="${w - 2 * m}" height="${hgt - 2 * m}" rx="30" fill="${oc ? oc.tint : '#F7FCFC'}"/>`,
+    `<rect class="sp-bg${oc ? ' is-owned' : ''}" x="${m}" y="${m}" width="${w - 2 * m}" height="${hgt - 2 * m}" rx="30" fill="${oc ? oc.hex : '#F7FCFC'}"/>`,
   );
-  // Ownership is an inset seal, leaving every stop as its own map card instead of one
-  // continuous colour strip around the board.
-  if (oc) {
-    parts.push(
-      `<circle class="sp-owner-seal" cx="${w - 40}" cy="${hgt - 40}" r="23" fill="${oc.hex}"/>`,
-    );
-  }
-  // A compact category badge makes adjacent destinations read as separate cards.
+  // A compact category badge makes adjacent destinations read as separate cards (and keeps the
+  // color group readable on an owner-filled card: white ring).
+  // A standing pop-out building covers the top `bldOn` of the card (geometry.ts buildingLayout):
+  // badge and price move down below it, the city art shrinks into what is left above the name.
+  const dy = Math.max(0, Math.round(v.bldOn + 22 - 16));
   parts.push(
-    `<rect class="sp-group-badge" x="${m + 16}" y="${m + 16}" width="74" height="52" rx="26" fill="${bar}"/>`,
+    `<rect class="sp-group-badge${oc ? ' on-owner' : ''}" x="${m + 16}" y="${m + 16 + dy}" width="74" height="52" rx="26" fill="${bar}"/>`,
   );
-  if (isProp && v.level === 0) {
+  const txt = oc ? ' on-owner' : '';
+  if (isProp) {
     const price = fmtMoney(sp.price ?? 0);
-    parts.push(textEl('sp-price', w / 2, m + 67, price.length >= 5 ? 54 : 70, price));
+    parts.push(textEl(`sp-price${txt}`, w / 2, m + 67 + dy, price.length >= 5 ? 54 : 70, price));
   }
-  // Landmark icon.
-  const iconSize = isProp ? 152 : 176;
-  const iconY = isProp ? 99 : 66;
+  // Landmark icon (on an owner-filled card: on a light plate so the city art keeps its colors).
+  const iconY = (isProp ? 99 : 66) + dy;
+  const iconSize = Math.max(80, Math.min(isProp ? 152 : 176, 266 - iconY));
+  if (oc) parts.push(`<rect class="sp-plate" x="${(w - iconSize) / 2 - 14}" y="${iconY - 10}" width="${iconSize + 28}" height="${iconSize + 20}" rx="44"/>`);
   parts.push(iconAt(spaceIcon(sp), (w - iconSize) / 2, iconY, iconSize));
   // Name.
   const name = loc(sp.short);
   const fit = fitLabel(name, w - 40, 92);
-  parts.push(textLines(fit.lines, fit.size, w / 2, fit.lines.length === 1 ? 388 : 386, oc ? 'sp-name on-owner' : 'sp-name'));
-  // Buildings sit above the category badge, roofs tinted in the owner's colour.
-  if (v.level >= 1 && oc) {
-    parts.push(`<rect x="${m + 104}" y="${m + 14}" width="${w - 2 * m - 120}" height="60" rx="30" fill="#fff" opacity=".94"/>`);
-  }
-  // Level icons in one group (`sp-lvl`): the fx pop / "under construction" dim target (Board.popIcon).
-  if (v.level >= 1 && v.level <= 3) {
-    const ids = ['villa', 'building', 'hotel'].slice(0, v.level);
-    const sz = Math.min(92, (w - 2 * m - 24) / (1 + (ids.length - 1) * 0.91));
-    const step = sz * 0.91;
-    const x0 = w / 2 - ((ids.length - 1) * step) / 2 - sz / 2;
-    const c = oc?.hex ?? '#E8564F';
-    parts.push('<g class="sp-lvl">');
-    ids.forEach((id, i) => parts.push(`<g color="${c}">${iconAt(id, x0 + i * step, -4, sz, 'sp-bld', c)}</g>`));
-    parts.push('</g>');
-  } else if (v.level === 4) {
-    parts.push(`<circle class="sp-glow" cx="${w / 2}" cy="${46}" r="84" fill="url(#lr-glow)"/>`);
-    const c = oc?.hex ?? '#F2B633';
-    parts.push(`<g class="sp-lvl"><g color="${c}">${iconAt('landmark', w / 2 - 60, -16, 120, 'sp-bld sp-landmark', c)}</g></g>`);
-  }
-  if (oc) {
-    parts.push(
-      `<rect x="${m + 6}" y="${m + 6}" width="${w - 2 * m - 12}" height="${hgt - 2 * m - 12}" rx="20" fill="none" stroke="${oc.hex}" stroke-width="12"/>`,
-    );
-  }
+  parts.push(textLines(fit.lines, fit.size, w / 2, fit.lines.length === 1 ? 388 : 386, `sp-name${txt}`));
   if (v.festival) {
-    parts.push(iconAt('festival-marker', w - 138, 96, 124, 'sp-fest'));
-    parts.push(
-      `<g class="sp-x2"><rect x="${14}" y="${104}" width="96" height="58" rx="29" fill="#E8564F"/><text x="62" y="147" font-size="44" text-anchor="middle" fill="#fff">×${v.festival}</text></g>`,
-    );
+    const fs = dy > 40 ? 96 : 124;
+    parts.push(iconAt('festival-marker', w - fs - 14, Math.min(96 + dy, 270 - fs), fs, 'sp-fest'));
+    parts.push(xBadge(Math.min(104 + dy, 212), '#E8564F', v.festival));
   }
-  if (v.boost > 1) {
-    parts.push(
-      `<g class="sp-x2"><rect x="${14}" y="${104}" width="96" height="58" rx="29" fill="#2EC4B6"/><text x="62" y="147" font-size="44" text-anchor="middle" fill="#fff">×${v.boost}</text></g>`,
-    );
-  }
-  return parts.join('');
+  if (v.boost > 1) parts.push(xBadge(Math.min(104 + dy, 212), '#2EC4B6', v.boost));
+  if (!oc) return parts.join('');
+  const ink = inkOn(oc);
+  return `<g class="sp-own" style="--own-ink:${ink.ink};--own-halo:${ink.halo}">${parts.join('')}</g>`;
+}
+
+/** "×2" pill (festival / hub growth) at local y. */
+function xBadge(y: number, fill: string, n: number): string {
+  return `<g class="sp-x2"><rect x="14" y="${y}" width="96" height="58" rx="29" fill="${fill}"/><text x="62" y="${y + 43}" font-size="44" text-anchor="middle" fill="#fff">×${n}</text></g>`;
 }
 
 function cornerMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView): string {
@@ -259,7 +244,7 @@ function spaceMatrix(i: number, geom: readonly SpaceGeom[]): DOMMatrix {
 }
 
 /** The look of a space with nothing on it (what the static base image shows). */
-const BARE: Omit<SpaceView, 'lang'> = { owner: null, level: 0, festival: 0, boost: 1, pot: 0, ring: null };
+const BARE: Omit<SpaceView, 'lang'> = { owner: null, level: 0, festival: 0, boost: 1, pot: 0, ring: null, bldOn: 0 };
 const isBare = (v: SpaceView): boolean => v.owner === null && v.level === 0 && !v.festival && v.boost <= 1 && v.pot === 0;
 
 /** Invisible hit area of a bare space (taps, picking); the art is in the base image. */
@@ -434,6 +419,14 @@ export class Board {
    * (compositor-only); animating inside the SVG would repaint the whole board every frame.
    */
   private marks: HTMLElement;
+  /**
+   * Pop-out buildings (one element per built space): above the ring and the marks' layer order
+   * below, under the Stage's content and the tokens; positioned once per change, no animation at rest.
+   */
+  private bldLayer: HTMLElement;
+  private bldEls = new Map<number, HTMLElement>();
+  private bldSigs = new Map<number, string>();
+  private building = new Set<number>();
   private rings = new Map<number, HTMLElement>();
   private pickEls: HTMLElement[] = [];
   private focusEl: HTMLElement | null = null;
@@ -477,11 +470,14 @@ export class Board {
     this.board = getBoard(size);
     this.geom = getBoardGeometry(size, uprightTop);
     this.el = h('div', { class: 'board' });
+    // How far a pop-out building reaches into the inner area (in --u): the Stage keeps its roll
+    // control clear of it (stage.css).
+    this.el.style.setProperty('--bld-out', String(+((BLD_OUT_MAX * getBoardGeometry(size)[1]!.lw) / 100).toFixed(3)));
     this.svgEl = document.createElementNS(NS, 'svg');
     this.svgEl.setAttribute('viewBox', `0 0 ${VB} ${VB}`);
     this.svgEl.setAttribute('class', 'board-svg');
     this.svgEl.innerHTML =
-      `<defs><radialGradient id="lr-glow"><stop offset="0" stop-color="#FFE27A" stop-opacity=".95"/><stop offset="1" stop-color="#FFE27A" stop-opacity="0"/></radialGradient></defs>` +
+      `<defs></defs>` +
       boardShellMarkup();
     this.defsEl = this.svgEl.querySelector('defs')!;
     for (let i = 0; i < this.board.length; i++) {
@@ -510,9 +506,13 @@ export class Board {
     });
     this.stageHost = h('div', { class: 'stage-host' });
     this.marks = h('div', { class: 'board-marks' });
+    this.bldLayer = h('div', { class: 'board-bldgs', 'aria-hidden': 'true' });
     this.tokenLayer = h('div', { class: 'token-layer' });
     this.overlay = h('div', { class: 'board-overlay' });
-    this.el.append(this.svgEl, this.marks, this.stageHost, this.tokenLayer, this.overlay);
+    // The Stage's backdrop is the board's (not the Stage's): buildings stick out over it, under the
+    // Stage's content (prompts stay readable; the Stage's own layer is the one composited layer).
+    const stageBg = h('div', { class: 'stage-bg board-stage-bg' });
+    this.el.append(this.svgEl, stageBg, this.bldLayer, this.marks, this.stageHost, this.tokenLayer, this.overlay);
     for (const p of players) {
       const body = h('div', { class: 'token-body' });
       body.append(h('span', { class: 'tok-badge' }, svgNode(p.tokenId)));
@@ -528,6 +528,8 @@ export class Board {
     if (px !== this.px) {
       this.px = px;
       for (const tk of this.tokens.values()) this.setTokenXY(tk, tk.x, tk.y);
+      // Building boxes have a minimum size in px (layoutBuildings).
+      if (this.lastVs) this.render(this.lastVs);
     }
     this.ensureBase();
   }
@@ -679,9 +681,11 @@ export class Board {
       rings.set(w.missing, playerColor(vs.players[w.playerId]!.colorId).hex);
     }
     const lang = getLang();
+    const blds = this.layoutBuildings(vs);
     for (let i = 0; i < this.board.length; i++) {
       const sp = this.board[i]!;
       const pr = vs.properties[i];
+      const bg = blds[i] ?? null;
       const v: SpaceView = {
         owner: pr?.owner ?? null,
         level: pr?.level ?? 0,
@@ -690,15 +694,18 @@ export class Board {
         pot: i === 0 ? vs.pot : 0,
         ring: rings.get(i) ?? null,
         lang,
+        bldOn: bg?.onCard ?? 0,
       };
       const hit = based && i < this.swapLimit && isBare(v);
-      const sig = hit ? 'hit' : `${v.owner}|${v.level}|${v.festival}|${v.pot}|${v.lang}`;
+      const sig = hit ? 'hit' : `${v.owner}|${v.level}|${v.festival}|${v.pot}|${v.lang}|${Math.round(v.bldOn)}`;
       const grp = this.groups[i]!;
       if (sig !== this.sigs[i]) {
         this.sigs[i] = sig;
         const g = this.geom[i]!;
         grp.innerHTML = hit ? hitMarkup(i, this.geom) : g.corner ? cornerMarkup(sp, g, v) : sideSpaceMarkup(sp, g, v, this.players);
         this.flushAtlasDefs();
+      }
+      if (this.renderBuilding(i, v, bg)) {
         // An fx pop requested in this same frame (the 'swap' cue fires just before the re-render).
         const pop = this.pops.get(i);
         if (pop && performance.now() - pop.at < 120) this.runPop(i, pop.o);
@@ -721,6 +728,65 @@ export class Board {
     }
     this.renderTokens(vs);
     this.ensureBase();
+  }
+
+  /**
+   * The building of space i as its own element on the card's inner edge (geometry.ts
+   * `buildingGeom`): the current level's icon (villa / building / hotel / landmark), roof in the
+   * owner's color. Recreated only when its owner, level or box change (returns true then).
+   */
+  private renderBuilding(i: number, v: SpaceView, bg: BuildingGeom | null): boolean {
+    const owner = v.owner !== null ? this.players[v.owner] : undefined;
+    const level = owner && bg && v.level >= 1 ? (Math.min(4, v.level) as BuildingLevel) : 0;
+    const sig = level && bg ? `${owner!.colorId}|${level}|${bg.x.toFixed(1)}|${bg.y.toFixed(1)}|${bg.size.toFixed(1)}` : '';
+    if ((this.bldSigs.get(i) ?? '') === sig) return false;
+    this.bldEls.get(i)?.remove();
+    this.bldEls.delete(i);
+    this.bldSigs.delete(i);
+    if (!level || !bg) return true;
+    const k = 100 / VB;
+    const el = h('div', { class: `bb lv${level}${bg.hanging ? ' is-hanging' : ''}`, 'data-i': String(i) });
+    el.style.left = `${bg.x * k}%`;
+    el.style.top = `${bg.y * k}%`;
+    el.style.width = `${bg.size * k}%`;
+    el.style.height = `${bg.size * k}%`;
+    if (bg.rot) el.style.rotate = `${bg.rot}deg`;
+    el.style.color = playerColor(owner!.colorId).hex;
+    el.append(svgNode(BUILDING_ICON[level]));
+    el.classList.toggle('is-building', this.building.has(i));
+    el.classList.toggle('is-dim', this.pickSet.size > 0 && !this.pickSet.has(i));
+    this.bldLayer.append(el);
+    this.bldEls.set(i, el);
+    this.bldSigs.set(i, sig);
+    return true;
+  }
+
+  /** Smallest building box (board units): about 22 px on screen, so a small board's villa still reads. */
+  private get minBuilding(): number {
+    return (22 * VB) / Math.max(1, this.px);
+  }
+
+  /** Building boxes for a state (`override`: one space's level replaced, e.g. a build in progress). */
+  private layoutBuildings(vs: GameState, override?: { i: number; level: number }): (BuildingGeom | null)[] {
+    const levels = this.board.map((_, i) => {
+      if (override && override.i === i) return override.level;
+      const pr = vs.properties[i];
+      return pr && pr.owner !== null ? pr.level : 0;
+    });
+    return buildingLayout(levels, this.size, this.uprightTop, this.minBuilding);
+  }
+
+  /**
+   * Client rect of space i's building box at `level` among the buildings already standing (the
+   * build cut-in's hero lands there).
+   */
+  buildingRect(i: number, level: number, boardRect?: { left: number; top: number; width: number }): { x: number; y: number; width: number; height: number } | null {
+    const lv = Math.max(1, Math.min(4, level));
+    const bg = this.lastVs ? this.layoutBuildings(this.lastVs, { i, level: lv })[i] : buildingGeom(i, lv as BuildingLevel, this.size, this.uprightTop, this.minBuilding);
+    if (!bg) return null;
+    const r = boardRect ?? this.el.getBoundingClientRect();
+    const k = r.width / VB;
+    return { x: r.left + bg.x * k, y: r.top + bg.y * k, width: bg.size * k, height: bg.size * k };
   }
 
   /** Put the atlas patterns the last markup referenced into this board's <defs> (once each). */
@@ -816,6 +882,7 @@ export class Board {
     this.pickHandler = options ? (onPick ?? null) : null;
     this.el.classList.toggle('is-picking', !!options);
     this.groups.forEach((g, i) => g.classList.toggle('is-pick', this.pickSet.has(i)));
+    for (const [i, el] of this.bldEls) el.classList.toggle('is-dim', !!options && !this.pickSet.has(i));
     this.updateSpaceAccessibility(true);
     for (const el of this.pickEls) el.remove();
     this.pickEls = [];
@@ -874,9 +941,6 @@ export class Board {
 
   private pops = new Map<number, { o: { from: number; c1: number; frames: number }; at: number }>();
 
-  private levelIconEl(i: number): SVGGElement | null {
-    return (this.groups[i]?.querySelector('.sp-lvl') as SVGGElement | null) ?? null;
-  }
 
   /** Tier pop of a space's level icon: scale `from` → 1 along easeOutBack(c1), `frames` 30 Hz frames. */
   popIcon(i: number, o: { from: number; c1: number; frames: number }): void {
@@ -926,19 +990,42 @@ export class Board {
 
   private svgTweens = new Map<Element, () => void>();
 
+  /**
+   * Pop of the space's pop-out building (scale from its base), stepped on the 30 Hz clock through
+   * the static `scale` property at 15 Hz: a repaint of that small box per step, no compositor layer
+   * (an animated transform would lift the Stage and tokens above it onto overlap layers).
+   */
   private runPop(i: number, o: { from: number; c1: number; frames: number }): void {
-    const el = this.levelIconEl(i);
-    if (!el) return;
-    let box: DOMRect;
-    try {
-      box = el.getBBox();
-    } catch {
-      return;
-    }
+    const icon = this.bldEls.get(i)?.firstElementChild as SVGElement | null | undefined;
+    if (!icon || noMotion()) return;
+    this.svgTweens.get(icon)?.();
     const c1 = o.c1;
-    this.svgScale(el, '', box.x + box.width / 2, box.y + box.height / 2, Math.max(2, o.frames), (t) => {
+    const dur = (Math.max(2, o.frames) * 1000) / 30;
+    const scaleAt = (t: number): number => {
       const x = t - 1;
       return o.from + (1 - o.from) * (1 + (c1 + 1) * x ** 3 + c1 * x ** 2);
+    };
+    const set = (sc: number): void => {
+      icon.style.scale = Math.abs(sc - 1) < 1e-3 ? '' : sc.toFixed(3);
+    };
+    let t = 0;
+    let last = -1;
+    let n = 0;
+    set(o.from);
+    const stop = onFrame((now) => {
+      if (last >= 0) t += (now - last) * animSpeed() * (isSkipping() ? 5 : 1);
+      last = now;
+      const k = Math.min(1, t / dur);
+      if (n++ % 2 === 0 || k >= 1) set(scaleAt(k));
+      if (k >= 1 || !icon.isConnected) {
+        this.svgTweens.delete(icon);
+        return false;
+      }
+      return true;
+    });
+    this.svgTweens.set(icon, () => {
+      stop();
+      set(1);
     });
   }
 
@@ -964,6 +1051,9 @@ export class Board {
   /** "Under construction" dim of a space's level icon (class on the space group: survives re-renders). */
   dimIcon(i: number, on: boolean): void {
     this.groups[i]?.classList.toggle('is-building', on);
+    if (on) this.building.add(i);
+    else this.building.delete(i);
+    this.bldEls.get(i)?.classList.toggle('is-building', on);
   }
 
   /** Static highlight: an outline mark for `ms` (or until the returned function removes it), no animation. */

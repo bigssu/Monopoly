@@ -63,6 +63,8 @@ export interface MoneyHost {
   seatRect?(seat: Seat): Rect | null;
   /** A board space's rect (client px): the hero flies back there at settle. */
   tileRect?(spaceIndex: number): Rect | null;
+  /** Where a space's pop-out building at `level` stands (client px): the build hero lands there. */
+  buildingRect?(spaceIndex: number, level: number): Rect | null;
   /** Landmark art / name of a space. */
   space?(spaceIndex: number): SpaceArt | null;
   camera?: BoardCamera;

@@ -243,6 +243,10 @@ export class GameView {
         return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
       },
       tileRect: (i) => (defs[i] ? toRect(this.board.spaceRect(i, boardRect())) : null),
+      buildingRect: (i, level) => {
+        const r = defs[i] ? this.board.buildingRect(i, level, boardRect()) : null;
+        return r ? toRect(r) : null;
+      },
       space: (i) => {
         const sp = defs[i];
         return sp ? { icon: spaceIcon(sp), name: loc(sp.short), color: groupColor(sp) ?? undefined } : null;

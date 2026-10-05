@@ -609,6 +609,8 @@ async function playMoney(view: GameView, vs: GameState, events: readonly GameEve
   if (!fast) for (const e of evs) view.director.onEvent(e, e.type === 'TollPaid' ? before : vs, 'after');
   // What the board still does by itself after the cut-in hands back.
   const sc = g.scene;
+  // The build hero is flying onto the new pop-out building (scenes.ts `finish`): it pops as it lands.
+  if (sc.kind === 'build' && !fast) view.board.popIcon(sc.spaceIndex, { from: 0.55, c1: 2.2, frames: 9 });
   if (sc.kind === 'purchase') await groupMoment(view, vs, sc.player, sc.spaceIndex, fast);
   else if (sc.kind === 'takeover') await groupMoment(view, vs, sc.buyer, sc.spaceIndex, fast);
   else if (sc.kind === 'bankruptcy' && !fast) await view.panel(sc.debtor)?.breakApart();
