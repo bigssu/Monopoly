@@ -27,8 +27,8 @@ export const POOL_SIZE = 16;
 /** Shadow ellipses (one per concurrent stream). */
 export const SHADOWS = 4;
 /** Default spawn hop / travel (frames). */
-export const HOP_F = 5;
-export const TRAVEL_F = 12;
+export const HOP_F = 6;
+export const TRAVEL_F = 15;
 const SPIN_MS = 50;
 const SPIN_N = 8;
 const NOMINAL = 48;
@@ -255,7 +255,8 @@ export class CoinPool {
         a.lift = 0.6 * u;
       } else {
         const u = (e - hopMs) / travelMs;
-        const k = u ** 1.35;
+        // Slow in and slow out along the arc (no linear motion, §12).
+        const k = 0.5 - 0.5 * Math.cos(Math.PI * u);
         const p0x = a.from.x + a.hopV.x;
         const p0y = a.from.y + a.hopV.y;
         const dx = to.x - p0x;

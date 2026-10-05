@@ -272,7 +272,8 @@ test.describe('in-game VFX', () => {
     await boot(page, 1600, 1000);
     await craft(page, BEATS[0]!.patch!);
     await page.evaluate(() => void window.__lotAndRoll!.dispatch({ type: 'Buy', playerId: 0 }));
-    await expect(page.locator('.bm-hl').first()).toBeAttached({ timeout: 3000 });
+    // The colour-group highlight follows the purchase cut-in (≥ 3 s on screen, MONEY-EVENTS §12).
+    await expect(page.locator('.bm-hl').first()).toBeAttached({ timeout: 12_000 });
     await page.evaluate(() => window.__lotAndRoll!.whenIdle());
     expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.properties[31]!.owner)).toBe(0);
     expect(await page.locator('canvas.fx-canvas').count()).toBe(0);
@@ -283,7 +284,8 @@ test.describe('in-game VFX', () => {
   test('prompts stay clickable through a running effect (pointer-events: none)', async ({ page }) => {
     const errors = watchErrors(page);
     await boot(page, 1600, 1000);
-    await craft(page, BEATS[1]!.patch!);
+    // Player 1 (E) at the build prompt for London (22).
+    await craft(page, `${ME(1)} s.players[1].position = 22; s.properties[22] = { owner: 1, level: 0 }; s.phase = { kind: 'build', playerId: 1, spaceIndex: 22, toLevel: 1, cost: 240 };`);
     // A landmark effect (close-up card + stage veil) running…
     await page.evaluate(() => void window.__lotAndRoll!.playFx('landmarkReveal', { space: 31, player: 0 }));
     await page.waitForFunction(() => (window.__lotAndRoll!.fx()?.live ?? 0) > 20);

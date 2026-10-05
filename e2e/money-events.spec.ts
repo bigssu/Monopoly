@@ -14,6 +14,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { reduceMotion } from './motion';
 
 interface LogEntry {
+  stillMs: number;
+  liveMs: number;
   scene: string;
   play: string;
   tier: string;
@@ -47,7 +49,7 @@ async function craft(page: Page, seat: string, patch: string, manual = false): P
     ({ seat, patch, manual }) => {
       const hook = window.__lotAndRoll!;
       hook.manualClock(false);
-      if (manual) hook.setAnimSpeed(1);
+      void manual; // filmstrips run at the default game pace (no setAnimSpeed: it would set pace 1)
       hook.setPromptTimer(0);
       hook.startGame({ ...hook.demoSettings(4, false), rules: 'easy' } as never, 7);
       const s = hook.getState()!;
@@ -105,6 +107,12 @@ async function expectWalletsMatch(page: Page, entry: LogEntry): Promise<void> {
   for (const [seat, label] of Object.entries(entry.wallets)) expect(Number(label.replace(/\D/g, '')), `${entry.scene} wallet ${seat} = engine cash`).toBe(cash[seat]);
 }
 
+/** Pose-to-pose beats (MONEY-EVENTS §12): every cut-in ≥ 3 s on screen, a still hold ≥ 1 s before it hands back. */
+function expectBeats(e: LogEntry): void {
+  expect(e.liveMs, `${e.play}: ${e.liveMs} ms on screen`).toBeGreaterThanOrEqual(2950);
+  expect(e.stillMs, `${e.play}: still ${e.stillMs} ms`).toBeGreaterThanOrEqual(950);
+}
+
 /** Parked and idle: off-screen, no scene clock, no frame callback. */
 async function expectParked(page: Page): Promise<void> {
   await expect.poll(() => stageLive(page), { timeout: 8000 }).toBe(false);
@@ -141,6 +149,7 @@ test.describe('money cut-ins (normal speed, real controls)', () => {
     await expectWalletsMatch(page, L.at(-1)!);
     expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.properties[4])).toMatchObject({ owner: 0, level: 1 });
     await expectParked(page);
+    for (const e of await log(page)) expectBeats(e);
 
     // 2. Toll to the opposite seat on Cairo (villa), then take the city over.
     await craft(page, 'S', `s.players[me].position = 0; s.players[me].cash = 3000; s.properties[4] = { owner: other(2), level: 1 }; s.testHooks = { diceQueue: [[1, 3]] };`);
@@ -158,6 +167,7 @@ test.describe('money cut-ins (normal speed, real controls)', () => {
     await expectWalletsMatch(page, L.at(-1)!);
     expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.properties[4]!.owner)).toBe(0);
     await expectParked(page);
+    for (const e of await log(page)) expectBeats(e);
 
     // 3. Happy birthday: every other player pays into the centre, the total flies to me.
     await craft(page, 'S', `s.players[me].position = 0; s.testHooks = { diceQueue: [[1, 2]], cardQueue: ['birthday'] };`);
@@ -169,6 +179,7 @@ test.describe('money cut-ins (normal speed, real controls)', () => {
     expect(Object.keys(col.wallets).sort()).toEqual(['E', 'N', 'S', 'W']);
     await expectWalletsMatch(page, col);
     await expectParked(page);
+    for (const e of await log(page)) expectBeats(e);
 
     // 4. Tax office.
     await craft(page, 'S', `s.players[me].position = 20; s.players[me].cash = 4560; s.testHooks = { diceQueue: [[1, 2]] };`);
@@ -179,6 +190,8 @@ test.describe('money cut-ins (normal speed, real controls)', () => {
     expect(L.at(-1)!.play).toBe('tax');
     await expectWalletsMatch(page, L.at(-1)!);
     await expectParked(page);
+    for (const e of await log(page)) expectBeats(e);
+    console.log(`[money] on screen: ${(await log(page)).map((e) => `${e.play} ${e.liveMs} ms (still ${e.stillMs})`).join(', ')}`);
 
     expect(errors, errors.join('\n')).toEqual([]);
   });

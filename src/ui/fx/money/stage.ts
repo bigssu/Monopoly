@@ -424,7 +424,7 @@ export class MoneyStage implements TweenHost {
   }
 
   /** Take the stage down (unless `keep`: a follow-up scene continues the same cut-in). */
-  async close(tier: Tier, keep = false): Promise<void> {
+  async close(tier: Tier, keep = false, ms = f(5), alongside: Promise<void>[] = []): Promise<void> {
     this.stats.peakFlying = Math.max(this.coins.peakFlying, 0);
     this.stats.peakNodes = this.coins.peakNodes;
     if (keep) {
@@ -432,8 +432,9 @@ export class MoneyStage implements TweenHost {
       return;
     }
     this.kept = false;
-    this.host.camera?.('out', tier, f(5));
-    await this.tween(f(5), (u) => (this.root.style.opacity = String(1 - easeOutCubic(u))));
+    this.host.camera?.('out', tier, ms);
+    // The fade runs with the scene's own out moves (hero to its tile, wallets sinking): one quick out.
+    await Promise.all([...alongside, this.tween(ms, (u) => (this.root.style.opacity = String(1 - u * u)))]);
     this.park();
   }
 
@@ -569,22 +570,40 @@ export class MoneyStage implements TweenHost {
    * A tool swinging in (the build hammer): frame 0 of a colour sprite at `at`, rotating from a
    * raised angle down onto the site over `ms`, then gone.
    */
-  swing(anim: FxAnimName, at: Pt, seatRot: number, o: { scale?: number; ms?: number } = {}): Promise<void> {
-    if (!this.clock || this.reduced() || headless() || !this.fxFree.length) return Promise.resolve();
+  swing(anim: FxAnimName, at: Pt, seatRot: number, o: { scale?: number; ms?: number; onHit?: () => void } = {}): Promise<void> {
+    if (!this.clock || this.reduced() || headless() || !this.fxFree.length) {
+      o.onHit?.();
+      return this.clock ? this.clock.after(o.ms ?? f(8)) : Promise.resolve();
+    }
     const n = this.fxFree.pop()!;
     const { w, h } = animSize(anim);
     const s = o.scale ?? 1;
     if (!paintFrame(n, anim, 0, s)) {
       this.fxFree.push(n);
+      o.onHit?.();
       return Promise.resolve();
     }
     n.style.transformOrigin = `${w * s * 0.75}px ${h * s * 0.85}px`;
     n.style.opacity = '1';
-    return this.tween(o.ms ?? f(4), (u) => {
-      const k = u < 0.7 ? (u / 0.7) ** 2 : 1 - (u - 0.7) * 0.6;
-      const ang = seatRot - 70 + 85 * k;
-      n.style.transform = `translate(${(at.x - w * s * 0.75).toFixed(1)}px,${(at.y - h * s * 0.85).toFixed(1)}px) rotate(${ang.toFixed(1)}deg)`;
+    let hit = false;
+    // Anticipation: wound up further back (slow), then struck down fast (an arc about the grip),
+    // a small recoil after the impact (follow-through).
+    return this.tween(o.ms ?? f(8), (u) => {
+      let ang: number;
+      if (u < 0.45) ang = -70 - 25 * Math.sin((Math.PI / 2) * (u / 0.45));
+      else if (u < 0.7) {
+        const k = ((u - 0.45) / 0.25) ** 2;
+        ang = -95 + 110 * k;
+      } else {
+        if (!hit) {
+          hit = true;
+          o.onHit?.();
+        }
+        ang = 15 - 12 * Math.sin(Math.PI * ((u - 0.7) / 0.3));
+      }
+      n.style.transform = `translate(${(at.x - w * s * 0.75).toFixed(1)}px,${(at.y - h * s * 0.85).toFixed(1)}px) rotate(${(seatRot + ang).toFixed(1)}deg)`;
     }).then(() => {
+      if (!hit) o.onHit?.();
       this.resetFx(n);
       this.fxFree.push(n);
     });

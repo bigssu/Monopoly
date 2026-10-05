@@ -111,6 +111,9 @@
   color: #FFE08A;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
 }
+/* Anticipation (wallet.lift): the top coins rise a little and shimmer before the first one leaves. */
+.mw.is-lift .mw-col:not(.is-empty)::before { transform: translateY(calc(var(--cap-h) * -0.9)); filter: brightness(1.5); }
+.mw.is-lift .mw-col:not(.is-empty) { filter: brightness(1.18); }
 .mw-col.is-flash::before { filter: brightness(1.9); }
 .mw-col.is-flash { filter: brightness(1.5); }
 .mw-col.is-pop { filter: brightness(1.25); }

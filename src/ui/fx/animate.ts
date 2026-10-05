@@ -71,6 +71,9 @@ export interface MoneyLogEntry {
   /** Wallet labels per seat when the scene settled (what the players read). */
   wallets: Record<string, string>;
   t: number;
+  /** Real ms of the still hold (result pose → hand-back) and of the whole cut-in on screen. */
+  stillMs: number;
+  liveMs: number;
 }
 const MONEY_LOG: MoneyLogEntry[] | null =
   typeof window !== 'undefined' && isDevHook() ? (((window as unknown as { __moneyLog?: MoneyLogEntry[] }).__moneyLog ??= [])) : null;
@@ -579,11 +582,20 @@ async function playMoney(view: GameView, vs: GameState, events: readonly GameEve
   if (!fast) for (const e of evs) view.director.onEvent(e, vs, 'before');
   if (!fast) {
     const play = startScene(view, vs, g.scene, g.keep);
+    let tStart = 0;
+    let tResult = 0;
+    if (MONEY_LOG) {
+      void play.cue('start').then(() => (tStart = performance.now()));
+      void play.cue('result').then(() => (tResult = performance.now()));
+    }
     await play;
     if (MONEY_LOG) {
       const wallets: Record<string, string> = {};
       for (const s of M.SEATS) if (view.money.wallets[s].visible) wallets[s] = view.money.wallets[s].el.dataset.v ?? '';
-      MONEY_LOG.push({ scene: g.scene.kind, play: play.kind, tier: play.tier, keep: g.keep, events: evs.map((e) => e.type), wallets, t: Math.round(performance.now()) });
+      const entry: MoneyLogEntry = { scene: g.scene.kind, play: play.kind, tier: play.tier, keep: g.keep, events: evs.map((e) => e.type), wallets, t: Math.round(performance.now()), stillMs: Math.round(performance.now() - tResult), liveMs: 0 };
+      MONEY_LOG.push(entry);
+      // On screen from stage-in to park (or to the hand-over when kept up for the next scene).
+      void play.done.then(() => (entry.liveMs = Math.round(performance.now() - tStart)));
     }
   }
   for (const e of evs) applyMoneyState(vs, e);

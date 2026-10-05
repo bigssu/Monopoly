@@ -60,7 +60,7 @@ buy/build/takeover decision cards, card draws, the island escape choice, the fes
 picker, the travel destination prompt, the pay/sell flow, the turn banner.
 
 Rule: **a player never has to read upside-down text to take their turn**. Non-acting players
-only need to *notice* things (money floats on their own panel, token animation on the board,
+only need to *notice* things (their own coin pile at their seat edge in a money cut-in, token animation on the board,
 color flashes), and those are orientation-free (numbers/icons on their rotated panel).
 
 The board ring itself does not rotate (tokens would be disorienting); space labels are short and
@@ -101,9 +101,12 @@ target, build-anywhere), the board space — and the action is dispatched at the
 * Dice: two big dice on the Stage; tap-and-hold shakes them (haptic ticks), release rolls with a
   CSS 3D tumble (≈900 ms), result pips snap, doubles get a golden flash + "더블!" burst.
 * Token movement: hop space-to-space (~180 ms/space, ease-out with squash & stretch), passing Start
-  triggers a coin shower + "+300" float on that player's panel.
-* Money: numbers animate (tween) and flash green/red; toll payment shows a coin arc from payer
-  panel to receiver panel.
+  triggers the salary cut-in (coins fountain from the bank into that player's pile).
+* Money (docs/MONEY-EVENTS.md §11): every purchase, payment and income is a full-screen cut-in —
+  the hero (lot, building, city card, vault, bank) big in the middle, each party's gold/silver/
+  bronze pile at its own seat edge, coins flying seat to seat (via the centre when collecting from
+  everyone), the amount on a plaque facing the acting seat. Panel numbers tween and flash green/red
+  when the cut-in hands back.
 * Buildings: pop-in with bounce; landmark gets a sparkle loop.
 * Takeover: short screen shake + stamp animation "인수!".
 * Bankruptcy: panel desaturates + broken-piggy icon.

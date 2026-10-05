@@ -244,15 +244,23 @@ export class Wallet {
     this.place();
   }
 
-  /** A quick squash-bounce of the whole pile (landing / paying). */
+  /**
+   * A squash-bounce of the whole pile (landing / paying) that wobbles out (follow-through): up to `k`,
+   * a smaller rebound past 1, settle.
+   */
   bump(host: TweenHost, k = 1.06, ms = f(4)): void {
     const t0 = host.now();
     this.bumpT = t0;
     void host.tween(ms, (u) => {
       if (this.bumpT !== t0) return;
-      this.bumpK = 1 + (k - 1) * Math.sin(Math.PI * u);
+      this.bumpK = 1 + (k - 1) * Math.sin(Math.PI * 2 * 0.75 * u) * (1 - u) ** 1.2;
       this.place();
     });
+  }
+
+  /** Anticipation: the coins that are about to leave lift a little and shimmer (until the first goes). */
+  lift(on: boolean): void {
+    this.el.classList.toggle('is-lift', on);
   }
 
   /** Breaks before a coin leaves: the bigger coin flashes (2 f), then becomes ten smaller ones. */

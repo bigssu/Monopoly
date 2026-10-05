@@ -302,6 +302,10 @@ scripts/fx/contact-sheet.mjs  아틀라스 + 프레임 재생 컨택트 시트 P
 
 ### 7.2 돈 · 구매 · 건설
 
+> **2026-10-05: 게임에서는 이 절의 돈 프리셋(plotClaim, buildSeq, landmarkReveal, tollPay, takeoverStamp,
+> passStart, billRain, coinIn, bankruptcy)이 재생되지 않는다.** 모든 돈 이벤트는 DOM 머니 컷인이 맡는다
+> (`docs/MONEY-EVENTS.md` §11). 프리셋 코드는 FX 데모·성능 재생(`npm run perf` fx 단계)용으로 남아 있다.
+
 | 이벤트/조건 | 등급 | 시퀀스 (t) | 스프라이트·수량 | 색 | 쉐이크·정지 | SFX / 햅틱 | 좌석 가독성 |
 |---|---|---|---|---|---|---|---|
 | **탭: 구매/건설/인수 확정 버튼** (프롬프트 순간) | I0 | 0: 버튼 위치 `sparkle4`×4 + `ring_shock` 0.4× (≤100 ms 지연) | 5 | 행위자 색 | — | `tap`(기존) / `tick` | ↻ 버튼은 이미 행위자 쪽 |
