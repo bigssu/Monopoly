@@ -230,6 +230,10 @@ export function setHeld(on: boolean, scope: Element | null = null): void {
   heldWaiters = [];
   w.forEach((f) => f());
 }
+/** The game is paused (`setHeld`): JS-driven animations on `onFrame` stop advancing their own time. */
+export function isHeld(): boolean {
+  return held;
+}
 /** Resolves at once, or when the game is resumed. */
 export function whenRunning(): Promise<void> {
   return held ? new Promise((r) => heldWaiters.push(r)) : Promise.resolve();

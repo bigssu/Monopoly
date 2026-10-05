@@ -1,0 +1,53 @@
+/** Money-stage captions (registered on import; Korean first, short). */
+import { registerStrings } from '@/i18n';
+
+export const MONEY_STRINGS = {
+  ko: {
+    'm.toll': '통행료',
+    'm.toll.festival': '축제 통행료',
+    'm.bought': '{name} 구매!',
+    'm.built.1': '별장 완공!',
+    'm.built.2': '빌딩 완공!',
+    'm.built.3': '호텔 완공!',
+    'm.built.4': '명소 완성!',
+    'm.takeover': '인수!',
+    'm.collect': '모두에게 걷기',
+    'm.collect.total': '총 {n}!',
+    'm.payAll': '모두에게 주기',
+    'm.salary': '월급',
+    'm.bonus': '보너스',
+    'm.pot': '기부금 받기',
+    'm.tax': '세금',
+    'm.donation': '기부',
+    'm.bail': '보석금',
+    'm.fine': '벌금',
+    'm.sale': '매각',
+    'm.bankrupt': '파산!',
+    'm.x2': '×2',
+  },
+  en: {
+    'm.toll': 'Toll',
+    'm.toll.festival': 'Festival toll',
+    'm.bought': 'Bought {name}!',
+    'm.built.1': 'Villa built!',
+    'm.built.2': 'Building done!',
+    'm.built.3': 'Hotel built!',
+    'm.built.4': 'Landmark!',
+    'm.takeover': 'Taken over!',
+    'm.collect': 'Everyone pays',
+    'm.collect.total': '{n} in total!',
+    'm.payAll': 'Pay everyone',
+    'm.salary': 'Salary',
+    'm.bonus': 'Bonus',
+    'm.pot': 'Donation pot',
+    'm.tax': 'Tax',
+    'm.donation': 'Donation',
+    'm.bail': 'Bail',
+    'm.fine': 'Fine',
+    'm.sale': 'Sold',
+    'm.bankrupt': 'Bankrupt!',
+    'm.x2': '×2',
+  },
+} as const;
+
+registerStrings({ ko: { ...MONEY_STRINGS.ko }, en: { ...MONEY_STRINGS.en } });

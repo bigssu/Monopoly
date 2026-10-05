@@ -9,7 +9,7 @@
  * synthesized voices name by name once decoded; until then (or if one is missing) the synth plays.
  * All sounds are scheduled on `ctx.currentTime`, short, and disconnect themselves.
  */
-import type { Sfx, SfxName } from './sfx';
+import type { Sfx, SfxName, SfxOpts } from './sfx';
 
 type Wave = OscillatorType;
 
@@ -56,6 +56,11 @@ export const THROTTLE: Partial<Record<SfxName, number>> = {
   'cash-in': 0.05,
   'cash-out': 0.05,
   toll: 0.05,
+  // Money events: the ONE gate for clinks is the coin scheduler (fx/money/sound.ts: ≥ 25 ms, 6
+  // voices); a second throttle here on the quantized audio clock would drop clinks it accepted.
+  'coin-clink': 0,
+  'coin-thud': 0.1,
+  'coin-break': 0.06,
 };
 export const DEFAULT_THROTTLE = 0.04;
 
@@ -154,7 +159,7 @@ export class SynthSfx implements Sfx {
     this.applyGain();
   }
 
-  play(name: SfxName, opts: { pitch?: number; gain?: number } = {}): void {
+  play(name: SfxName, opts: SfxOpts = {}): void {
     if (this.muted || this.volume <= 0) return;
     // Silent until a gesture has resumed the context (unlock).
     const c = this.ctx;
@@ -182,7 +187,7 @@ export class SynthSfx implements Sfx {
     }
     let len = 0.5;
     try {
-      len = this.voice(name, now + 0.008, p, out);
+      len = this.voice(name, now + 0.008, p, out, opts.variant ?? 0);
     } catch (e) {
       console.warn('[sfx]', name, e);
     }
@@ -370,8 +375,38 @@ export class SynthSfx implements Sfx {
   // ------------------------------------------------------------------ voices
 
   /** Schedules the sound and returns its length in seconds. */
-  private voice(name: SfxName, t: number, p: number, out: AudioNode): number {
+  private voice(name: SfxName, t: number, p: number, out: AudioNode, variant = 0): number {
     switch (name) {
+      case 'coin-clink': {
+        // A small coin on coins: 4 round-robin timbres (inharmonic partial sets), short and bright.
+        const V: ReadonlyArray<readonly [number, number, number]> = [
+          [2350, 2.41, 3.93],
+          [2600, 2.27, 4.11],
+          [2180, 2.62, 3.71],
+          [2480, 2.33, 4.4],
+        ];
+        const [f0, r1, r2] = V[((variant % V.length) + V.length) % V.length]!;
+        const f = f0 * p;
+        this.tone({ f, t, d: 0.12, g: 0.17, a: 0.001 }, out);
+        this.tone({ f: f * r1, t, d: 0.08, g: 0.08, a: 0.001 }, out);
+        this.tone({ f: f * r2, t, d: 0.05, g: 0.045, a: 0.001 }, out);
+        this.noise({ t, d: 0.012, g: 0.07, type: 'highpass', f: 6000 }, out);
+        return 0.13;
+      }
+
+      case 'coin-thud':
+        // The end of paying: a low, soft "tuk" (no cha-ching on money going out).
+        this.tone({ f: 150 * p, f2: 70 * p, t, d: 0.16, g: 0.42, a: 0.002 }, out);
+        this.noise({ t, d: 0.05, g: 0.16, type: 'lowpass', f: 900 }, out);
+        this.tone({ f: 1400 * p, t, d: 0.05, type: 'triangle', g: 0.04 }, out);
+        return 0.2;
+
+      case 'coin-break':
+        // A gold coin turning into ten silver: a quick high shimmer.
+        this.bell(N.E7 * p, t, 0.16, 0.09, out);
+        this.sparkle(t + 0.02, 5, 0.12, 0.05, out, 3600, 6200);
+        return 0.25;
+
       case 'tap':
         this.tone({ f: 1500 * p, f2: 950 * p, t, d: 0.05, type: 'triangle', g: 0.2, a: 0.002 }, out);
         this.noise({ t, d: 0.018, g: 0.05, type: 'highpass', f: 4500 }, out);

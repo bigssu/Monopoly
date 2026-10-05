@@ -1,0 +1,269 @@
+/* Money stage (src/ui/fx/money, docs/MONEY-EVENTS.md §2–§3).
+   One full-screen layer, parked off-screen by a transform while idle (no layer, no paint).
+   While a scene runs: root (opacity), hero (transform) and fg (transform) are the only layers.
+   Only transform / opacity move; everything else is set once per scene or per coin event. */
+
+.money-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+  perspective: 1200px;
+  transform: translateX(-400vw);
+  --pu: 10px;
+}
+.money-stage.is-live { transform: none; will-change: opacity; }
+
+/* Static vignette + dim (opacity set once per scene from the tier). */
+.ms-dim {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 72% 64% at 50% 50%, rgba(14, 20, 34, 0.72) 0%, rgba(10, 14, 24, 0.9) 60%, rgba(4, 6, 12, 0.98) 100%);
+}
+
+.ms-wallets, .ms-fg { position: absolute; inset: 0; }
+.money-stage.is-live .ms-fg { will-change: transform; }
+
+/* ------------------------------------------------------------------ wallet piles */
+.mw {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 50% 100%;
+  visibility: hidden;
+  --pc: #4A6CF7;
+  --lab: 24px;
+  --coin: 40px;
+}
+.mw.is-on { visibility: visible; }
+/* Ground shadow under the columns. */
+.mw::before {
+  content: '';
+  position: absolute;
+  left: 2%;
+  right: 2%;
+  bottom: calc(var(--lab) * 0.72);
+  height: calc(var(--coin) * 0.5);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+}
+/* The exact amount, on a pill in the player's colour (faces the seat with the wallet). */
+.mw::after {
+  content: attr(data-v);
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  min-width: 62%;
+  box-sizing: border-box;
+  padding: 0 0.45em;
+  height: var(--lab);
+  line-height: var(--lab);
+  border-radius: 999px;
+  background: var(--pc);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  color: #fff;
+  font-family: var(--font-display, sans-serif);
+  font-size: calc(var(--lab) * 0.78);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+.mw.is-broke { filter: grayscale(0.85) brightness(0.8); }
+
+.mw-col {
+  position: absolute;
+  height: 0;
+  background-repeat: repeat-y;
+  background-position: 50% 100%;
+  --cap-h: 14px;
+}
+/* Top coin face. */
+.mw-col::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: var(--cap-h);
+  top: calc(var(--cap-h) * -0.5);
+  background-image: var(--cap-img, none);
+  background-size: var(--cap-size, 100% 100%);
+  background-position: var(--cap-pos, 0 0);
+  background-repeat: no-repeat;
+}
+.mw-col.is-empty::before { display: none; }
+/* More coins than shown (gold compression / cap). */
+.mw-col.is-more::after {
+  content: '+';
+  position: absolute;
+  left: 50%;
+  top: calc(var(--cap-h) * -1.9);
+  transform: translateX(-50%);
+  font-family: var(--font-display, sans-serif);
+  font-size: calc(var(--coin) * 0.55);
+  line-height: 1;
+  color: #FFE08A;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+.mw-col.is-flash::before { filter: brightness(1.9); }
+.mw-col.is-flash { filter: brightness(1.5); }
+.mw-col.is-pop { filter: brightness(1.25); }
+
+/* ------------------------------------------------------------------ flying coins */
+.mc, .mc-sh, .ms-fx {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  transform: translate(-9999px, 0);
+  background-repeat: no-repeat;
+}
+.mc { width: 48px; height: 48px; }
+/* Fallback discs until the atlas is in. */
+.mc[data-m='gold'] { background: radial-gradient(circle at 42% 38%, #FFE08A 0 22%, #FFC94A 23% 58%, #E9A92A 59% 68%, transparent 69%); }
+.mc[data-m='silver'] { background: radial-gradient(circle at 42% 38%, #F6F8FC 0 22%, #DCE3EE 23% 58%, #A3AFC4 59% 68%, transparent 69%); }
+.mc[data-m='bronze'] { background: radial-gradient(circle at 42% 38%, #F8C899 0 22%, #E69C61 23% 58%, #BD7442 59% 68%, transparent 69%); }
+.mc-sh {
+  width: 40px;
+  height: 12px;
+  margin: -6px 0 0 -20px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+}
+
+/* ------------------------------------------------------------------ hero */
+.ms-hero {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  --hu: 3px;
+}
+.money-stage.is-live .ms-hero { will-change: transform; }
+.ms-hero-in { position: absolute; inset: 0; }
+.ms-hero-in > svg, .ms-hero-in svg { display: block; width: 100%; height: 100%; }
+
+/* City card: landmark on paper, group band on top, owner frame. */
+.mh-card {
+  position: absolute;
+  left: 12%;
+  top: 3%;
+  width: 76%;
+  height: 94%;
+  box-sizing: border-box;
+  border-radius: calc(var(--hu) * 7);
+  background: linear-gradient(#FFFDF6, #F3EAD6);
+  border: calc(var(--hu) * 3.2) solid var(--frame, transparent);
+  box-shadow: 0 calc(var(--hu) * 2.4) 0 rgba(0, 0, 0, 0.35), 0 calc(var(--hu) * 5) calc(var(--hu) * 8) rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.mh-card:not(.is-owned) { border-color: #E2D6BC; }
+.mh-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 15%;
+  background: var(--band);
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-family: var(--font-display, sans-serif);
+  font-size: calc(var(--hu) * 7.5);
+  color: #fff;
+  text-shadow: 0 calc(var(--hu) * 0.5) 0 rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.mh-deeds .mh-band { font-size: calc(var(--hu) * 2.6); }
+.mh-art { position: absolute; left: 6%; right: 6%; top: 18%; bottom: 4%; }
+.mh-card.is-stamped { box-shadow: 0 0 0 calc(var(--hu) * 1.2) #fff, 0 calc(var(--hu) * 2.4) 0 rgba(0, 0, 0, 0.35); }
+
+/* Lot (purchase): dirt plot, landmark, sign, flag. */
+.mh-lot, .mh-site { position: absolute; inset: 0; }
+.mh-plot { position: absolute; left: 0; right: 0; bottom: 2%; height: 59%; }
+.mh-landmark { position: absolute; left: 21%; width: 58%; height: 58%; bottom: 25%; filter: saturate(0.85); }
+.mh-lot.is-owned .mh-landmark { filter: none; }
+.mh-sign { position: absolute; right: 1%; bottom: 14%; width: 26%; height: 29%; }
+.mh-flag { position: absolute; left: 13%; bottom: 26%; width: 17%; height: 24%; opacity: 0; transform-origin: 25% 100%; }
+.mh-lot.is-owned .mh-flag { opacity: 1; }
+
+/* Construction site (build): the building rises out of the ground (clipped below it). */
+.mh-rise { position: absolute; left: 18%; width: 64%; bottom: 27%; height: 66%; overflow: hidden; }
+.mh-site.lv4 .mh-rise { left: 8%; width: 84%; height: 88%; bottom: 25%; }
+.mh-bld { position: absolute; inset: 0; transform: translateY(100%); }
+.mh-rays {
+  position: absolute;
+  inset: -28%;
+  border-radius: 50%;
+  opacity: 0;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 226, 140, 0.55) 0deg 9deg, rgba(255, 226, 140, 0) 9deg 30deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
+}
+.mh-site.is-rays .mh-rays { opacity: 1; }
+
+.mh-sinkpic { position: absolute; inset: 4%; }
+
+/* Deeds (bankruptcy): a grid of small city cards. */
+.mh-deeds {
+  position: absolute;
+  inset: 2%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: calc(var(--hu) * 3);
+}
+.mh-deeds .mh-card { position: relative; left: auto; top: auto; width: 22%; height: auto; aspect-ratio: 0.8; border-width: calc(var(--hu) * 1.6); }
+.mh-deeds.n1 .mh-card, .mh-deeds.n2 .mh-card { width: 40%; }
+.mh-deeds.n3 .mh-card { width: 29%; }
+
+/* ------------------------------------------------------------------ plaques & stamp */
+.ms-plq {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--pu) * 0.35) calc(var(--pu) * 1.3) calc(var(--pu) * 0.45);
+  border-radius: calc(var(--pu) * 1.4);
+  background: linear-gradient(#323B54, #1B2130);
+  border: calc(var(--pu) * 0.28) solid #FFC94A;
+  box-shadow: 0 calc(var(--pu) * 0.4) 0 rgba(0, 0, 0, 0.45);
+  color: #FFE08A;
+  font-family: var(--font-display, sans-serif);
+  white-space: nowrap;
+  transform-origin: 50% 50%;
+}
+.ms-plq-t { font-size: calc(var(--pu) * 1.15); line-height: 1.2; color: #fff; }
+.ms-plq-a { font-weight: 400; font-size: calc(var(--pu) * 2.6); line-height: 1.05; font-variant-numeric: tabular-nums; text-shadow: 0 calc(var(--pu) * 0.18) 0 rgba(0, 0, 0, 0.5); }
+.ms-plq[data-tone='bad'] { border-color: #FF8A80; }
+.ms-plq[data-tone='bad'] .ms-plq-a { color: #FFC2BC; }
+.ms-plq[data-tone='good'] { border-color: #5CC689; }
+.ms-plq[data-tone='good'] .ms-plq-a { color: #B9F2CF; }
+
+.ms-stamp {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  padding: calc(var(--pu) * 0.2) calc(var(--pu) * 0.9);
+  border-radius: calc(var(--pu) * 0.8);
+  border: calc(var(--pu) * 0.32) solid #fff;
+  font-family: var(--font-display, sans-serif);
+  font-size: calc(var(--pu) * 3.4);
+  line-height: 1.1;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 calc(var(--pu) * 0.4) 0 rgba(0, 0, 0, 0.45);
+}
+.ms-stamp.is-gold { background: #E9A92A; }
+.ms-stamp.is-bad { background: #E8564F; }

@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { THROTTLE } from '../synth';
-import type { SfxName } from '../sfx';
+import { SYNTH_ONLY_SFX, type SfxName } from '../sfx';
 import type { TrackId } from '../music';
 
 const PUB = join(__dirname, '..', '..', '..', '..', 'public');
@@ -24,7 +24,7 @@ describe('sound assets', () => {
         expect(readFileSync(join(PUB, 'sfx', f)).length, f).toBeGreaterThan(1000);
       }
     }
-    expect(Object.keys(THROTTLE).every((k) => NAMES.includes(k as SfxName))).toBe(true);
+    expect(Object.keys(THROTTLE).every((k) => NAMES.includes(k as SfxName) || SYNTH_ONLY_SFX.includes(k as SfxName))).toBe(true);
   });
 
   it('ships every music track', () => {
