@@ -25,7 +25,7 @@ import {
   type Flight, type FlightRange, type Metal, type Tier,
 } from './denom';
 import { SEAT_UP, SEATS, type MoneyStage, type SpaceArt } from './stage';
-import { SEAT_ROT, type Wallet } from './wallet';
+import { SEAT_ROT, rotate, type Wallet } from './wallet';
 import './strings';
 
 export interface Party {
@@ -185,6 +185,7 @@ interface StreamOpts {
   travelF?: number;
   /** Per-coin spawn hop direction / arc bend (a fountain instead of a line). */
   hop?: (i: number) => Pt;
+  hopSize?: number;
   bend?: (i: number) => number;
   /** Fire the 'depart' cue on the first departure. */
   cueDepart?: boolean;
@@ -229,6 +230,7 @@ async function stream(x: Ctx, src: Src, dst: Dst, flights: readonly Flight[], o:
       at: x.c.t,
       stream: o.sid,
       hop: o.hop?.(i),
+      hopSize: o.hopSize,
       bend: o.bend?.(i),
       hopF: o.hopF,
       travelF: o.travelF,
@@ -298,11 +300,16 @@ function heroPunch(x: Ctx, k = 1.04, frames = 3): void {
   void x.st.tween(f(frames), (u) => x.st.pose({ s: s0 * (1 + (k - 1) * Math.sin(Math.PI * u)) }));
 }
 
-/** Plaque in front of the hero, facing `seat`. */
+/**
+ * Where a plaque facing `seat` stands: the hero's front-right corner as that seat sees it (clear of
+ * the seat's own wallet on its edge midpoint, and of the coins' landing spot in the middle). Four
+ * seats get four different corners, so the collect-from-all totals never overlap. `d` = 0: centre.
+ */
 function frontOf(x: Ctx, seat: Seat, d = 0.42): Pt {
-  const u = SEAT_UP[seat];
   const { c, hero } = x.st.geom;
-  return { x: c.x - u.x * hero * d, y: c.y - u.y * hero * d };
+  if (!d) return c;
+  const v = rotate(hero * 0.5, hero * 0.36, SEAT_ROT[seat]);
+  return { x: c.x + v.x, y: c.y + v.y };
 }
 
 async function plaqueIn(x: Ctx, i: number, seat: Seat, at: Pt, o: { title?: string; amount?: number | null; sign?: '' | '+' | '−'; tone?: 'gold' | 'bad' | 'good' }): Promise<void> {
@@ -368,7 +375,13 @@ export interface TransferArgs extends SceneOpts {
   hero?: string;
 }
 
-const placeHero = (p: Place): string => (p === 'bank' ? bank() : p === 'pot' ? icon('pot') : vault(false));
+/** Closed and open vault in one hero (opening = a class switch, no markup parse mid-scene). */
+const vaultPair = (): string => `<div class="mh-vault"><div class="mh-v0">${vault(false)}</div><div class="mh-v1">${vault(true)}</div></div>`;
+function openVault(x: Ctx): void {
+  x.st.heroIn.querySelector('.mh-vault')?.classList.add('is-open');
+}
+
+const placeHero = (p: Place): string => (p === 'bank' ? bank() : p === 'pot' ? icon('pot') : vaultPair());
 
 /** Generic money move: wallet / bank / pot / centre → wallet / bank / pot / centre. */
 export function transfer(st: MoneyStage, a: TransferArgs): MoneyPlay {
@@ -689,7 +702,7 @@ export function collectFromAll(st: MoneyStage, a: CollectArgs): MoneyPlay {
   return runScene(st, 'collect', tier, a, async (x) => {
     const rw = walletOf(x, a.receiver);
     const pws = a.payers.map((p) => ({ p, w: walletOf(x, p) }));
-    void heroIn(x, vault(false), a.receiver.seat, 'is-place', { s: 0.82, rx: 10 });
+    void heroIn(x, vaultPair(), a.receiver.seat, 'is-place', { s: 0.82, rx: 10 });
     const g = x.st.geom;
     // The total faces every seat (four plaques around the vault).
     const spots = SEATS.map((s, i) => ({ s, i, at: frontOf(x, s, 0.56) }));
@@ -726,7 +739,7 @@ export function collectFromAll(st: MoneyStage, a: CollectArgs): MoneyPlay {
     const x0 = x.st.heroPose.x;
     await x.st.tween(f(8), (u) => x.st.pose({ x: x0 + Math.sin(u * Math.PI * 8) * 4 * (u > 0.3 ? 1 : 0) }));
     // … and opens: a fast stream to the receiver.
-    x.st.heroIn.innerHTML = vault(true);
+    openVault(x);
     heroPunch(x, 1.1, 4);
     x.st.sound.cue('coin-break');
     await stream(x, { point: vaultPt }, { wallet: rw, sound: 'receive' }, regroup(arrived), { start: x.c.t / f(1) + 1, stagger: 1.2, sid: 3, hopF: 2, travelF: 10, cueDepart: false });
@@ -749,7 +762,7 @@ export function payAll(st: MoneyStage, a: PayAllArgs): MoneyPlay {
   return runScene(st, 'payAll', tier, a, async (x) => {
     const pw = walletOf(x, a.payer);
     const rws = a.receivers.map((r) => ({ r, w: walletOf(x, r) }));
-    void heroIn(x, vault(false), a.payer.seat, 'is-place', { s: 0.82, rx: 10 });
+    void heroIn(x, vaultPair(), a.payer.seat, 'is-place', { s: 0.82, rx: 10 });
     const g = x.st.geom;
     const front = frontOf(x, a.payer.seat, 0.56);
     void plaqueIn(x, 0, a.payer.seat, front, { title: a.title ?? t('m.payAll'), amount: 0, tone: 'bad' });
@@ -767,7 +780,7 @@ export function payAll(st: MoneyStage, a: PayAllArgs): MoneyPlay {
     void plaquePop(x, 0, a.payer.seat, front);
     const x0 = x.st.heroPose.x;
     await x.st.tween(f(8), (u) => x.st.pose({ x: x0 + Math.sin(u * Math.PI * 6) * 3 }));
-    x.st.heroIn.innerHTML = vault(true);
+    openVault(x);
     heroPunch(x, 1.08, 4);
     const t0 = x.c.t / f(1);
     await Promise.all(
@@ -816,7 +829,7 @@ export function receive(st: MoneyStage, a: ReceiveArgs): MoneyPlay {
         got += fl.value;
         void x.st.plaque(0).count(x.c, got, f(4));
       },
-    }, flights, { start: 8, stagger: 1.5, sid: 0, hopF: 6, travelF: 12, hop: fan, bend: (i) => (i % 2 ? 0.32 : -0.32) });
+    }, flights, { start: 8, stagger: 1.5, sid: 0, hopF: 6, travelF: 12, hop: fan, hopSize: x.st.geom.hero * 0.3, bend: (i) => (i % 2 ? 0.3 : -0.3) });
     w.bump(x.st, 1.08, f(4));
     void x.st.fx('coin_burst', w.center(), { scale: x.coin / 30 });
     void plaquePop(x, 0, a.seat, front);

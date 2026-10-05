@@ -2,6 +2,7 @@
  * Money-stage filmstrips: runs scenes of the demo page (money-demo.html, src/ui/fx/money/demo.ts)
  * on the manual clock and writes one PNG per scenario × seat × viewport to docs/assets/money-strips/
  * (one thumbnail every 2 ticks = 2 frames at 30 fps; label = scene frame, coins in flight).
+ * JPEG by default (`--format png` for lossless; ~2.4 MB per strip as PNG).
  *
  *   node scripts/fx/money-strips.mjs                       # the default set
  *   node scripts/fx/money-strips.mjs toll@E@800x450 build4 # scenario[@seat[@WxH]]
@@ -25,8 +26,10 @@ const opt = (k, d) => {
 };
 const OUT = resolve(opt('--out', 'docs/assets/money-strips'));
 const EVERY = +opt('--every', '2');
-const COLS = +opt('--cols', '6');
-const THUMB = +opt('--thumb', '420');
+const COLS = +opt('--cols', '8');
+const THUMB = +opt('--thumb', '320');
+/** jpg (default, ~10× smaller for these dark full-screen frames) or png. */
+const FORMAT = opt('--format', 'jpg');
 const PORT = +opt('--port', '5189');
 const MAX = +opt('--max', '150');
 /** Also save these ticks as full-size PNGs (review): --full 12,30,50 */
@@ -102,7 +105,7 @@ try {
     }
     const stats = await page.evaluate(() => window.__moneyDemo.stats());
     const png = await composer.evaluate(
-      async ({ shots, cols, thumb, w, h, title }) => {
+      async ({ fmt, shots, cols, thumb, w, h, title }) => {
         const k = thumb / w;
         const tw = Math.round(w * k);
         const th = Math.round(h * k);
@@ -127,11 +130,11 @@ try {
           g.font = '11px monospace';
           g.fillText(shots[i].label, x + 3, y + th + 12);
         }
-        return c.toDataURL('image/png').split(',')[1];
+        return c.toDataURL(fmt === 'png' ? 'image/png' : 'image/jpeg', 0.82).split(',')[1];
       },
-      { shots, cols: Math.min(COLS, shots.length), thumb: Math.min(THUMB, w), w, h, title: `${name} @${seat} ${w}x${h} — every ${EVERY} ticks (f = scene frame, c = coins in flight), peak ${stats.peakFlying} coins / ${stats.peakNodes} nodes` },
+      { fmt: FORMAT, shots, cols: Math.min(COLS, shots.length), thumb: Math.min(THUMB, w), w, h, title: `${name} @${seat} ${w}x${h} — every ${EVERY} ticks (f = scene frame, c = coins in flight), peak ${stats.peakFlying} coins / ${stats.peakNodes} nodes` },
     );
-    const file = resolve(OUT, `${name}-${seat}-${w}x${h}.png`);
+    const file = resolve(OUT, `${name}-${seat}-${w}x${h}.${FORMAT === 'png' ? 'png' : 'jpg'}`);
     writeFileSync(file, Buffer.from(png, 'base64'));
     console.log(`${name}@${seat} ${w}x${h}: ${shots.length} shots, ${tick} ticks, peak ${stats.peakFlying} → ${file}`);
   }

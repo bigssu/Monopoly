@@ -19,7 +19,7 @@ import { activeFrameTicks, animSpeed, endSkip, isManualClock, setAnimSpeed, setM
 import { loadMoneyAtlas } from './atlas';
 import { MoneyStage, SEATS, type Rect } from './stage';
 import { SCENES, type MoneyPlay, type Party } from './scenes';
-import { f } from './clock';
+import { clockPerf, f, resetClockPerf } from './clock';
 
 const CSS = `
 html,body{margin:0;height:100%;background:#16202D;overflow:hidden;font-family:var(--font-body,system-ui)}
@@ -67,6 +67,10 @@ export interface MoneyDemoApi {
   layout(w?: number, h?: number): GameLayout;
   ui(on: boolean): void;
   preload(): Promise<boolean>;
+  /** Bind / unbind the mock board camera (perf: count the stage's own layers). */
+  camera(on: boolean): void;
+  /** Measure the scene clock's frame steps (money-perf.mjs). */
+  perf(on: boolean): void;
 }
 
 declare global {
@@ -152,6 +156,9 @@ export function mountMoneyDemo(host: HTMLElement): MoneyDemoApi {
   };
   draw();
 
+  let cameraOn = true;
+  /** `?flatcam`: a 2D camera (scale only), to compare layer counts with the 3D tilt. */
+  const flatCamera = new URLSearchParams(location.search).has('flatcam');
   const rectOf = (e: Element): Rect => {
     const r = e.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
@@ -166,10 +173,11 @@ export function mountMoneyDemo(host: HTMLElement): MoneyDemoApi {
       return { icon: iconId(sp.iconId), name: loc(sp.short), color: sp.kind === 'hub' ? HUB_COLOR : sp.group ? GROUP_COLORS[sp.group] : undefined };
     },
     camera: (state, _tier, ms) => {
+      if (!cameraOn) return;
       // The in-game wiring does the same on the real board (transform only).
       void stage.tween(ms, (u) => {
         const k = state === 'in' ? u : 1 - u;
-        board.style.transform = k ? `perspective(1400px) rotateX(${(9 * k).toFixed(2)}deg) scale(${(1 - 0.08 * k).toFixed(4)})` : '';
+        board.style.transform = k ? (flatCamera ? `scale(${(1 - 0.08 * k).toFixed(4)})` : `perspective(1400px) rotateX(${(9 * k).toFixed(2)}deg) scale(${(1 - 0.08 * k).toFixed(4)})`) : '';
       });
     },
   });
@@ -317,7 +325,7 @@ export function mountMoneyDemo(host: HTMLElement): MoneyDemoApi {
   ui.append(statsEl);
   root.append(ui);
   setInterval(() => {
-    if (!isManualClock()) statsEl.textContent = JSON.stringify(api.stats());
+    if (!isManualClock() && ui.style.display !== 'none') statsEl.textContent = JSON.stringify({ ...api.stats(), perf: undefined });
   }, 500);
 
   const api: MoneyDemoApi = {
@@ -346,9 +354,12 @@ export function mountMoneyDemo(host: HTMLElement): MoneyDemoApi {
       peakNodes: stage.coins.peakNodes,
       ticks: activeFrameTicks(),
       stageNodes: stage.root.querySelectorAll('*').length,
+      perf: { n: clockPerf.n, total: clockPerf.total, max: clockPerf.max, samples: clockPerf.samples },
     }),
     layout: () => L,
     ui: (on) => void (ui.style.display = on ? '' : 'none'),
+    perf: (on) => resetClockPerf(on),
+    camera: (on) => void (cameraOn = on),
     preload: () => loadMoneyAtlas(),
   };
   addEventListener('resize', () => {

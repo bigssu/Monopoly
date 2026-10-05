@@ -25,6 +25,14 @@ const SKIP_RATE = 5;
 /** Float slack (ms): n frames of 33.33… ms must reach f(n). */
 const EPS = 1e-6;
 
+/** Dev/perf: cost of the scene clock's frame steps (scripts/fx/money-perf.mjs via the demo). */
+export const clockPerf = { on: false, n: 0, total: 0, max: 0, samples: [] as number[] };
+export function resetClockPerf(on: boolean): void {
+  clockPerf.on = on;
+  clockPerf.n = clockPerf.total = clockPerf.max = 0;
+  clockPerf.samples = [];
+}
+
 export class MoneyClock {
   /** Scene time (ms at normal speed). */
   t = 0;
@@ -100,6 +108,18 @@ export class MoneyClock {
   }
 
   private step(now: number): boolean {
+    if (!clockPerf.on) return this.stepInner(now);
+    const t0 = performance.now();
+    const keep = this.stepInner(now);
+    const ms = performance.now() - t0;
+    clockPerf.n++;
+    clockPerf.total += ms;
+    clockPerf.max = Math.max(clockPerf.max, ms);
+    if (clockPerf.samples.length < 2000) clockPerf.samples.push(ms);
+    return keep;
+  }
+
+  private stepInner(now: number): boolean {
     // Paused: unregister (zero cost while held) and re-arm on resume.
     if (isHeld()) {
       this.stopTick = null;

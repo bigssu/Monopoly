@@ -209,6 +209,9 @@
 .mh-site.is-rays .mh-rays { opacity: 1; }
 
 .mh-sinkpic { position: absolute; inset: 4%; }
+.mh-vault, .mh-v0, .mh-v1 { position: absolute; inset: 0; }
+.mh-v1, .mh-vault.is-open .mh-v0 { visibility: hidden; }
+.mh-vault.is-open .mh-v1 { visibility: visible; }
 
 /* Deeds (bankruptcy): a grid of small city cards. */
 .mh-deeds {

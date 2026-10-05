@@ -151,3 +151,160 @@
 4. 검증: 단위 테스트(자릿수 분해, 환전, 묶기), e2e 필름스트립(4 좌석, 1600×1000과 800×450),
    턴 시간 측정, 성능 게이트, 전체 `npm run release:check -- --web`.
 5. 비트 조정: 필름스트립을 눈으로 보고 타이밍을 고친다. 실기기 태블릿 확인은 사용자 몫으로 남긴다.
+
+## 10. 무대 모듈 구현 결과 / 연결 가이드 (2026-10-05, §9 1–2단계)
+
+§9의 1단계(에셋)와 2단계(무대 모듈)를 **새 파일로만** 구현했다. 게임에는 아직 연결되지 않았다(앱 화면 변화 없음).
+연결(3단계)은 `animate.ts`에서 아래 §10.4 표대로 장면을 부르면 된다. 리서치 06과의 차이는 코디네이터 결정(아래
+"적용한 결정")을 따랐다.
+
+### 10.1 파일
+
+| 경로 | 내용 |
+|---|---|
+| `src/content/fx/sprites-money.ts` | 머니 스프라이트 생성기(원본 SVG, 글자·숫자·통화 기호 없음): 금·은·동 회전 코인(8프레임), 코인 옆면 조각(타일), 기둥 윗면 코인, 금고(닫힘/열림), 은행, 땅 표지판, 공사 현장(흙 부지), 코인 반짝 터짐 + 기존 망치·경광등·먼지·반짝임을 머니 아틀라스용으로 재베이크 |
+| `scripts/fx/bake-money.mjs` | 머니 아틀라스 베이커(`npm run fx:atlas`가 기존 `bake.mjs` 다음에 실행). 고정 셀(`fixedBox`) 코인, `tile` 스프라이트는 반복용 단독 WebP |
+| `public/fx/money.webp` · `money.json` · `money-tile-coin_slice_{gold,silver,bronze}.webp` | 산출물. `src/content/fx/money-manifest.ts`(생성물), 컨택트 시트 `docs/assets/money-contact-sheet.png` |
+| `src/ui/fx/money/denom.ts` | 순수 계산: 자릿수 → 기둥, 금 기둥 로그 압축, 지불 계획(환전 비트), 합치기, 비행 코인 묶기, 등급, 카운트업 길이, 펜타토닉 래더 |
+| `src/ui/fx/money/clock.ts` | 장면 시계 `MoneyClock`(30 Hz `onFrame` 위, 시간 정책 그대로) |
+| `src/ui/fx/money/coins.ts` | 비행 코인 풀(DOM 16개), 스폰 홉 → 2차 베지어(끝에서 빨려듦), 스케일 높이, 스트림당 그림자 1개 |
+| `src/ui/fx/money/wallet.ts` | 좌석 지갑 더미(노드 4개: 지갑 + 기둥 3개), 지불/수령/환전/합치기, 숫자 카운트업 |
+| `src/ui/fx/money/sound.ts` | 코인 소리 스케줄러(지불 하강·수령 래더·챠링, 보이스 6, 25 ms 간격) + 햅틱 |
+| `src/ui/fx/money/stage.ts` | `MoneyStage`: 전체 화면 레이어, 비네트, 히어로(3D 기울임), 명판 4개, 도장, 일회성 스프라이트 풀 8개, 카메라 콜백 |
+| `src/ui/fx/money/scenes.ts` | 장면 타임라인(§4) + `MoneyPlay`(큐) |
+| `src/ui/fx/money/strings.ts` | 장면 제목 문자열(`m.*`, 한/영) |
+| `src/styles/money.css` | 무대 스타일(`stage.ts`가 직접 import) |
+| `money-demo.html` · `src/ui/fx/money/demo.ts` | 개발용 데모(빌드 입력 아님): 모의 보드 + 장면·좌석 버튼, `window.__moneyDemo` |
+| `scripts/fx/money-strips.mjs` · `scripts/fx/money-perf.mjs` | 필름스트립 / 성능 측정 |
+| 기존 파일 수정 | `time.ts`에 `isHeld()` 추가, `sfx.ts`/`synth.ts`에 합성 전용 `coin-clink`(음색 4종) · `coin-thud` · `coin-break` |
+
+### 10.2 에셋과 크기
+
+- 머니 아틀라스는 **캔버스 VFX 아틀라스와 별개**다. `atlas-color`(512²)·`atlas-mask`(1024²)는 바뀌지 않았고, 머니
+  무대만 `money.webp`를 읽는다(디코드 1024×512 = 2 MB).
+- `money.webp` 1024×512 78 KB, `money.json` 8 KB, 타일 3장 3.7 KB. FX 비트맵 전체(기존 262 KB 포함) 약 352 KB
+  (예산 ≤ 500 KB, `src/content/fx/__tests__/money-atlas.test.ts`가 검사).
+- 코인 셀은 48 공칭 px × DPR 2 × 1.2 = 116 px. 비행 코인 표시 크기(1600×1000에서 약 94 CSS px)에서는 약간 확대된다
+  (기획 §2 "픽셀이 보여도 허용"). 히어로(금고·은행·표지판·공사 현장)는 같은 생성 함수의 SVG를 **인라인으로** 그려
+  화면 60 %에서도 선명하다. 흰 스프라이트(먼지·반짝임)는 `mask-image`로 색을 입힌다.
+
+### 10.3 API
+
+```ts
+import { MoneyStage, toll, purchase, build, ... } from '@/ui/fx/money';
+
+const stage = new MoneyStage({
+  parent: gameRoot,                       // 무대가 채울 요소(게임 화면 루트)
+  boardRect: () => rectOf(board.el),      // 클라이언트 px. 지갑이 보드 축에 선다
+  seatRect: (seat) => rectOf(panel(seat)),// (선택) 좌석 패널
+  tileRect: (i) => rectOf(board.space(i)),// 정리 비트에서 히어로가 이 칸으로 날아가 합쳐진다
+  space: (i) => ({ icon, name, color }),  // 칸의 랜드마크 아이콘 id, 이름, 그룹 색
+  camera: (state, tier, ms) => { ... },   // 'in' / 'out': 보드를 물리고 기울이기 (아래 10.5)
+  zIndex: 45,                             // 기본 45: 보드·FX 캔버스 위, 메뉴 오버레이(60) 아래
+});
+const play = toll(stage, { payer, owner, spaceIndex, amount, festival });   // Party = { seat, cash(이벤트 전), color }
+await play;                // = play.block: 'settle' 큐에서 풀린다 → 여기서 보드 상태를 바꾼다
+play.cue('arrive');        // 'start' | 'depart' | 'arrive' | 'result' | 'settle' | 'done'
+play.done;                 // 무대가 내려감(또는 keep으로 다음 장면에 넘김)
+stage.newTurn();           // TurnStarted에서: 같은 턴의 같은 종류 반복은 0.7배 길이(터보)
+```
+
+장면: `transfer({from,to,via,amount,title})`(from/to = Party | 'bank' | 'pot' | 'center'), `purchase`, `build(level 1–4)`,
+`toll`, `takeover`, `collectFromAll({payers:[Party&{amount}], receiver})`, `payAll({payer, receivers})`,
+`receive({kind:'salary'|'bonus'|'pot'})`, `pay({kind:'tax'|'donation'|'bail'|'fine'})`,
+`bankruptcy({debtor, creditor|null, properties})`. 모든 장면은 `keep`(다음 장면과 한 컷인), `tier`(강제), `title`
+(제목 교체)을 받는다. 장면은 큐에 쌓여 하나씩 재생된다.
+
+시간 정책(`time.ts` 표)과의 관계: 장면 시간은 `MoneyClock`만 진행한다. 속도 × 건너뛰기(×5) ÷ (√(게임 속도/2) × 터보)
+로 흐르고, 일시정지 중에는 프레임 스텝을 해제했다가(유휴 0) 재개 때 다시 건다. 속도 0(테스트)이면 장면 함수가 즉시
+풀리고 아무것도 보이지 않는다(장면 도중 0이 되면 다음 스텝에 끝까지 진행). 앱 설정 "애니메이션 줄이기"에서는 코인
+비행·흔들림·스프라이트를 숨기고 시간·숫자·명판·소리는 그대로 둔다. 수동 시계(`setManualClock`/`stepClock`)로
+필름스트립이 결정적이다.
+
+### 10.4 엔진 이벤트 → 장면
+
+| 엔진 이벤트 | 장면 | 비고 |
+|---|---|---|
+| `PropertyBought` (via buy / auction) | `purchase` | 같은 행동에서 `Built`가 이어지면 `keep: true` 후 `build`(한 컷인, §4.3) |
+| `Built` (free=false) | `build(level)` | L4는 XL(망치 3회, 광선, 명소 완성). free=true는 코인 없이 기존 연출 유지 권장 |
+| `TollPaid` (waived=false) | `toll` | festival → XL + ×2 도장. 짝이 되는 두 `MoneyChanged`(toll)는 장면이 숫자를 대신 보여 주므로 패널 float 생략 |
+| `TakenOver` | `takeover` | 테두리 색 전환은 장면 안에서, 보드 소유 변경은 `settle` |
+| `PassedStart` / `MoneyChanged(reason:'salary')` | `receive({kind:'salary'})` | |
+| `MoneyChanged(reason:'pot', delta>0)` | `receive({kind:'pot'})` | 출발 정지 보너스 |
+| `MoneyChanged(reason:'tax'|'donation'|'bail')` | `pay({kind})` | donation은 팟으로, 이어지는 `PotChanged`는 장면 뒤 렌더 |
+| 카드로 생긴 `MoneyChanged(reason:'card')` 여러 개 | 받는 사람 1 + 내는 사람 여럿 → `collectFromAll`, 반대 → `payAll`, 은행에서 → `receive({kind:'bonus'})`, 은행으로 → `pay({kind:'fine'})` | §4.3: 한 카드의 변화는 묶어서 한 장면 |
+| `BuildingSold` / `PropertySold` (`reason:'sale'`) | `transfer({from:'bank', to: 나, amount, title: t('m.sale')})` | §4.2 매각(건물 해체 히어로)은 아직 없음 |
+| `Bankrupt` (+ 뒤따르는 `PropertyTransferred`, `MoneyChanged(reason:'bankruptcy')`) | `bankruptcy` | 채권자 없음(은행) → `creditor: null` |
+
+### 10.5 연결 단계가 해 줄 것
+
+1. **무대 생성**: 게임 화면 마운트 때 `new MoneyStage(host)` 한 번, 언마운트 때 `destroy()`. `loadMoneyAtlas()`는
+   생성자가 미리 부른다(실패해도 코인은 CSS 원판으로 대체).
+2. **사각형 공급자**: `boardRect`, `tileRect`, `space`는 꼭 필요하다. 장면 시작 때 한 번씩만 읽는다(강제 레이아웃 1회).
+3. **카메라 콜백**: 'in'에서 보드를 0.92배로 물리고 'out'에서 되돌린다(장면 시계에 맞추려면 `stage.tween(ms, fn)` 사용,
+   데모 참고). **측정 결과 보드에 `rotateX` 3D 기울임을 걸면 레이어가 3–4개 늘었다**(모의 보드, §10.6). 기본은
+   2D(scale + 약간의 translateY)로 하고, 3D 기울임은 실제 보드에서 레이어 수를 재 보고 결정한다.
+4. **보드 상태 반영 시점**: `await play`(= 'settle')에서 소유 색·건물 레벨·패널 금액을 바꾼다. 장면이 지갑 숫자를
+   보여 주므로 그동안 패널 float/카운트업은 생략한다. `play.done`은 기다리지 않아도 된다(다음 장면은 큐가 순서를 지킨다).
+5. **현금 값**: Party의 `cash`는 **이벤트 전 잔액**(vs: 시퀀서의 view state). 장면이 끝나면 지갑 숫자 = 이벤트 후 잔액.
+6. **턴 경계**: `TurnStarted`에서 `stage.newTurn()`.
+7. **건너뛰기**: 기존 skip(×5)이 그대로 적용된다(점프 아님). 일시정지(`setHeld`)도 그대로.
+8. **기존 돈 프리셋**: 연결 후 같은 이벤트의 캔버스 돈 프리셋(tollPay, coinIn 등)과 패널 float을 끈다(이중 표시 방지).
+
+### 10.6 측정 (데모, 1600×1000 DPR 2, CPU 4×, `node scripts/fx/money-perf.mjs`, 각 3회 중앙값)
+
+| 장면 | 장면 시계 스텝 avg / p95 / max | 프레임당 스크립트 / 스타일 / 레이아웃 | 비행 코인 피크 / 풀 사용 | 추가 레이어(2D 카메라) | 추가 레이어(3D 카메라) | 레이어 페인트/초 | 끝나고 유휴 |
+|---|---|---|---|---|---|---|---|
+| collectFromAll 3명 XL | 0.79 / 2.2 / 7.7 ms | 1.35 / 1.34 / 0.67 ms | 13 / 14 | +1 | +4 | 46 | 예 |
+| 축제 통행료 XL | 0.68 / 1.5 / 5.9 ms | 1.12 / 1.10 / 0.52 ms | 11 / 11 | +2 | +5 | 47 | 예 |
+| 명소 L4 | 0.56 / 1.6 / 3.5 ms | 1.05 / 0.94 / 0.57 ms | 8 / 8 | +2 | +5 | 45 | 예 |
+| 인수 L | 1.01 / 2.8 / 14.9 ms | 1.54 / 1.61 / 0.79 ms | 11 / 12 | +3 | +6 | 47 | 예 |
+
+- JS(목표 프레임당 ≤ 4 ms): 평균 1–1.5 ms, 스텝 p95 ≤ 2.8 ms. 최대값은 장면 시작(히어로 SVG 삽입) 1프레임 스파이크.
+  금고 열림은 마크업 교체 대신 클래스 전환으로 바꿔 16 → 4 ms로 줄였다.
+- 비행 코인: 풀 16개, 한 이동(스트림)당 ≤ 12. collectFromAll은 세 지불자 스트림이 겹쳐 동시 13–14.
+- 레이어: 유휴 0(무대는 변환으로 화면 밖, will-change 없음), 장면 중 2D 카메라에서 +1–3. 원자료
+  `docs/assets/money-perf.json`(2D), `docs/assets/money-perf-3dcam.json`(3D).
+- **페인트**: 장면 중 레이어 페인트 약 45회/초(전경 레이어가 30 Hz로 다시 그려짐 + 지갑 변화). 코인을 각자 레이어로
+  올리지 않는 대가(레이어 예산 ≤ 3 우선). 게이트 "Paint ≤ 20/s"는 플레이 전체 평균이므로 연결 후 `npm run perf`로
+  확인해야 한다.
+- 노드: 무대 전체 상시 62개(지갑 4×4, 코인 16 + 그림자 4, 스프라이트 8, 명판 4×3, 도장, 히어로·레이어 컨테이너). 장면 중 히어로 SVG가 더해진다.
+
+장면 길이(보통 속도, 게임 속도 2, `settle` / 무대 내려감, 30 fps 프레임):
+구매 42/54 · 건설 L1 48/60 · L2 53/65 · L3 61/73 · L4 76/90 · 통행료 M 66/80 · 축제 통행료 87/101 · 인수 72/86 ·
+모두에게 걷기 88/101 · 모두에게 주기 84/97 · 월급 48/61 · 팟 보너스 54/67 · 세금 47/60 · 기부·보석금 43/56 ·
+파산 74/85. (같은 턴 반복은 0.7배, 게임 속도 1/3에서는 0.71배/1.22배.)
+
+### 10.7 필름스트립 (`node scripts/fx/money-strips.mjs`, `docs/assets/money-strips/*.png`)
+
+모든 장면 × S 좌석(1600×1000), 통행료·구매·명소·모두에게 걷기 × E/N/W, 통행료·구매·호텔·걷기·월급·세금 × S/E
+(800×450). 2틱마다 한 장, 라벨 = 장면 프레임과 비행 코인 수. 보고 나서 고친 것:
+
+- 지갑·코인이 너무 작아 "어디서 나와 어디로 가는지"가 약했다 → 코인 폭 짧은 변의 5.8 % → 7.5 %, 비행 코인 1.25배,
+  히어로 52 % → 60 %, 비네트/딤을 진하게(등급별 0.78–0.97).
+- 명판 금액이 실제 금액보다 작게 끝났다(카운트 도중 값에 더함) → 명판 목표값 누적. 받는 사람 숫자가 장면 끝까지
+  안 올라간 경우(이전 장면의 쓰기 시각이 남음) → 장면마다 초기화, 카운트업을 첫 착지 기준 한 번의 ease-out으로.
+- 통행료·인수·모두에게 걷기가 3.3–4 s로 길었다 → 리서치 프레임에 맞춰 홉/이동/홀드를 줄여 settle 66–88 f.
+- 명판이 착지 코인·지갑과 겹쳤다(특히 800×450) → 명판을 히어로의 "그 좌석 기준 앞-오른쪽 모서리"로. 네 좌석 합계
+  명판은 서로 다른 네 모서리에 놓여 겹치지 않는다.
+- 별 모양 버스트가 플레이어 색 별 덩어리로 보였다 → 코인 반짝 터짐 + 플레이어 색 반짝임으로 교체. 버스트 첫 프레임의
+  회색 원반 → 2프레임 섬광으로.
+- 월급 코인이 한 줄로만 떨어졌다 → 은행에서 부채꼴로 솟았다가 좌우 호로 떨어지는 분수.
+- 인수 도장이 장면이 끝난 뒤에도 남았다 → 정리 비트에서 함께 사라짐. 카메라 'out'이 무대보다 늦게 끝나 보드가
+  1.5° 기운 채 남았다 → 같은 길이로.
+
+### 10.8 적용한 결정 (코디네이터, 리서치 06 정합)
+
+금·은·동 = 1,000/100/10만(보석 단계 없음), 금 기둥만 로그 압축(n ≤ 5 그대로, 이후 5 + ⌊log2(n−4)⌋, 최대 15 + `+`),
+숫자와 더미는 코인 출발/착지에 맞춰 바뀜, 카운트업 ease-out cubic 500 + 300·log10(1 + 금액/10) ms(≤ 15 Hz 쓰기),
+베지어 제어점 0.15–0.25 × 거리, 높이 = 스케일 1 + 0.25·sin, 스폰 홉 후 끝에서 빨려듦, 스트림당 그림자 1개, 풀 16·
+이동당 ≤ 12, 지불 = 하강 피치 + 툭(챠링 없음) / 수령 = 펜타토닉 래더 + 챠링(≥ 150 ms 간격), 클링크 4음색 라운드로빈
+±1 반음, 코인 버스 6보이스, 햅틱 첫 착지 light · 3번째마다 tick · 마지막 medium · 도장 heavy(≤ 10/s), 모두에게 걷기
+합계 명판 4방향, 건너뛰기 = ×5, 같은 턴 반복 0.7배.
+
+### 10.9 남은 일 / 미확인
+
+- **연결(§9 3단계)**: 위 표대로 `animate.ts`에서 호출, 기존 돈 프리셋·패널 float 끄기, 연속 이벤트 묶기.
+- 매각(건물 해체 히어로), 경매 낙찰 망치 소리, 카드 컷인 배너는 아직 없다(매각은 `transfer`로 대체 가능).
+- 건설 L1–L2가 리서치(36–42 f)보다 길다(48–53 f). 연결 후 턴 시간을 재고 비트를 조정한다(§9 5단계).
+- 3D 보드 기울임의 레이어 비용, 전체 플레이의 Paint/s, 실기기(삼성 태블릿) 렌더링·소리 지연은 확인하지 못했다.

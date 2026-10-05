@@ -50,6 +50,8 @@ export interface FlightSpec {
   travelF?: number;
   /** Hop direction (unit vector, default: "up" = away from the target's side, randomised). */
   hop?: Pt;
+  /** Hop length (px; default 0.5–0.85 × the coin size). */
+  hopSize?: number;
   /** Called once when the coin lands (at its scene time, even when hidden). */
   onLand?: () => void;
   /** Drawn in front at landing (the pile keeps it). */
@@ -157,7 +159,7 @@ export class CoinPool {
       const a = Math.atan2(-dy, -dx) * 0.35 + -Math.PI / 2 * 0.65 + (r() - 0.5) * 0.9;
       hop = { x: Math.cos(a), y: Math.sin(a) };
     }
-    const h = spec.size * (0.5 + r() * 0.35);
+    const h = (spec.hopSize ?? spec.size) * (0.5 + r() * 0.35);
     this.active.push({
       ...spec,
       node: null,
