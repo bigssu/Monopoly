@@ -5,6 +5,7 @@
  *    a normal-speed animation frame, and the result screen → e2e/__screenshots__/game-*.png
  */
 import { expect, test, type Page } from '@playwright/test';
+import { OWNED_SAMPLE, checkOwnedBoard, craftOwned } from './owned-board';
 
 const VIEWPORTS = [
   { w: 1600, h: 1000 },
@@ -112,6 +113,40 @@ test.describe('game screen', () => {
         return out;
       });
       expect(overflow).toEqual([]);
+      const owned = await checkOwnedBoard(page);
+      expect(owned.problems, owned.problems.join('\n')).toEqual([]);
+      expect(owned.owned).toBeGreaterThan(0);
+      expect(errors, errors.join('\n')).toEqual([]);
+    });
+  }
+
+  for (const v of [VIEWPORTS[0], VIEWPORTS[3]]) {
+    test(`owned spaces ${v.w}x${v.h}: owner-color cards, pop-out buildings on every side`, async ({ page }) => {
+      const errors = watchErrors(page);
+      await boot(page, v.w, v.h);
+      await start(page, { seed: 31, cpu: false, speed: 0 });
+      await craftOwned(page, OWNED_SAMPLE);
+      const owned = await checkOwnedBoard(page);
+      expect(owned.problems, owned.problems.join('\n')).toEqual([]);
+      expect(owned.owned).toBe(Object.keys(OWNED_SAMPLE).length);
+      expect(owned.buildings).toBe(Object.values(OWNED_SAMPLE).filter(([, l]) => l > 0).length);
+      // Table view: each building is upright for its side's reader (the space text's rotation).
+      const rots = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('.bb')].map((b) => [b.dataset.i, getComputedStyle(b).rotate])));
+      expect(rots['4']).toBe('none');
+      expect(rots['10']).toBe('90deg');
+      expect(rots['19']).toBe('180deg');
+      expect(rots['28']).toBe('-90deg');
+      // Selling back to the bank returns the card to the empty look (no fill, no building).
+      await page.evaluate(() => {
+        const hook = window.__lotAndRoll!;
+        const s = structuredClone(hook.getState()!);
+        s.properties[28] = { owner: null, level: 0 };
+        hook.loadState(s);
+      });
+      await page.waitForFunction(() => !document.querySelector('.bb[data-i="28"]'));
+      const after = await checkOwnedBoard(page);
+      expect(after.problems, after.problems.join('\n')).toEqual([]);
+      await page.screenshot({ path: `${SHOTS}/game-owned-${v.w}x${v.h}.png` });
       expect(errors, errors.join('\n')).toEqual([]);
     });
   }

@@ -13,6 +13,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { Action, GameState, Seat } from '../src/engine/types';
 import { reduceMotion } from './motion';
+import { checkOwnedBoard } from './owned-board';
 
 const SHOTS = 'e2e/__screenshots__';
 /** Animation speed multiplier for the long runs (durations ÷ 10; not instant, so fx code runs). */
@@ -241,6 +242,9 @@ test.describe('human play (clicking real controls)', () => {
     for (const k of ['preRoll', 'buy', 'build']) expect(stats.kinds[k] ?? 0, JSON.stringify(stats.kinds)).toBeGreaterThan(0);
     console.log(`[human] prompts ${JSON.stringify(stats.kinds)} games=${games} cards tapped=${stats.cards}`);
     await page.screenshot({ path: `${SHOTS}/human-4p-mid-1600x1000.png` });
+    const owned = await checkOwnedBoard(page);
+    expect(owned.problems, owned.problems.join('\n')).toEqual([]);
+    expect(owned.owned).toBeGreaterThan(0);
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
@@ -623,6 +627,7 @@ test.describe('human play (clicking real controls)', () => {
           seen.add(s.phase.kind);
           await page.waitForTimeout(50);
           await page.screenshot({ path: `${SHOTS}/human-en-${s.phase.kind}-${vp.w}x${vp.h}.png` });
+          for (const p of (await checkOwnedBoard(page)).problems) problems.add(`${s.phase.kind}: ${p}`);
         }
         for (const p of await findOverflow(page)) problems.add(`${s.phase.kind}: ${p}`);
         const a = (await page.evaluate(() => window.__lotAndRoll!.suggest()))!;

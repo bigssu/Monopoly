@@ -12,6 +12,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import type { HandRecord } from '../src/ui/stage/CpuHand';
+import { OWNED_SAMPLE, checkOwnedBoard, craftOwned } from './owned-board';
 
 const SHOTS = 'e2e/__screenshots__';
 const ANGLE: Record<string, number> = { S: 0, E: -90, N: 180, W: 90 };
@@ -306,6 +307,8 @@ test.describe('fixed view: one human vs CPUs', () => {
       await page.waitForTimeout(600);
       await page.screenshot({ path: `${SHOTS}/fixed-mid-${size}.png` });
       await expectPanelsFit(page);
+      const owned = await checkOwnedBoard(page);
+      expect(owned.problems, owned.problems.join('\n')).toEqual([]);
 
       // The CPU drawn at N (engine seat S) presses Buy: held at its press for the shot.
       await page.evaluate(() => {
@@ -417,4 +420,39 @@ test.describe('fixed view: one human vs CPUs', () => {
     expect(panels).toEqual({ S: 0, E: -90, N: 180, W: 90 });
     expect(logs, logs.join('\n')).toEqual([]);
   });
+});
+
+test.describe('fixed view: owned spaces', () => {
+  for (const vp of [
+    { w: 1600, h: 1000 },
+    { w: 800, h: 450 },
+  ]) {
+    test(`${vp.w}x${vp.h}: owner-color cards, buildings upright for S (the top row's hang under it)`, async ({ page }) => {
+      const logs = watchConsole(page);
+      await boot(page, vp.w, vp.h);
+      await start(page, { humans: ['S'], seed: 31, speed: 0 });
+      await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+      await craftOwned(page, OWNED_SAMPLE);
+      const owned = await checkOwnedBoard(page);
+      expect(owned.problems, owned.problems.join('\n')).toEqual([]);
+      expect(owned.buildings).toBe(Object.values(OWNED_SAMPLE).filter(([, l]) => l > 0).length);
+      const top = await page.evaluate(() =>
+        [17, 19, 20, 22].map((i) => {
+          const b = document.querySelector<HTMLElement>(`.bb[data-i="${i}"]`)!;
+          const card = document.querySelector(`.sp[data-i="${i}"] .sp-bg`)!.getBoundingClientRect();
+          return { i, hanging: b.classList.contains('is-hanging'), rotate: getComputedStyle(b).rotate, gap: b.getBoundingClientRect().top - card.bottom };
+        }),
+      );
+      for (const t of top) {
+        expect(t.hanging, `${t.i}`).toBe(true);
+        expect(t.rotate, `${t.i}`).toBe('none');
+        // Entirely below its card (toward the centre): nothing of the card is covered.
+        expect(t.gap, `${t.i}`).toBeGreaterThanOrEqual(-0.5);
+      }
+      // The side columns still read along their edge.
+      expect(await page.evaluate(() => getComputedStyle(document.querySelector('.bb[data-i="10"]')!).rotate)).toBe('90deg');
+      await page.screenshot({ path: `${SHOTS}/fixed-owned-${vp.w}x${vp.h}.png` });
+      expect(logs, logs.join('\n')).toEqual([]);
+    });
+  }
 });
