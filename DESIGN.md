@@ -42,7 +42,7 @@ Landscape tablet is primary (roughly 4:3–16:10); 800×450 and 640×360 CSS px 
 
 ## Interaction states
 
-Show a boot splash only while loading, then Title or a recoverable error. Setup states show seat count and explain invalid starts. Stage always shows current player and either a Roll action, a decision prompt, a short CPU-thinking state, or resolution feedback. Timed prompts choose the documented safe default. Save/load failure must be visible; offline play remains fully functional.
+Show a boot splash only while loading, then Title or a recoverable error. Setup states show seat count and explain invalid starts. Stage always shows current player and either a Roll action, a decision prompt, a short CPU-thinking state, or resolution feedback. A CPU decision is never made invisibly: the CPU's hand (cuff in its color) comes in from its seat and presses the chosen button or board space before the action happens, in the same rotated frame as the Stage. Timed prompts choose the documented safe default. Save/load failure must be visible; offline play remains fully functional.
 
 ## Content voice
 

@@ -90,7 +90,11 @@ TurnStart ─► (island? ► IslandChoice) ─► Roll ─► MoveAnim ─► L
 
 Every prompt has a **15-second soft timer** (setting: off/15/30 s) that auto-picks the safe default
 (pass) so a distracted table keeps moving. CPU turns auto-play with short delays so humans can
-follow.
+follow. Every CPU decision is shown being made: a hand (white glove, cuff in the CPU's color)
+reaches in from the CPU's seat edge, presses the control it chose — the prompt button (roll, buy,
+pass, build, bail, sell, bid…) or, for board picks (travel, festival, free upgrade, typhoon
+target, build-anywhere), the board space — and the action is dispatched at the release
+(`src/ui/stage/CpuHand.ts`; mapping in `handTarget.ts`; timings `HAND` in `src/ui/fx/motion.ts`).
 
 ### 2.4 Feel
 
