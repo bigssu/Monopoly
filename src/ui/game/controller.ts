@@ -2,7 +2,8 @@
  * Game store + loop.
  *
  *  dispatch(action) → isLegal? → reduce → saveGame → play events (sequencer) → advance()
- *  advance(): game over → onGameOver; CPU → wait 600–1100 ms (scaled) → chooseAction;
+ *  advance(): game over → onGameOver; CPU → wait 450–750 ms (× pace) → chooseAction → the CPU
+ *             hand presses the chosen control (CpuHand) → dispatch;
  *             human → prompt card for `state.phase` (with the soft timer → defaultAction).
  */
 import {
@@ -19,7 +20,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { D, endSkip, frame, gamePace, headless, onFrame, setHeld, skip } from '@/ui/fx/time';
+import { D, endSkip, frame, gamePace, headless, onFrame, setHeld, skip, whenRunning } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -44,6 +45,8 @@ export class GameController {
   state: GameState;
   readonly view: GameView;
   private busy = false;
+  /** The CPU hand is pressing a control (the decision is chosen, not dispatched yet). */
+  private cpuActing = false;
   private disposed = false;
   private paused = false;
   /** Cancels the pending CPU move (a plain timeout; its animation starts on the next grid frame). */
@@ -63,7 +66,7 @@ export class GameController {
     this.onGameOver = opts.onGameOver;
     // Tap during playback = fast-forward (the menu sits above and stays usable).
     this.view.table.addEventListener('pointerdown', () => {
-      if (this.busy) {
+      if (this.busy || this.cpuActing) {
         skip();
         // Pending fx cues (state swaps) fire now; running effects finish ×5.
         this.view.vfx.skip();
@@ -220,10 +223,32 @@ export class GameController {
           console.error('[game] CPU failed; using default', e);
           a = defaultAction(snapshot)!;
         }
-        void this.dispatch(a, { deferPlay: true });
+        this.cancelCpu = () => {};
+        void this.cpuAct(a, snapshot);
       }, delay);
       this.cancelCpu = () => window.clearTimeout(id);
     }
+  }
+
+  /**
+   * Show the CPU's choice — its hand reaches from its seat and presses the control (prompt button
+   * or board space) — then dispatch it. A pause freezes the hand where it is; it carries on and
+   * dispatches after resume. A stale decision (state moved on, screen gone) is dropped.
+   */
+  private async cpuAct(a: Action, snapshot: GameState): Promise<void> {
+    const ph = snapshot.phase;
+    if (ph.kind === 'gameOver') return;
+    const p = snapshot.players[ph.playerId]!;
+    const alive = (): boolean => !this.disposed && !this.busy && this.state === snapshot;
+    this.cpuActing = true;
+    try {
+      await this.view.hand.press({ state: snapshot, action: a, seat: p.seat, color: this.view.colorOf(p.id), alive });
+      await whenRunning();
+    } finally {
+      this.cpuActing = false;
+    }
+    if (!alive()) return;
+    void this.dispatch(a, { deferPlay: true });
   }
 
   private showPromptFor(s: GameState): void {
@@ -277,6 +302,8 @@ export class GameController {
     this.view.stage.clearTimer();
     // A running turn freezes too (animations, holds, the dealer), not just the next decision.
     setHeld(true, this.view.table);
+    // A CPU hand frozen on the roll button: the dice stop rattling (their timer is not on the clock).
+    if (this.cpuActing) this.view.stage.dice.shake(false);
     this.view.dealer.hush();
   }
 
@@ -284,7 +311,8 @@ export class GameController {
     if (!this.paused) return;
     this.paused = false;
     setHeld(false);
-    if (!this.busy) this.advance();
+    // A CPU hand frozen mid-press carries on and dispatches by itself.
+    if (!this.busy && !this.cpuActing) this.advance();
   }
 
   /** Dev: act for whoever must act with the CPU policy. */

@@ -5,6 +5,7 @@
  *   + loadState(state) (resume an arbitrary, e.g. hand-crafted, state) · suggest() (the CPU
  *     policy's choice for whoever must act — e2e tests click the matching on-screen control)
  *   + setLang('ko' | 'en')
+ *   + cpuHand() (the CPU hand's press log; freeze(true) holds every hand at its press until release())
  */
 import { chooseAction, defaultPlayers, defaultSettings, deepClone, legalActions, type Action, type GameState, type Settings } from '@/engine';
 import { setLang, type Lang } from '@/i18n';
@@ -13,6 +14,7 @@ import { activeFrameTicks, setAnimSpeed, setPace, setTurnRest, setManualClock, s
 import type { FxStats, PresetName, PresetParams } from '@/ui/fx/vfx';
 import type { GameController } from './controller';
 import { isDevHook } from './util';
+import { handDev, type HandRecord } from '@/ui/stage/CpuHand';
 
 let current: GameController | null = null;
 
@@ -49,6 +51,8 @@ export interface LotAndRollHook {
   manualClock(on: boolean): void;
   /** Advance the manual clock `n` frames (microtasks and timers flushed after each). */
   stepFrames(n: number): Promise<void>;
+  /** The CPU hand: presses so far, and a switch that holds each hand at its press. */
+  cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; release(): void; frozen(): boolean };
 }
 
 declare global {
@@ -105,5 +109,23 @@ export function installDevHook(): void {
         await new Promise((r) => setTimeout(r, 0));
       }
     },
+    cpuHand: () => ({
+      log: handDev?.log ?? [],
+      clear: () => {
+        if (handDev) handDev.log.length = 0;
+      },
+      freeze: (on) => {
+        if (!handDev) return;
+        handDev.freeze = on;
+        if (!on) handDev.release?.();
+      },
+      release: () => {
+        const r = handDev?.release;
+        if (handDev) handDev.release = null;
+        r?.();
+      },
+      // A hand is being held at its press right now.
+      frozen: () => !!handDev?.release,
+    }),
   };
 }

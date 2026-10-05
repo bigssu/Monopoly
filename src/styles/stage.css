@@ -351,6 +351,12 @@
 .pcard.is-cpu .pc-buttons { opacity: 0.75; }
 .pcard.is-cpu .pbtn:disabled { opacity: 0.55; }
 .pc-cpu { text-align: center; margin-top: calc(var(--u) * 0.35); font-weight: 800; color: var(--ink-3); }
+/* CPU hand (src/ui/stage/CpuHand.ts): the control the CPU chose reads at full strength under its
+   hand, outlined in the CPU's color, then shows the same pressed state a finger gives it. */
+.pcard.is-cpu.has-cpu-pick .pc-buttons { opacity: 1; }
+.pcard.is-cpu .is-cpu-pick:disabled { opacity: 1; filter: none; }
+.pcard .is-cpu-pick { outline: max(3px, calc(var(--u) * 0.16)) solid var(--cpu-hand, #fff); outline-offset: 2px; }
+.pbtn.is-pressed { transform: translateY(2px) scale(1.01, .94); transition-duration: var(--t-press); transition-timing-function: var(--ease-out); }
 
 /* Roll */
 .pc-roll {
@@ -441,6 +447,7 @@
   flex: none;
 }
 button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
+button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; transition-duration: var(--t-press); }
 .pick-ico { width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6); min-width: 26px; min-height: 26px; flex: none; margin-left: calc(var(--u) * 0.2); }
 .pick-name { font-family: var(--font-display); font-size: 1.1em; white-space: nowrap; flex: none; }
 .pick-detail { margin-left: auto; font-weight: 800; color: var(--ink-3); font-size: 0.9em; white-space: nowrap; }
@@ -480,6 +487,7 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 }
 .tg-cell.is-owned { background: var(--pc-tint); box-shadow: inset 0 calc(var(--u) * 0.2) 0 var(--gc), inset 0 0 0 2px var(--pc); }
 .tg-cell:active { transform: scale(0.95); }
+.tg-cell.is-pressed { transform: scale(0.95); transition-duration: var(--t-press); }
 .tg-ico { width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); min-width: 24px; min-height: 24px; }
 /* Up to two lines ("TAX / OFFICE", "Cape / Town") rather than an ellipsis. */
 .tg-name {

@@ -213,3 +213,24 @@
 .sp.is-building .sp-lvl { opacity: 0.6; }
 .bm-hl rect,
 .bm-hl circle { stroke: var(--fx-hl, #F2B633); stroke-width: 10; }
+
+/* CPU hand (src/ui/stage/CpuHand.ts): a board-sized layer turned like the Stage toward the acting
+   seat, above tokens and marks; it exists only while a hand is out. Transform / opacity only. */
+.cpu-hand-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.cpu-hand {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* The fingertip (23.5, 4 of the 64-unit art): rotation and the press squash pivot there. */
+  transform-origin: 36.72% 6.25%;
+  will-change: transform;
+}
+.cpu-hand > svg { display: block; width: 100%; height: 100%; }
+.cpu-hand-tip { position: absolute; left: 36.72%; top: 6.25%; width: 0; height: 0; }
+.cpu-hand-ring {
+  position: absolute;
+  box-sizing: border-box;
+  border: max(3px, calc(var(--u) * 0.18)) solid currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}

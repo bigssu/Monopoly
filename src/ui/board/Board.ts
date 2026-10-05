@@ -932,12 +932,16 @@ export class Board {
     this.groups[i]?.classList.toggle('is-building', on);
   }
 
-  /** Reduced-motion static highlight: an outline mark for `ms`, no animation. */
-  highlight(i: number, color: string, ms = 800): void {
-    if (!this.geom[i]) return;
+  /** Static highlight: an outline mark for `ms` (or until the returned function removes it), no animation. */
+  highlight(i: number, color: string, ms = 800): () => void {
+    if (!this.geom[i]) return () => {};
     const el = this.outline(i, 'bm-hl', 10);
     el.style.setProperty('--fx-hl', color);
-    gridTimeout(() => el.remove(), ms);
+    const stop = gridTimeout(() => el.remove(), ms);
+    return () => {
+      stop();
+      el.remove();
+    };
   }
 
   /** Screen centre (client px) of a space — for fx. */

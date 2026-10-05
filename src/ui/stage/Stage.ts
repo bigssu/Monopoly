@@ -40,6 +40,9 @@ export class Stage {
   private stopFit: (() => void) | null = null;
   private fitRo: ResizeObserver | null = null;
   private cardDone: (() => void) | null = null;
+  /** The running turn and prompt entrance (see `whenSettled`). */
+  private turning: Promise<void> = Promise.resolve();
+  private entering: Promise<void> = Promise.resolve();
   private infoInvoker: HTMLElement | SVGElement | null = null;
 
   constructor() {
@@ -89,10 +92,22 @@ export class Stage {
     // On the 30 Hz frame budget like everything else (a 60 Hz turn every turn change alone pushed
     // the presented rate to ~36 fps, docs/PERFORMANCE.md); the ease-in-out keeps the stepped
     // turn's largest per-frame step at ~11 degrees for a quarter turn.
-    await anim(this.rot, [{ transform: `rotate(${from}deg)` }, { transform: `rotate(${this.angle}deg)` }], {
+    const turn = anim(this.rot, [{ transform: `rotate(${from}deg)` }, { transform: `rotate(${this.angle}deg)` }], {
       duration: 420,
       easing: EASE.inOut,
     });
+    this.turning = turn;
+    await turn;
+  }
+
+  /** Resolves when the stage has stopped turning and the prompt card has finished coming in. */
+  whenSettled(): Promise<void> {
+    return Promise.all([this.turning, this.entering]).then(() => undefined);
+  }
+
+  /** The prompt card on the stage (null when none is up). */
+  get promptCard(): HTMLElement | null {
+    return this.promptSlot.firstElementChild as HTMLElement | null;
   }
 
   /** Update the (static) turn banner text for the player whose turn it is. */
@@ -204,7 +219,7 @@ export class Stage {
       card.querySelector<HTMLElement>('.roll-btn:not(:disabled), .pbtn.is-primary:not(:disabled), .pbtn:not(:disabled)')?.focus({ preventScroll: true });
     }
     // On the slot (its own layer, same box as the card): see .st-prompt in stage.css.
-    void anim(this.promptSlot, [{ transform: 'translateY(30%) scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
+    this.entering = anim(this.promptSlot, [{ transform: 'translateY(30%) scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
       duration: 300,
       easing: EASE.settle,
     });

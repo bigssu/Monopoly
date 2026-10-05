@@ -7,6 +7,7 @@ import { t } from '@/i18n';
 import { Board } from '@/ui/board/Board';
 import { INNER, VB } from '@/ui/board/geometry';
 import { Stage } from '@/ui/stage/Stage';
+import { CpuHand } from '@/ui/stage/CpuHand';
 import { spaceInfo } from '@/ui/stage/prompts';
 import { PlayerPanel } from '@/ui/panels/PlayerPanel';
 import { createFx, type FxHandle, type HighlightTarget } from '@/ui/fx/vfx';
@@ -44,6 +45,8 @@ export class GameView {
   readonly table: HTMLElement;
   readonly board: Board;
   readonly stage: Stage;
+  /** The CPU's pointing hand (presses the control a CPU decision picks). */
+  readonly hand: CpuHand;
   readonly dealer: Dealer;
   readonly director: DealerDirector;
   readonly panels = new Map<PlayerId, PlayerPanel>();
@@ -71,6 +74,7 @@ export class GameView {
     this.board = new Board(state.players, (i) => this.showInfo(i), spacesPerSide);
     this.stage = new Stage();
     this.board.stageHost.append(this.stage.el);
+    this.hand = new CpuHand(this.board, this.stage);
     this.dealer = new Dealer(() => prefs.get().sound);
     this.stage.mountDealer(this.dealer.el);
     this.director = new DealerDirector(this.dealer, () => prefs.get().dealer);
@@ -251,6 +255,7 @@ export class GameView {
     this.stage.dropCloseUp();
     this.stopWatch();
     this.board.dispose();
+    this.hand.dispose();
     this.stage.dispose();
     for (const p of this.panels.values()) p.dispose();
     disposeIconAtlas();

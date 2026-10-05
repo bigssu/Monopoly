@@ -8,6 +8,7 @@
  * - anticipate: pulls back a little before leaving (exits) — "anticipation"
  * - breathe:    symmetric slow in/out for loops (calls to act, idle floats)
  * - inOut:      deliberate travel between two places (stage turns, arcs)
+ * - reach:      ease-out with a small overshoot (the CPU hand arriving on a control)
  */
 export const EASE = {
   settle: 'cubic-bezier(.22,1,.36,1)',
@@ -15,6 +16,7 @@ export const EASE = {
   anticipate: 'cubic-bezier(.36,0,.66,-0.56)',
   breathe: 'cubic-bezier(.45,0,.55,1)',
   inOut: 'cubic-bezier(.65,0,.35,1)',
+  reach: 'cubic-bezier(.25,1.3,.5,1)',
 } as const;
 
 /**
@@ -59,4 +61,32 @@ export const DUR = {
   exit: 220,
   breathe: 2000,
   stagger: 60,
+} as const;
+
+/**
+ * The CPU hand (src/ui/stage/CpuHand.ts): before a CPU decision is dispatched, a glove reaches
+ * from the CPU's seat to the control it chose and presses it. Tweens (`anim`, speed/skip only)
+ * and beats (`sleep`, × game pace). The dispatch happens at the release; lift and exit run on
+ * during the decision's own animation and add no time.
+ *
+ * Added time per decision = reach + hover + press + hold:
+ * pace 1 (fastest) ≈ 390 ms, pace 2 (default) ≈ 520 ms, pace 3 ≈ 650 ms; a roll is held longer so
+ * the dice shake reads (≈ 720 ms at pace 2). Headless (speed 0): none, the hand is not shown.
+ */
+export const HAND = {
+  /** Seat edge → control (tween). Shorter at a fast game pace: 180 + 30 × pace ms. */
+  reachBase: 180,
+  reachPerPace: 30,
+  /** On the control before pressing (beat). */
+  hover: 40,
+  /** Press down (tween). */
+  press: 80,
+  /** Held down (beat); a roll is held so the dice shake can be seen. */
+  hold: 60,
+  holdRoll: 160,
+  /** Lift and leave (tweens, not waited for). */
+  lift: 90,
+  exit: 240,
+  /** Ripple ring around the pressed control (decoration). */
+  ring: 380,
 } as const;
