@@ -219,6 +219,8 @@ export function pickLine(situation: string, setting: DealerSetting, last: Map<st
 export interface Speaker {
   say(line: DealerLine): void;
   dropBelow?(priority: number): void;
+  /** A game event or a new decision: a finished line's pose may go back to idle now. */
+  relax?(): void;
 }
 
 /** Advice starts this long after its prompt appears (staging: card first, then the comment). */
@@ -234,11 +236,13 @@ export class DealerDirector {
   ) {}
 
   onEvent(ev: GameEvent, vs: GameState, when: 'before' | 'after'): void {
+    this.dealer.relax?.();
     const id = situationForEvent(ev, vs, this.memo, when);
     if (id) this.speak(id);
   }
 
   onPrompt(s: GameState): void {
+    this.dealer.relax?.();
     const id = situationForPrompt(s);
     if (!id) return;
     this.dealer.dropBelow?.(SITUATIONS[id]?.priority ?? 0);

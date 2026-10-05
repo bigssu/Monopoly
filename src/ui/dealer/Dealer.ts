@@ -3,10 +3,17 @@
  * boy as a sprite + speech bubble. `say(line)` shows the line's expression, plays the Korean voice
  * (talking frames flap while it plays) or, silent, holds the bubble for a reading time, then goes
  * back to idle. One line at a time: a higher priority interrupts, anything else is dropped.
+ *
+ * Zero idle load (docs/PERFORMANCE.md, gate B): when a line ends the bubble only fades (its own
+ * small layer, compositor-only), and the sprite keeps the line's expression until the next thing
+ * happens — the next line, game event (`relax()`, from the director) or the player's input — and
+ * goes back to idle then, together with that frame's own repaint. Swapping the sprite on the
+ * timer repainted the stage while a human was deciding and nothing else moved.
  */
 import { getLang } from '@/i18n';
 import { playVoice, stopVoice } from '@/ui/audio/voice';
-import { animSpeed, gamePace, onFrame, reducedMotion } from '@/ui/fx/time';
+import { EASE } from '@/ui/fx/motion';
+import { anim, animSpeed, gamePace, onFrame, reducedMotion } from '@/ui/fx/time';
 import { h } from '@/ui/game/util';
 import { DEALER_SPRITES, type DealerExpr, type DealerLine } from './lines';
 
@@ -30,6 +37,9 @@ export class Dealer {
   /** True while a line is being spoken (or read, when silent); the bubble may linger after. */
   private speaking = false;
   private quietWaiters: Array<() => void> = [];
+  /** The line ended; the sprite goes back to idle with the next activity (see top). */
+  private idleDue = false;
+  private readonly onInput = (): void => this.relax();
 
   constructor(private readonly voiceOn: () => boolean) {
     this.img = h('img', { class: 'dealer-img', alt: '', src: src('idle'), draggable: 'false' });
@@ -42,6 +52,15 @@ export class Dealer {
       i.src = src(n);
       return i;
     });
+    window.addEventListener('pointerdown', this.onInput, { capture: true, passive: true });
+    window.addEventListener('keydown', this.onInput, { capture: true, passive: true });
+  }
+
+  /** Something else is happening now (a game event, an input): a finished line's pose goes idle. */
+  relax(): void {
+    if (!this.idleDue) return;
+    this.idleDue = false;
+    this.setSprite('idle');
   }
 
   /** Is a line showing right now? */
@@ -83,13 +102,18 @@ export class Dealer {
     if (this.current && line.priority <= this.current.priority) return;
     const token = ++this.token;
     this.clear();
+    this.idleDue = false;
     this.current = line;
     this.setSprite(line.expr);
     this.text.textContent = getLang() === 'ko' ? line.ko : line.en;
     this.el.classList.add('is-talking');
     this.setSpeaking(true);
+    const shown = this.bubble.classList.contains('is-in');
     this.bubble.classList.remove('is-out');
     this.bubble.classList.add('is-in');
+    // Pop in (a Web Animation on the shared clock that is gone when it ends: a stylesheet animation
+    // stayed attached, and cancelling it when the line ended repainted the prompt card, gate B).
+    if (!shown) void anim(this.bubble, [{ opacity: 0, transform: 'scale(0.85)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: EASE.overshoot });
 
     const finish = (): void => {
       if (token !== this.token) return;
@@ -119,10 +143,13 @@ export class Dealer {
     this.token++;
     this.clear();
     this.end();
+    this.relax();
   }
 
   dispose(): void {
     this.hush();
+    window.removeEventListener('pointerdown', this.onInput, { capture: true });
+    window.removeEventListener('keydown', this.onInput, { capture: true });
     this.preload.length = 0;
   }
 
@@ -173,6 +200,6 @@ export class Dealer {
     this.el.classList.remove('is-talking');
     this.bubble.classList.remove('is-in');
     this.bubble.classList.add('is-out');
-    this.setSprite('idle');
+    this.idleDue = true;
   }
 }

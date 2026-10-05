@@ -4,10 +4,10 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { chooseAction, createGame, defaultPlayers, defaultSettings, type GameEvent, type GameState } from '@/engine';
 import { DEALER_LINES, DEALER_SPRITES, SITUATIONS } from '../lines';
-import { newMemo, pickLine, situationForEvent, situationForPrompt } from '../director';
+import { DealerDirector, newMemo, pickLine, situationForEvent, situationForPrompt } from '../director';
 
 const PUB = join(__dirname, '..', '..', '..', '..', 'public');
 
@@ -108,5 +108,19 @@ describe('situationForPrompt', () => {
     s.phase = { kind: 'buy', playerId: 0, spaceIndex: 1, price: 100 };
     const advice = situationForPrompt(s);
     expect(advice).toBe(chooseAction(s, 0).type === 'Buy' ? 'buy.advice.yes' : 'buy.advice.no');
+  });
+});
+
+describe('DealerDirector → idle pose (zero idle load, docs/PERFORMANCE.md "라운드 2")', () => {
+  it('lets a finished line go back to idle on the next game event or decision, not on a timer', () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    let relaxed = 0;
+    const director = new DealerDirector({ say: () => {}, relax: () => relaxed++ }, () => 'off');
+    const s = game();
+    director.onEvent({ type: 'TurnStarted', playerId: 0, round: 1, turn: 1 } as GameEvent, s, 'before');
+    expect(relaxed).toBe(1);
+    director.onPrompt(s);
+    expect(relaxed).toBe(2);
+    vi.unstubAllGlobals();
   });
 });

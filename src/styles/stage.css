@@ -410,8 +410,11 @@
 .roll-btn:disabled { filter: saturate(0.4); opacity: 0.8; }
 /* Opacity only: a scaled ring counted as the button's overflow (the label "didn't fit" for the
    layout checks) and is no cheaper for the compositor than a fade. */
+/* Rests at 0.01, never exactly 0: Chromium leaves fully transparent content out of the paint, so a
+   commit for anything else (the dealer's line ending) while the ring sat at 0 repainted the prompt
+   card's layer, and again when it showed (gate B, docs/PERFORMANCE.md "라운드 2"). */
 @keyframes lr-invite {
-  0%, 100% { opacity: 0; }
+  0%, 100% { opacity: 0.01; }
   35% { opacity: 1; }
 }
 .native-webview .roll-btn::before { content: none; animation: none; }
@@ -695,6 +698,8 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
    cards and reveals (.st-toasts z 4), so a card is never hidden and the line stays readable. */
 /* No CSS filter: the talking frames swap the image ~8×/s and a drop-shadow re-rasterised it each time. */
 .dealer-img { position: relative; z-index: 1; display: block; width: 100%; aspect-ratio: 1; }
+/* Under a money cut-in (full-screen dim) the dealer is not visible: drop his layers meanwhile. */
+.is-money-live .dealer { display: none; }
 .dealer-bubble {
   position: absolute;
   z-index: 5;
@@ -711,9 +716,11 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
   line-height: 1.35;
   box-shadow: var(--sh-2);
   opacity: 0;
-  transform: scale(0.85);
   transform-origin: 0 30%;
-  transition: opacity var(--t-fast) linear, transform var(--t-med) var(--ease-spring);
+  transition: opacity var(--t-fast) linear;
+  /* Its own small layer for good: popping in and fading out never repaint the stage under it
+     (promoted only while animating, it repainted the stage at both ends; gate B, PERFORMANCE.md). */
+  will-change: opacity, transform;
 }
 .dealer-bubble::before {
   content: '';
@@ -724,8 +731,9 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
   border-right-color: #FFFFFF;
   border-left-width: calc(var(--u) * 0.15);
 }
-.dealer-bubble.is-in { opacity: 1; transform: none; }
-.dealer-bubble.is-out { opacity: 0; transform: scale(0.85); }
+.dealer-bubble.is-in { opacity: 1; }
+.dealer-bubble.is-out { opacity: 0; }
+/* Pops in (Dealer.ts, a Web Animation that is gone when it ends), fades out (opacity only). */
 
 /* Card choice: two event cards as tall buttons; their descriptions wrap. */
 .pc-cardpick .pc-buttons { align-items: stretch; }
