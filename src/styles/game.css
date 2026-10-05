@@ -308,9 +308,7 @@
 .rs-rotate::after { content: ''; position: absolute; inset: -8px -6px; }
 .rs-rotate .ico { width: 18px; height: 18px; }
 .rs-rotate:active { background: rgba(255, 255, 255, 0.24); }
-@media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .rs-card.is-turning { transition: none; }
-}
+:root[data-motion="reduced"] .rs-card.is-turning { transition: none; }
 
 @media (max-height: 520px) {
   .menu-sheet { gap: 4px; padding: 8px; }

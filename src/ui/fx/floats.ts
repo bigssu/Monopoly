@@ -4,7 +4,7 @@
  */
 import type { Player, Seat } from '@/engine';
 import { t } from '@/i18n';
-import { instant, sleep } from './time';
+import { headless, sleep } from './time';
 import { h, iconEl, SEAT_ANGLE, tokenBadge } from '@/ui/game/util';
 
 export async function edgeToast(
@@ -14,7 +14,7 @@ export async function edgeToast(
   iconId: string,
   color: string,
 ): Promise<void> {
-  if (instant()) return;
+  if (headless()) return;
   const els = seats.map((seat) => {
     const el = h(
       'div',

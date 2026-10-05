@@ -328,13 +328,13 @@ h1, h2, h3, h4, .display, .num {
 @keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(.9); } }
 @keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
 
-@media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) *, :root:not([data-motion="full"]) *::before, :root:not([data-motion="full"]) *::after {
-    animation-duration: 1ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-  }
+/* Reduced motion is the app's setting (Settings → 애니메이션; policy in ui/fx/time.ts), never the
+   device media query: Remote Desktop and battery saver turn that on behind the player's back. */
+:root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after {
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
 }
 
 /* Korean wraps between words, never inside one ("음/성"). */

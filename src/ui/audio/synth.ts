@@ -83,12 +83,23 @@ export class SynthSfx implements Sfx {
   // ------------------------------------------------------------------ facade
 
   unlock(): void {
-    const c = this.ensure();
+    const c = this.prepare();
     if (c && c.state !== 'running') void c.resume().catch(() => undefined);
+  }
+
+  /**
+   * Build the audio context and load the samples. Called once at boot, while nothing is on screen
+   * to stutter: constructing an AudioContext opens the audio device and blocks the main thread
+   * (60-320 ms measured), which used to happen inside the first tap. The context stays suspended
+   * until a gesture resumes it (`unlock`); Chrome may log an autoplay notice for it, harmlessly.
+   */
+  prepare(): AudioContext | null {
+    const c = this.ensure();
     if (c && !this.samplesRequested) {
       this.samplesRequested = true;
       void this.loadSamples(c);
     }
+    return c;
   }
 
   /** Fetch + decode every generated sample listed in sfx/manifest.json (name → takes). */
@@ -145,7 +156,7 @@ export class SynthSfx implements Sfx {
 
   play(name: SfxName, opts: { pitch?: number; gain?: number } = {}): void {
     if (this.muted || this.volume <= 0) return;
-    // The context is created by unlock() (first user gesture) to avoid autoplay warnings.
+    // Silent until a gesture has resumed the context (unlock).
     const c = this.ctx;
     if (!c || c.state !== 'running') return;
     const now = c.currentTime;

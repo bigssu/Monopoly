@@ -159,10 +159,8 @@
 }
 /* The shake is feedback for holding the button, so it stays under reduced motion (base.css
    otherwise cuts every animation to one 1 ms run). */
-@media (prefers-reduced-motion: reduce) {
-  .dice.is-shaking .die { animation-duration: 120ms !important; animation-iteration-count: infinite !important; }
-  .dice.is-shaking .die:nth-child(2) { animation-delay: -60ms !important; }
-}
+:root[data-motion="reduced"] .dice.is-shaking .die { animation-duration: 120ms !important; animation-iteration-count: infinite !important; }
+:root[data-motion="reduced"] .dice.is-shaking .die:nth-child(2) { animation-delay: -60ms !important; }
 .dice.is-doubles .face { box-shadow: inset 0 0 0 max(2px, calc(var(--u) * 0.12)) #F2B633; }
 /* Doubles: a gold glow behind each die, pre-painted and faded in/out (opacity only; an animated
    drop-shadow filter re-rasterizes the dice every frame). */
@@ -411,9 +409,7 @@
   35% { opacity: 1; }
 }
 .native-webview .roll-btn::before { content: none; animation: none; }
-@media (prefers-reduced-motion: reduce) {
-  :root:not([data-motion="full"]) .roll-btn::before { animation: none; }
-}
+:root[data-motion="reduced"] .roll-btn::before { animation: none; }
 .roll-hint { font-size: max(12px, calc(var(--u) * 0.55)); color: #BCDAD6; font-weight: 700; }
 .pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -1.2); top: auto; bottom: calc(var(--u) * 1.6); }
 

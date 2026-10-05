@@ -16,8 +16,8 @@
  *
  * Speed: every duration goes through `fx/time` — `setAnimSpeed(0)` makes the whole queue
  * instant and plays no effect (tests), a "skip" tap accelerates it ×5 (and fires pending fx cues
- * now), prefers-reduced-motion is instant for DOM motion while the presets still play their
- * sound + a static highlight (VFX.md §8.3).
+ * now), reduced motion keeps every beat but holds still (presets: sound + a static highlight,
+ * VFX.md §8.3). The policy lives in `fx/time.ts`.
  */
 import { deepClone, getBoardInfo, groupOf, isFinalStretch, type GameEvent, type GameState, type Level, type PlayerId } from '@/engine';
 import { GROUP_NAMES } from '@/content/board';
@@ -28,7 +28,7 @@ import type { GameView } from '@/ui/game/view';
 import { isDevHook, money, spaceIcon } from '@/ui/game/util';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
-import { animSpeed, sleep, turnRest, wait, whenRunning } from './time';
+import { animSpeed, headless, sleep, turnRest, wait, whenRunning } from './time';
 import { BEAT } from './motion';
 import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
@@ -60,8 +60,7 @@ export async function playEvents(
   alive: Alive,
 ): Promise<void> {
   const vs = deepClone(prev);
-  // Reduced motion still plays the sequence (still frames, same beats); only speed 0 skips it.
-  const fast = animSpeed() === 0;
+  const fast = headless();
   const batch: Batch = { tollArrive: null, transfers: 0, prev: null };
   for (const ev of events) {
     // Paused: the next event waits for resume.
@@ -91,7 +90,8 @@ export async function playEvents(
   if (!alive()) return;
   // The next prompt waits for a big moment (landmark, takeover, monopoly…) to finish its beats.
   await settleBig(view);
-  if (!fast && events.length) await sleep(BEAT.beforePrompt);
+  // Only before a person's decision: the CPU's own think time already separates its actions.
+  if (!fast && events.length && next.phase.kind !== 'gameOver' && !next.players[next.phase.playerId]!.isCpu) await sleep(BEAT.beforePrompt);
   if (!alive()) return;
   view.render(next);
 }
@@ -176,7 +176,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       const steps = planFx(ev, ctx);
       if (!steps.length) {
         // Every new round gets its own beat (staging: the table sees the round turn over).
-        if (!fast && ev.round > 1) await stage.toast(t('g.round.start', { n: ev.round }), 700, 'info', 'restart');
+        if (!fast && ev.round > 1) await stage.toast(t('g.round.start', { n: ev.round }), 500, 'info', 'restart');
         return;
       }
       fire(view, steps);

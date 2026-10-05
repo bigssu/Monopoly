@@ -14,6 +14,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { reduceMotion } from './motion';
 
 const SHOTS = 'e2e/__screenshots__';
 const STRIPS = 'docs/assets/vfx-ingame';
@@ -286,7 +287,7 @@ test.describe('in-game VFX', () => {
 
   test('reduced motion: no canvas, static highlight, state still applied', async ({ page }) => {
     const errors = watchErrors(page);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await reduceMotion(page);
     await boot(page, 1600, 1000);
     await craft(page, BEATS[0]!.patch!);
     await page.evaluate(() => void window.__lotAndRoll!.dispatch({ type: 'Buy', playerId: 0 }));

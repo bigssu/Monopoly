@@ -16,7 +16,7 @@ import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { createFx } from '@/ui/fx/vfx';
 import { prefs } from '@/ui/shell/prefs';
-import { anim, gridTimeout, instant } from '@/ui/fx/time';
+import { anim, gridTimeout, noMotion } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { DUR, EASE } from '@/ui/fx/motion';
@@ -223,11 +223,11 @@ registerScreen('result', (root, { state }) => {
   });
   // After the screen's entry (its layout settles first); decided now, like every animation of the
   // mount (speed 0 / reduced motion at mount = no confetti, even if the speed changes 60 ms later).
-  const cancelConfetti = instant() ? () => {} : gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
+  const cancelConfetti = noMotion() ? () => {} : gridTimeout(() => void vfx.play('confettiRain', { n: 60 }), 60);
   // Awards pop in one by one (anticipation: hidden until their beat; overshoot on arrival); the
   // graph lines draw themselves after the hero lands.
   const cancels: Array<() => void> = [];
-  if (!instant()) {
+  if (!noMotion()) {
     awardEls.forEach((el, i) => {
       el.style.opacity = '0';
       cancels.push(gridTimeout(() => {

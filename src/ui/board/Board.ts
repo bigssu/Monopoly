@@ -7,7 +7,7 @@ import { playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, animSpeed, D, gridTimeout, instant, isSkipping, onFrame, wait } from '@/ui/fx/time';
+import { anim, animSpeed, D, gridTimeout, isSkipping, noMotion, onFrame } from '@/ui/fx/time';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
 import { DEPTH, INNER, VB, getBoardGeometry, tokenSpot, type SpaceGeom } from './geometry';
@@ -705,7 +705,7 @@ export class Board {
   /** Brief highlight of a space (bought / built / stamped). */
   async pulseSpace(i: number, kind: 'pop' | 'stamp' | 'shake' = 'pop'): Promise<void> {
     const grp = this.groups[i];
-    if (!grp || instant()) return;
+    if (!grp || noMotion()) return;
     const g = this.geom[i]!;
     const cls = `fx-${kind}`;
     const ring = h('div', { class: `space-flash ${cls}` });
@@ -735,7 +735,7 @@ export class Board {
 
   /** Landing ripple at a space centre. */
   ripple(i: number, color: string): void {
-    if (instant()) return;
+    if (noMotion()) return;
     const g = this.geom[i]!;
     const r = h('div', { class: 'land-ripple' });
     r.style.left = `${(g.cx / VB) * 100}%`;
@@ -811,7 +811,7 @@ export class Board {
       const dim = this.dimEl;
       this.dimEl = null;
       dim.classList.remove('is-on');
-      if (instant()) dim.remove();
+      if (noMotion()) dim.remove();
       else dim.addEventListener('transitionend', () => dim.remove(), { once: true });
       // Safety net if no transition runs (hidden tab, reduced motion).
       gridTimeout(() => dim.remove(), 600);
@@ -860,7 +860,7 @@ export class Board {
    * it steps at 15 Hz (a 250 ms pop is 4 steps + the end).
    */
   private svgScale(el: SVGGraphicsElement, base: string, cx: number, cy: number, frames: number, scaleAt: (t: number) => number): void {
-    if (instant()) return;
+    if (noMotion()) return;
     this.svgTweens.get(el)?.();
     const dur = (frames * 1000) / 30;
     let t = 0;
@@ -911,7 +911,7 @@ export class Board {
   /** Zoom punch of a whole space 1 → k (5 f outQuad) → 1 (7 f inOutQuad), drawn above its neighbours. */
   zoomPunch(i: number, k: number): void {
     const grp = this.groups[i];
-    if (!grp || instant()) return;
+    if (!grp || noMotion()) return;
     const g = this.geom[i]!;
     // Paint order = z-order in SVG: move the group last (the order of the groups carries no meaning).
     if (grp.nextSibling) this.svgEl.appendChild(grp);
@@ -1017,7 +1017,7 @@ export class Board {
     const per = path.length > 6 ? Math.max(200, Math.min(300, 300 * (7 / path.length))) : 300;
     const lift = 0.95 * (this.px / 32);
     // Anticipation: a short crouch before the first hop.
-    if (!instant()) {
+    {
       await anim(tk.body, [{ transform: 'scale(1)' }, { transform: 'scale(1.16, .8)' }], { duration: 140, easing: 'cubic-bezier(.3,0,.7,1)' });
     }
     for (let n = 0; n < path.length; n++) {
@@ -1029,12 +1029,6 @@ export class Board {
       tk.pos = idx;
       sfx.play('hop', { pitch: backward ? 1 - n * 0.03 : 1 + n * 0.045 });
       haptic('tick');
-      if (instant()) {
-        // Reduced motion: no tween, but one beat per space so the move can be followed.
-        await wait(per);
-        onLand?.(n);
-        continue;
-      }
       const d = per;
       await Promise.all([
         anim(tk.root, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }], {
@@ -1055,7 +1049,7 @@ export class Board {
       onLand?.(n);
     }
     // Follow-through: a little settle bounce on the final space.
-    if (!instant()) {
+    {
       await anim(
         tk.body,
         [
@@ -1087,7 +1081,7 @@ export class Board {
     this.setTokenXY(tk, spot.x, spot.y);
     tk.pos = to;
     const lift = 4 * (this.px / 32);
-    if (!instant()) {
+    {
       const frames: Keyframe[] = [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }];
       await Promise.all([
         anim(tk.root, frames, { duration: 700, easing: 'cubic-bezier(.45,.05,.55,.95)' }),

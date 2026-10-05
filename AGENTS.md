@@ -22,6 +22,7 @@ Use Node.js 22.12+ and install locked dependencies with `npm ci`.
 - `npm run preview`: serve the production build locally.
 - `npm run e2e`: run Chromium Playwright tests.
 - `npm run sim`: run the CPU balance simulation.
+- `npm run release:check`: the release gate (typecheck, unit, e2e, build, `cap sync`, APK, and a check that the APK holds the bundle just built). Hand a build to anyone only after it passes; `-- --web` stops after the web build.
 
 ## Coding Style & Naming Conventions
 
@@ -29,7 +30,7 @@ Follow `.editorconfig`: UTF-8, LF, final newline, two-space indentation; use fou
 
 ## Testing Guidelines
 
-Use Vitest `*.test.ts` files for logic and Playwright `e2e/*.spec.ts` files for browser flows. Add regression checks for changed behavior, especially seeded outcomes and save compatibility. No numeric coverage threshold is configured. Run typecheck, unit tests, and build before submitting; report browser results explicitly because CI treats e2e as nonblocking. Browser tests can overwrite tracked screenshots; review those changes.
+Use Vitest `*.test.ts` files for logic and Playwright `e2e/*.spec.ts` files for browser flows. Add regression checks for changed behavior, especially seeded outcomes and save compatibility. No numeric coverage threshold is configured. Run typecheck, unit tests, and build before submitting; report browser results explicitly because CI treats e2e as nonblocking. Browser tests can overwrite tracked screenshots; review those changes. Timing rules live in one place, the policy table at the top of `src/ui/fx/time.ts`: reduced motion removes movement, never time, and is the app's setting (the device's `prefers-reduced-motion` is not read: Remote Desktop and battery saver turn it on). `e2e/pacing.spec.ts` checks what a player sees in each environment.
 
 ## Commit & Pull Request Guidelines
 

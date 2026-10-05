@@ -19,7 +19,7 @@ import {
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { playEvents } from '@/ui/fx/animate';
-import { animSpeed, endSkip, frame, gamePace, instant, onFrame, setHeld, skip } from '@/ui/fx/time';
+import { D, endSkip, frame, gamePace, headless, onFrame, setHeld, skip } from '@/ui/fx/time';
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
@@ -140,7 +140,7 @@ export class GameController {
     }
     // CPU turns: the decision, `reduce` and the save ran in a plain task; the animation starts on
     // the next 30 Hz frame, so that frame carries only the first event's DOM work.
-    if (opts.deferPlay && !instant()) await frame();
+    if (opts.deferPlay && !headless()) await frame();
     await this.play(prev, result.events, result.state);
     this.busy = false;
     if (!this.disposed) this.advance();
@@ -193,7 +193,7 @@ export class GameController {
     // The new prompt goes in on the next 30 Hz frame, not in the frame that just took the last
     // event's DOM changes (landing token, board space, panels) and the old prompt's removal:
     // together they were one 35-60 ms frame at 4x CPU throttle (docs/PERFORMANCE.md).
-    if (instant()) this.showPromptFor(s);
+    if (headless()) this.showPromptFor(s);
     else {
       const seq = ++this.promptSeq;
       this.cancelPrompt = onFrame(() => {
@@ -204,9 +204,10 @@ export class GameController {
     }
     if (p.isCpu) {
       stage.setThinking(s.phase.kind !== 'preRoll');
-      const base = s.phase.kind === 'preRoll' ? 600 + Math.random() * 300 : 700 + Math.random() * 400;
-      // Not `D()`: under reduced motion the CPU still takes its time, so its turn can be followed.
-      const delay = animSpeed() === 0 ? 0 : (base * gamePace()) / animSpeed();
+      // Anticipation before the CPU acts: long enough to see who is about to do what, short
+      // enough not to be dead air (the beats after each change do the rest; ×pace).
+      const base = s.phase.kind === 'preRoll' ? 450 + Math.random() * 200 : 500 + Math.random() * 250;
+      const delay = D(base * gamePace());
       const snapshot = s;
       // A plain timeout, not a grid one: the CPU policy and `reduce` stay out of the animation
       // frame (dispatch's deferPlay puts the first DOM change on the next grid frame instead).

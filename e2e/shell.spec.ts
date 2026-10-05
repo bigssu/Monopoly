@@ -4,6 +4,7 @@
  * starting a game reaches the game screen.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { reduceMotion } from './motion';
 
 const VIEWPORTS = [
   { width: 1600, height: 1000 },
@@ -22,7 +23,7 @@ function watchErrors(page: Page): string[] {
 }
 
 async function boot(page: Page): Promise<void> {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await reduceMotion(page);
   await page.goto('/?dev=1');
   await expect(page.locator('#app[data-screen="title"]')).toBeVisible();
   await expect(page.locator('#splash')).toHaveCount(0);

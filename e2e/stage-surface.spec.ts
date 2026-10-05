@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { reduceMotion } from './motion';
 
 test('the Roll and purchase views use a dark stage with a contained card', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await reduceMotion(page);
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   await page.evaluate(() => {

@@ -16,7 +16,7 @@ import {
 } from '@/engine';
 import { getCard } from '@/content/cards';
 import { fmtMoney, loc, t } from '@/i18n';
-import { anim, D, gridTimeout, instant, onFrame } from '@/ui/fx/time';
+import { anim, D, gridTimeout, headless, onFrame } from '@/ui/fx/time';
 import { chip, groupColor, h, iconEl, setPlayerVars, signedMoney, spaceIcon, svgNode } from '@/ui/game/util';
 import { playerColor } from '@/content/palette';
 import { EASE } from '@/ui/fx/motion';
@@ -200,7 +200,7 @@ export class PlayerPanel {
     this.stopTween?.();
     this.stopTween = null;
     this.cashNum.style.color = '';
-    if (instant()) {
+    if (headless()) {
       this.shown = v;
       this.cashNum.textContent = fmtMoney(v);
       return;
@@ -232,7 +232,7 @@ export class PlayerPanel {
 
   /** "+300" / "−120" float rising from the panel (rotated with it), with an optional caption. */
   float(delta: number, note?: string): void {
-    if (instant() || delta === 0) return;
+    if (headless() || delta === 0) return;
     const el = h('span', { class: `pp-float ${delta > 0 ? 'is-up' : 'is-down'}`, text: signedMoney(delta) });
     if (note) el.append(h('small', { class: 'pp-float-note', text: note }));
     this.floats.append(el);
@@ -250,7 +250,7 @@ export class PlayerPanel {
 
   /** A number pop / caption rising from the panel (fx `floatText`: the canvas never draws text). */
   floatText(text: string, up = true): void {
-    if (instant() || !text) return;
+    if (headless() || !text) return;
     const el = h('span', { class: `pp-float ${up ? 'is-up' : 'is-down'}`, text });
     this.floats.append(el);
     void anim(

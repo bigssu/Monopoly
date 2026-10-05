@@ -19,7 +19,7 @@ export interface FxClock {
   skipping(): boolean;
   /** Speed 0 (tests): play nothing. */
   instant(): boolean;
-  /** prefers-reduced-motion (or the app setting): no canvas; sound + static highlight. */
+  /** Reduced motion (the app setting, fx/time.ts): no canvas; sound + static highlight. */
   reducedMotion(): boolean;
   /** Frames are stepped by hand (tests / filmstrips): paint synchronously on the main thread. */
   manual?(): boolean;

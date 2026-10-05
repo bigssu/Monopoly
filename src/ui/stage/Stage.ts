@@ -8,7 +8,7 @@ import type { GameState, Player, Seat } from '@/engine';
 import { lateTollMultiplier, ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, animSpeed, gamePace, gridTimeout, onFrame, sleep } from '@/ui/fx/time';
+import { anim, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, chip, h, iconEl, money, SEAT_ANGLE, setPlayerVars, svg, svgNode, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 import { EASE } from '@/ui/fx/motion';
@@ -265,7 +265,7 @@ export class Stage {
 
   /** A short toast in the middle of the stage (faces the acting player). */
   async toast(content: string | Node, ms = 900, tone: Tone = 'info', iconId?: string): Promise<void> {
-    if (animSpeed() === 0) return; // reduced motion: shown still, held as long
+    if (headless()) return;
     const el = h('div', { class: `st-toast tone-${tone}` });
     if (iconId) el.append(iconEl(iconId, 'ico st-toast-ico'));
     el.append(typeof content === 'string' ? h('span', { text: content }) : content);
@@ -301,7 +301,7 @@ export class Stage {
    * (anticipation pop → hold → fade). Resolves when it has gone.
    */
   async bigTotal(n: number, holdMs: number): Promise<void> {
-    if (animSpeed() === 0) return; // reduced motion: shown still, held as long
+    if (headless()) return;
     // 6 and 9 are underlined (as on billiard balls): the stage faces one seat, others read it rotated.
     const el = h('div', { class: `st-total num${n === 6 || n === 9 ? ' is-69' : ''}`, text: String(n), 'aria-hidden': 'true' });
     this.toastLayer.append(el);
@@ -316,7 +316,7 @@ export class Stage {
 
   /** Big stamp text ("더블!", "인수!"). */
   async stamp(text: string, tone: Tone = 'gold'): Promise<void> {
-    if (animSpeed() === 0) return; // reduced motion: shown still, held as long
+    if (headless()) return;
     const el = h('div', { class: `st-stamp tone-${tone}`, text });
     this.toastLayer.append(el);
     await anim(
@@ -334,7 +334,7 @@ export class Stage {
 
   /** Flip an event card; resolves after a read delay or a tap. */
   async showCard(id: CardId, readMs = 1400): Promise<void> {
-    if (animSpeed() === 0) return; // reduced motion: shown still, held as long
+    if (headless()) return;
     const c = getCard(id);
     const front = h(
       'div',
@@ -404,7 +404,7 @@ export class Stage {
 
   /** Paid-toll card: payer → owner, auto-dismisses. */
   async showToll(opts: { payer: Player; owner: Player; amount: number; festival: boolean; waived: boolean; multiplier: number }): Promise<void> {
-    if (animSpeed() === 0) return; // reduced motion: shown still, held as long
+    if (headless()) return;
     const el = h(
       'div',
       { class: 'toll-card' },

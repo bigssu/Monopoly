@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { getBoard } from '../src/content/board';
+import { reduceMotion } from './motion';
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -7,7 +8,7 @@ for (const spacesPerSide of [7, 8, 9] as const) {
   test(`${spacesPerSide} spaces per side render, accept taps, and survive save/resume`, async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await reduceMotion(page);
     await page.goto('/?dev=1');
     await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
     await page.locator('[data-action="new"]').click();
@@ -49,7 +50,7 @@ for (const spacesPerSide of [7, 8, 9] as const) {
 }
 
 test('circular corner only opens when its visible waypoint is tapped', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await reduceMotion(page);
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   await page.evaluate(() => {

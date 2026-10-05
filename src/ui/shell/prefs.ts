@@ -31,11 +31,11 @@ export interface Prefs {
   dealer: DealerPref;
   /** Background music on/off (follows `sound` and `volume` too). */
   music: boolean;
-  /** Animations: follow the device's reduce-motion setting, or always play in full. */
+  /** Animations: full, or reduced (no movement, same timing). The device setting is not read. */
   motion: MotionPref;
 }
 
-export const MOTION_PREFS = ['system', 'full'] as const;
+export const MOTION_PREFS = ['full', 'reduced'] as const;
 export type MotionPref = (typeof MOTION_PREFS)[number];
 
 export const DEALER_PREFS = ['off', 'min', 'normal', 'full'] as const;
@@ -64,7 +64,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, motion: 'system' };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, motion: 'full' };
 }
 
 function sanitize(raw: unknown): Prefs {

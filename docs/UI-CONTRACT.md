@@ -37,6 +37,6 @@ if they don't exist yet at the time — create empty placeholders if needed to k
 ## Rules for both
 - Vanilla TS + DOM/SVG only. No frameworks. Inline SVG from `@/content/icons`.
 - Every user-visible string via `t()`; Korean first, English second; no hard-coded Korean in TS.
-- Animations: CSS transforms/opacity only; `prefers-reduced-motion` respected via tokens.
+- Animations: CSS transforms/opacity only; reduced motion is the app's own setting (Settings → 애니메이션, `:root[data-motion="reduced"]`); the device's `prefers-reduced-motion` is not read (policy: `src/ui/fx/time.ts`).
 - Touch targets ≥ 48 CSS px. Fonts from `public/fonts/fonts.css` (SHELL links it in index.html).
 - No use of the forbidden words (마블, Monopoly, 황금열쇠, 찬스, 올림픽, 세계여행, 랜드마크 as ko label).

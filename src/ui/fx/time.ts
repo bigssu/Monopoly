@@ -1,10 +1,26 @@
 /**
  * Animation clock shared by every game-screen animation.
  *
- * - `setAnimSpeed(x)`: global multiplier (1 = normal, 2 = twice as fast, 0 = instant).
+ * THE TIME POLICY (the one place it is defined; call sites only ask these questions):
+ *
+ * | state                         | holds (`sleep`, beats) | tweens (`anim`)        | decorations |
+ * |-------------------------------|------------------------|------------------------|-------------|
+ * | normal                        | pace × ms              | play                   | play        |
+ * | `reducedMotion()` (a setting) | pace × ms (unchanged)  | hold, no movement      | skipped     |
+ * | `headless()` (speed 0, tests) | 0                      | 0                      | skipped     |
+ * | paused (`setHeld`)            | frozen                 | frozen                 | frozen      |
+ * | skip tap                      | ÷5                     | ×5                     | ×5          |
+ *
+ * - Reduced motion removes MOVEMENT, never TIME: a turn takes as long and shows the same things.
+ *   It is the app's own setting (Settings → 애니메이션). The device's `prefers-reduced-motion` is
+ *   deliberately NOT read: Windows turns it on for every Remote Desktop session and Android for
+ *   battery saver, which silently made the whole game instant (no dice roll, no token moves, the
+ *   CPU's turn invisible, pace settings without effect).
+ * - Ask `headless()` to skip time, `noMotion()` to skip a pure-motion decoration (a ripple, a
+ *   zoom punch). There is no "instant": that name conflated the two.
+ * - `setAnimSpeed(x)`: global multiplier (1 = normal, 2 = twice as fast, 0 = headless).
  * - `skip()`: accelerates everything currently running or queued in this batch (×5),
  *   without breaking the sequence. `endSkip()` restores normal speed.
- * - `prefers-reduced-motion` → instant.
  *
  * Frame budget (battery saver, docs/PERFORMANCE.md): `setFrameRate(30)` makes the game produce
  * ~30 distinct frames per second instead of 60, roughly halving CPU/GPU work:
@@ -40,9 +56,6 @@ function clockNow(): number {
   return manual ? manual.now : performance.now();
 }
 
-const reducedQuery =
-  typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
-
 export function setAnimSpeed(x: number): void {
   speed = Math.max(0, x);
 }
@@ -76,31 +89,33 @@ export function turnRest(): Promise<void> {
   return sleep(turnRestMs / pace);
 }
 
-let fullMotion = false;
-/** App setting "animations: always on" (prefs.motion = 'full'): ignore the device's reduce-motion. */
-export function setFullMotion(on: boolean): void {
-  fullMotion = on;
+let reduced = false;
+/** App setting "animations: reduced" (prefs.motion). Never the device's media query (see top). */
+export function setReducedMotion(on: boolean): void {
+  reduced = on;
 }
-/**
- * prefers-reduced-motion or the app setting: no canvas FX (static highlight + sound, docs/VFX.md
- * §8.3). Separate from `instant()`, which also covers speed 0 (tests: nothing at all).
- */
+/** Movement is removed (tweens hold still, no canvas FX: static highlight + sound); time is not. */
 export function reducedMotion(): boolean {
-  return !fullMotion && !!reducedQuery?.matches;
+  return reduced;
 }
 
-/** True when animations should be skipped entirely. */
-export function instant(): boolean {
-  return speed === 0 || reducedMotion();
+/** Speed 0 (tests): no time passes and nothing transient is shown. */
+export function headless(): boolean {
+  return speed === 0;
+}
+
+/** Pure-motion decorations (ripples, punches, confetti) are skipped: headless or reduced motion. */
+export function noMotion(): boolean {
+  return speed === 0 || reduced;
 }
 
 function rate(): number {
   return speed * (skipping ? SKIP_RATE : 1);
 }
 
-/** Scaled duration in ms (0 when instant). */
+/** Scaled duration in ms (0 when headless). */
 export function D(ms: number): number {
-  if (instant()) return 0;
+  if (speed === 0) return 0;
   return ms / rate();
 }
 
@@ -164,8 +179,7 @@ export function wait(ms: number): Promise<void> {
 
 /** Awaitable hold that honours pace, speed, skip and the frame budget. */
 export function sleep(ms: number): Promise<void> {
-  // Not `D()`: under reduced motion the motion is gone but the beat stays, so a turn still reads.
-  const d = speed === 0 ? 0 : (ms * pace) / rate();
+  const d = D(ms * pace);
   if (d <= 0) return Promise.resolve();
   return new Promise((resolve) => {
     const s: Sleeper = { id: 0 as unknown as ReturnType<typeof setTimeout>, end: clockNow() + d, resolve, stopTick: null };
@@ -262,7 +276,9 @@ export type AnimOptions = KeyframeAnimationOptions & {
 
 /** Animate with the Web Animations API; resolves when finished (or cancelled). */
 export function anim(el: Element, keyframes: Keyframe[] | PropertyIndexedKeyframes, opts: AnimOptions): Promise<void> {
-  if (instant() || typeof (el as HTMLElement).animate !== 'function') return Promise.resolve();
+  if (speed === 0 || typeof (el as HTMLElement).animate !== 'function') return Promise.resolve();
+  // Reduced motion: the element holds still for the tween's time (same beat, no movement).
+  if (reduced) return wait(opts.duration);
   const { smooth, ...timing } = opts;
   // Default: slow-out to rest (motion.ts EASE.settle); pass 'linear' explicitly when wanted.
   const easing = String(opts.easing ?? EASE.settle);
@@ -335,9 +351,9 @@ export function flushAll(): void {
   setHeld(false);
 }
 
-/** Next budgeted frame (resolves immediately when instant). */
+/** Next budgeted frame (resolves immediately when headless). */
 export function frame(): Promise<void> {
-  if (instant()) return Promise.resolve();
+  if (speed === 0) return Promise.resolve();
   return new Promise((r) =>
     onFrame(() => {
       r();

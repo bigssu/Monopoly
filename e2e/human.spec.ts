@@ -12,6 +12,7 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { Action, GameState, Seat } from '../src/engine/types';
+import { reduceMotion } from './motion';
 
 const SHOTS = 'e2e/__screenshots__';
 /** Animation speed multiplier for the long runs (durations ÷ 10; not instant, so fx code runs). */
@@ -544,7 +545,7 @@ test.describe('human play (clicking real controls)', () => {
   test('soft timer pauses: hidden app, rules overlay + Escape; a held roll button stops shaking', async ({ page }) => {
     test.setTimeout(90_000);
     const logs = watchConsole(page);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await reduceMotion(page);
     await boot(page);
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(0);

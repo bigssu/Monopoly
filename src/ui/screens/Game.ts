@@ -8,7 +8,7 @@ import { clearSavedGame, saveGame } from '@/ui/shell/persist';
 import { go } from '@/ui/shell/nav';
 import { openRulesOverlay } from '@/ui/screens/Rules';
 import { openSettingsOverlay } from '@/ui/screens/SettingsScreen';
-import { flushAll, gridTimeout, instant } from '@/ui/fx/time';
+import { flushAll, gridTimeout, headless } from '@/ui/fx/time';
 import { GameController } from '@/ui/game/controller';
 import { GameMenu } from '@/ui/game/menu';
 import { GameView } from '@/ui/game/view';
@@ -39,7 +39,7 @@ registerScreen('game', (root, props) => {
       clearSavedGame();
       gridTimeout(() => {
         if (!leaving) showScreen('result', { state: s });
-      }, instant() ? 0 : 500);
+      }, headless() ? 0 : 500);
     },
   });
   ctrl.timerOverride = currentTimerOverride();

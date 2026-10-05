@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { reduceMotion } from './motion';
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
 async function setup(page: import('@playwright/test').Page): Promise<void> {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await reduceMotion(page);
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   await page.locator('[data-action="new"]').click();

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { reduceMotion } from './motion';
 
 const viewports = [
   { width: 640, height: 360 },
@@ -8,7 +9,7 @@ const viewports = [
 const seats = ['S', 'E', 'N', 'W'] as const;
 
 async function openSetup(page: Page): Promise<void> {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await reduceMotion(page);
   await page.goto('/?dev=1');
   await expect(page.locator('#app[data-screen="title"]')).toBeVisible();
   await page.locator('[data-action="new"]').click();
