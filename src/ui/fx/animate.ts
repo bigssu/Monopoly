@@ -14,6 +14,12 @@
  *   the owner colour / level icon changes under the dust curtain, not before the effect.
  * - Presets carry their own sounds / haptics / shake; the matching old calls are gone here.
  *
+ * Money (docs/MONEY-EVENTS.md §10–§11): every purchase, payment and income is a full-screen cut-in on
+ * the money stage. `planMoney` (moneymap.ts) groups a batch's money events (one action's money =
+ * one cut-in); the group's scene plays at its first event, the state of all its events is applied
+ * at the scene's 'settle' cue (the board / panels change as the cut-in hands back), and the old
+ * canvas money presets, panel floats and the toll card do not play for them.
+ *
  * Speed: every duration goes through `fx/time` — `setAnimSpeed(0)` makes the whole queue
  * instant and plays no effect (tests), a "skip" tap accelerates it ×5 (and fires pending fx cues
  * now), reduced motion keeps every beat but holds still (presets: sound + a static highlight,
@@ -26,12 +32,17 @@ import { playerColor } from '@/content/palette';
 import { loc, t } from '@/i18n';
 import type { GameView } from '@/ui/game/view';
 import { isDevHook, money, spaceIcon } from '@/ui/game/util';
+import { iconMarkup } from '@/content/icons';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
 import { animSpeed, headless, sleep, turnRest, wait, whenRunning } from './time';
 import { BEAT } from './motion';
 import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
+import { applyMoneyState, planMoney, type MoneyGroup, type MoneyScene } from './moneymap';
+import * as M from './money';
+import { festivalMultiplier, type Level as EngineLevel } from '@/engine';
+import { HAND } from './motion';
 
 type Alive = () => boolean;
 const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide ?? 7).board;
@@ -52,6 +63,21 @@ interface Batch {
   prev: GameEvent['type'] | null;
 }
 
+/** Dev (?dev=1): the money scenes played so far (e2e/money-events.spec.ts reads `__moneyLog`). */
+export interface MoneyLogEntry {
+  scene: MoneyScene['kind'];
+  /** The stage scene that ran (after tier / variant choice). */
+  play: string;
+  tier: string;
+  keep: boolean;
+  events: string[];
+  /** Wallet labels per seat when the scene settled (what the players read). */
+  wallets: Record<string, string>;
+  t: number;
+}
+const MONEY_LOG: MoneyLogEntry[] | null =
+  typeof window !== 'undefined' && isDevHook() ? (((window as unknown as { __moneyLog?: MoneyLogEntry[] }).__moneyLog ??= [])) : null;
+
 export async function playEvents(
   view: GameView,
   prev: GameState,
@@ -62,10 +88,36 @@ export async function playEvents(
   const vs = deepClone(prev);
   const fast = headless();
   const batch: Batch = { tollArrive: null, transfers: 0, prev: null };
-  for (const ev of events) {
+  // Money cut-ins: group start index → group; every grouped event index → its group.
+  const groups = planMoney(events);
+  const starts = new Map<number, MoneyGroup>();
+  const grouped = new Set<number>();
+  for (const g of groups) {
+    starts.set(g.start, g);
+    for (const k of g.events) grouped.add(k);
+  }
+  let firstMoney = true;
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i]!;
     // Paused: the next event waits for resume.
     await whenRunning();
     if (!alive()) return;
+    const g = starts.get(i);
+    if (g) {
+      try {
+        // A CPU's own decision: its hand lifts off the button before the cut-in comes up.
+        if (!fast && firstMoney && i <= 1 && vs.players[vs.current]?.isCpu) await wait(HAND.lift + 60);
+        firstMoney = false;
+        await playMoney(view, vs, events, g, fast);
+      } catch (e) {
+        console.error('[animate] money', g.scene.kind, e);
+        for (const k of g.events) applyMoneyState(vs, events[k]!);
+        render(view, vs);
+      }
+      batch.prev = g.scene.kind === 'bankruptcy' ? 'Bankrupt' : events[g.events[g.events.length - 1]!]!.type;
+      continue;
+    }
+    if (grouped.has(i)) continue;
     try {
       if (MARK) performance.mark(`lr:${ev.type}`);
       // Let the dealer finish the last line before the stage turns to the next player (and before
@@ -88,6 +140,11 @@ export async function playEvents(
     batch.prev = ev.type;
   }
   if (!alive()) return;
+  // The prompt comes up once the last cut-in has handed back.
+  if (!fast && view.money.live) {
+    if (view.money.kept) await view.money.releaseKept();
+    await view.money.enqueue(() => Promise.resolve());
+  }
   // The next prompt waits for a big moment (landmark, takeover, monopoly…) to finish its beats.
   await settleBig(view);
   // Only before a person's decision: the CPU's own think time already separates its actions.
@@ -193,6 +250,8 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       vs.current = ev.playerId;
       vs.round = ev.round;
       vs.turn = ev.turn;
+      // A repeated money event in the same turn plays at 0.7× (MONEY-EVENTS §10.3).
+      view.money.newTurn();
       const p = vs.players[ev.playerId]!;
       render(view, vs);
       stage.setTurn(p, vs);
@@ -534,4 +593,97 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       return;
     }
   }
+}
+
+// ------------------------------------------------------------------------------------------ money
+
+const cardTitle = (id: string | null): string | undefined => (id ? loc(getCard(id as never).title) : undefined);
+
+/** Start the stage scene for a planned money group (cash in `vs` = before the events). */
+function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean): M.MoneyPlay {
+  const st = view.money;
+  const party = (pid: PlayerId): M.Party => ({ seat: vs.players[pid]!.seat, cash: vs.players[pid]!.cash, color: view.colorOf(pid) });
+  const me = (pid: PlayerId) => ({ seat: vs.players[pid]!.seat, cash: vs.players[pid]!.cash, playerColor: view.colorOf(pid) });
+  const name = (i: number): string => loc(boardOf(vs)[i]!.short);
+  switch (sc.kind) {
+    case 'purchase':
+      return M.purchase(st, { ...me(sc.player), spaceIndex: sc.spaceIndex, price: sc.price, auction: sc.via === 'auction', keep });
+    case 'build':
+      return M.build(st, {
+        ...me(sc.player), spaceIndex: sc.spaceIndex, cost: sc.cost, level: Math.max(1, Math.min(4, sc.level)) as 1 | 2 | 3 | 4, free: sc.free, keep,
+        ...(sc.free ? { title: t('m.upgrade') } : {}),
+      });
+    case 'toll': {
+      const mult = sc.festival ? festivalMultiplier(vs) : 1;
+      return M.toll(st, { payer: party(sc.payer), owner: party(sc.owner), spaceIndex: sc.spaceIndex, amount: sc.amount, festival: sc.festival, stamp: `×${mult * sc.multiplier}`, keep });
+    }
+    case 'tollWaived':
+      return M.tollWaived(st, { payer: party(sc.payer), owner: party(sc.owner), spaceIndex: sc.spaceIndex, keep });
+    case 'takeover':
+      return M.takeover(st, { buyer: party(sc.buyer), seller: party(sc.seller), spaceIndex: sc.spaceIndex, price: sc.price, keep });
+    case 'collectFromAll':
+      return M.collectFromAll(st, { receiver: party(sc.receiver), payers: sc.payers.map((p) => ({ ...party(p.id), amount: p.amount })), keep, ...(cardTitle(sc.cardId) ? { title: cardTitle(sc.cardId) } : {}) });
+    case 'payAll':
+      return M.payAll(st, { payer: party(sc.payer), receivers: sc.receivers.map((p) => ({ ...party(p.id), amount: p.amount })), keep, ...(cardTitle(sc.cardId) ? { title: cardTitle(sc.cardId) } : {}) });
+    case 'transfer':
+      return M.transfer(st, { from: party(sc.from), to: party(sc.to), via: 'center', amount: sc.amount, keep, title: cardTitle(sc.cardId) ?? t(sc.reason === 'toll' ? 'm.toll' : 'm.payAll') });
+    case 'receive': {
+      const kind = sc.source === 'pot' ? 'pot' : sc.source === 'salary' ? 'salary' : 'bonus';
+      const title = sc.source === 'doubleUp' ? t('m.doubleUp.win') : cardTitle(sc.cardId);
+      return M.receive(st, { ...me(sc.player), amount: sc.amount, kind, keep, ...(title ? { title } : {}) });
+    }
+    case 'pay': {
+      const kind = sc.sink === 'doubleUp' ? 'fine' : sc.sink;
+      const title = sc.sink === 'doubleUp' ? t('m.doubleUp.lose') : cardTitle(sc.cardId);
+      return M.pay(st, { ...me(sc.player), amount: sc.amount, kind, keep, ...(title ? { title } : {}) });
+    }
+    case 'sale': {
+      // §4.2 "dismantle" picture is not built yet: the sold building (or the city card) is the hero.
+      const art = sc.building !== null ? buildingArt(sc.building) : undefined;
+      return M.transfer(st, {
+        from: 'bank', to: party(sc.player), amount: sc.amount, keep,
+        title: sc.building !== null ? t('m.sale.building') : t('m.sale.land', { name: name(sc.spaceIndex) }),
+        ...(art ? { hero: art } : {}),
+      });
+    }
+    case 'bankruptcy':
+      return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, keep });
+  }
+}
+
+const BUILDING_ICON: Record<1 | 2 | 3 | 4, string> = { 1: 'villa', 2: 'building', 3: 'hotel', 4: 'landmark' };
+function buildingArt(level: EngineLevel): string | undefined {
+  const id = BUILDING_ICON[Math.max(1, Math.min(4, level)) as 1 | 2 | 3 | 4];
+  try {
+    return `<div class="mh-sinkpic">${iconMarkup(id)}</div>`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One money group: the cut-in plays; at its 'settle' cue the group's events change the view state
+ * and the board / panels render (the scene's wallet numbers = the engine's cash). Headless: the
+ * state is applied at once, nothing shows.
+ */
+async function playMoney(view: GameView, vs: GameState, events: readonly GameEvent[], g: MoneyGroup, fast: boolean): Promise<void> {
+  const evs = g.events.map((k) => events[k]!);
+  if (!fast) for (const e of evs) view.director.onEvent(e, vs, 'before');
+  if (!fast) {
+    const play = startScene(view, vs, g.scene, g.keep);
+    await play;
+    if (MONEY_LOG) {
+      const wallets: Record<string, string> = {};
+      for (const s of M.SEATS) if (view.money.wallets[s].visible) wallets[s] = view.money.wallets[s].el.dataset.v ?? '';
+      MONEY_LOG.push({ scene: g.scene.kind, play: play.kind, tier: play.tier, keep: g.keep, events: evs.map((e) => e.type), wallets, t: Math.round(performance.now()) });
+    }
+  }
+  for (const e of evs) applyMoneyState(vs, e);
+  render(view, vs);
+  if (!fast) for (const e of evs) view.director.onEvent(e, vs, 'after');
+  // What the board still does by itself after the cut-in hands back.
+  const sc = g.scene;
+  if (sc.kind === 'purchase') await groupMoment(view, vs, sc.player, sc.spaceIndex, fast);
+  else if (sc.kind === 'takeover') await groupMoment(view, vs, sc.buyer, sc.spaceIndex, fast);
+  else if (sc.kind === 'bankruptcy' && !fast) await view.panel(sc.debtor)?.breakApart();
 }

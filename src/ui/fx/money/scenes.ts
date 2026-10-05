@@ -435,6 +435,8 @@ export interface PurchaseArgs extends SceneOpts {
   playerColor: string;
   spaceIndex: number;
   price: number;
+  /** Won at auction: two gavel knocks and a "낙찰" stamp before the coins. */
+  auction?: boolean;
 }
 
 /** E1: my wallet → the empty lot (landmark big, lot sign); coins fall in; my flag goes up. */
@@ -453,8 +455,19 @@ export function purchase(st: MoneyStage, a: PurchaseArgs): MoneyPlay {
       `</div>`;
     void heroIn(x, html, a.seat, 'is-lot');
     const front = frontOf(x, a.seat, 0.56);
-    void plaqueIn(x, 0, a.seat, front, { title: a.title ?? t('m.bought', { name: sp.name }), amount: 0 });
+    void plaqueIn(x, 0, a.seat, front, { title: a.title ?? t(a.auction ? 'm.auction' : 'm.bought', { name: sp.name }), amount: 0 });
     await x.at(3);
+    if (a.auction) {
+      // Sold! Two gavel knocks (the build hammer, higher), the stamp, then the payment.
+      const g = x.st.geom;
+      for (let k = 0; k < 2; k++) {
+        x.st.sound.cue('build', { pitch: 1.35 });
+        x.st.sound.buzz('medium');
+        void x.st.swing('hammer', lotPoint(x, a.seat, -0.12), SEAT_ROT[a.seat], { scale: g.hero / 230, ms: f(4) });
+        await x.c.after(f(5));
+      }
+      void x.st.stampAt(t('m.sold'), lotPoint(x, a.seat, -0.3), a.seat, 'gold', f(6));
+    }
     pulse(x, w);
     const flights = payFlights(w, a.price, { min: Math.max(4, TIER[tier].min - 2), max: Math.min(8, TIER[tier].max) });
     const plotPt = (): Pt => lotPoint(x, a.seat, 0.04);
@@ -466,7 +479,7 @@ export function purchase(st: MoneyStage, a: PurchaseArgs): MoneyPlay {
         void x.st.plaque(0).add(x.c, fl.value, f(4));
         void x.st.fx('coin_burst', plotPt(), { scale: x.coin / 52 });
       },
-    }, flights, { start: 4, stagger: 2, sid: 0 });
+    }, flights, { start: x.c.t / f(1) + 1, stagger: 2, sid: 0 });
     // Impact: the flag goes in, the lot takes the owner's colour.
     x.st.sound.cue('buy');
     x.st.sound.buzz('medium');
@@ -502,6 +515,8 @@ export interface BuildArgs extends SceneOpts {
   spaceIndex: number;
   cost: number;
   level: 1 | 2 | 3 | 4;
+  /** Free upgrade (card): no wallet, no coins — the hammer and the building only. */
+  free?: boolean;
 }
 
 const BUILDING: Record<1 | 2 | 3 | 4, string> = { 1: 'villa', 2: 'building', 3: 'hotel', 4: 'landmark' };
@@ -511,7 +526,7 @@ const BUILD_COINS: Record<1 | 2 | 3 | 4, number> = { 1: 3, 2: 4, 3: 6, 4: 8 };
 export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
   const tier = a.tier ?? (a.level === 4 ? 'XL' : a.level === 3 ? maxTier('L', tierFor(a.cost, a.cash)) : maxTier('M', tierFor(a.cost, a.cash)));
   return runScene(st, a.level === 4 ? 'landmark' : 'build', tier, a, async (x) => {
-    const w = walletOf(x, { seat: a.seat, cash: a.cash, color: a.playerColor });
+    const w = a.free ? null : walletOf(x, { seat: a.seat, cash: a.cash, color: a.playerColor });
     const html =
       `<div class="mh-site lv${a.level}" style="color:${a.playerColor};--pc:${a.playerColor}">` +
       `<i class="mh-rays"></i>` +
@@ -520,20 +535,28 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
       `</div>`;
     void heroIn(x, html, a.seat, 'is-site');
     const front = frontOf(x, a.seat, 0.54);
-    void plaqueIn(x, 0, a.seat, front, { title: a.title ?? t(`m.built.${a.level}`), amount: 0 });
+    void plaqueIn(x, 0, a.seat, front, { title: a.title ?? t(`m.built.${a.level}`), amount: w ? 0 : null });
     await x.at(3);
-    pulse(x, w);
-    const n = BUILD_COINS[a.level];
-    const flights = payFlights(w, a.cost, { min: n, max: n });
     const site = (): Pt => lotPoint(x, a.seat, 0.02);
-    await stream(x, { wallet: w }, {
-      point: site,
-      sound: 'pot',
-      onLand: (_k, _l, fl) => {
-        heroPunch(x, 1.03, 3);
-        void x.st.plaque(0).add(x.c, fl.value, f(4));
-      },
-    }, flights, { start: a.level === 4 ? 5 : 3, stagger: a.level === 4 ? 1.5 : 2, sid: 0 });
+    if (w) {
+      pulse(x, w);
+      const n = BUILD_COINS[a.level];
+      const flights = payFlights(w, a.cost, { min: n, max: n });
+      await stream(x, { wallet: w }, {
+        point: site,
+        sound: 'pot',
+        onLand: (_k, _l, fl) => {
+          heroPunch(x, 1.03, 3);
+          void x.st.plaque(0).add(x.c, fl.value, f(4));
+        },
+      }, flights, { start: a.level === 4 ? 5 : 3, stagger: a.level === 4 ? 1.5 : 2, sid: 0 });
+    } else {
+      // Free: a sparkle drops onto the site instead of the coins.
+      x.cues.fire('depart');
+      x.st.sound.cue('card');
+      void x.st.fx('sparkle4', site(), { scale: x.st.geom.hero / 160, tint: '#FFE08A', fps: 18 });
+      await x.at(10);
+    }
     // Hammer hits: one per level (L4: three heavy ones).
     const hits = a.level === 4 ? 3 : a.level;
     const g = x.st.geom;
@@ -575,6 +598,8 @@ export interface TollArgs extends SceneOpts {
   spaceIndex: number;
   amount: number;
   festival?: boolean;
+  /** Festival stamp text (default ×2; olympics ×3 / ×5). */
+  stamp?: string;
 }
 
 /** E3: payer → the city (owner-coloured frame, gathers, total locks) → owner. Festival: ×2 stamp, XL. */
@@ -591,7 +616,7 @@ export function toll(st: MoneyStage, a: TollArgs): MoneyPlay {
     if (a.festival) {
       await x.at(4);
       x.st.sound.cue('festival');
-      void x.st.stampAt(t('m.x2'), lotPoint(x, a.payer.seat, -0.3), a.payer.seat, 'gold');
+      void x.st.stampAt(a.stamp ?? t('m.x2'), lotPoint(x, a.payer.seat, -0.3), a.payer.seat, 'gold');
     }
     await x.at(a.festival ? 7 : 4);
     pulse(x, pw);
@@ -615,6 +640,31 @@ export function toll(st: MoneyStage, a: TollArgs): MoneyPlay {
     ow.bump(x.st, 1.08, f(4));
     void ow.merge(x.st, (_m, at) => void x.st.fx('coin_burst', at, { scale: x.coin / 36 }));
     await finish(x, { keep: a.keep, tile: a.spaceIndex, resultHold: 5, settleHold: 4 });
+  });
+}
+
+export interface WaivedArgs extends SceneOpts {
+  payer: Party;
+  owner: Party;
+  spaceIndex: number;
+}
+
+/** A toll pass waives the toll: the city, a "면제!" stamp, no coins (short S beat). */
+export function tollWaived(st: MoneyStage, a: WaivedArgs): MoneyPlay {
+  return runScene(st, 'tollWaived', a.tier ?? 'S', a, async (x) => {
+    walletOf(x, a.payer);
+    const sp = art(x, a.spaceIndex);
+    void heroIn(x, cityCard(sp, a.owner.color), a.payer.seat, 'is-city', { s: 0.92 });
+    const front = frontOf(x, a.payer.seat, 0.5);
+    void plaqueIn(x, 0, a.payer.seat, front, { title: a.title ?? t('m.toll'), amount: null, tone: 'good' });
+    await x.at(7);
+    x.cues.fire('depart');
+    x.st.sound.cue('escape');
+    x.st.sound.buzz('medium');
+    void x.st.fx('sparkle4', lotPoint(x, a.payer.seat, 0), { scale: x.st.geom.hero / 160, tint: '#B9F2CF', fps: 18 });
+    await x.st.stampAt(t('m.waived'), lotPoint(x, a.payer.seat, 0.02), a.payer.seat, 'gold', f(6));
+    heroPunch(x, 1.05, 4);
+    await finish(x, { keep: a.keep, tile: a.spaceIndex, resultHold: 8, settleHold: 4 });
   });
 }
 
@@ -937,6 +987,6 @@ export function bankruptcy(st: MoneyStage, a: BankruptcyArgs): MoneyPlay {
 }
 
 /** Every scene, by name (demo / wiring tables). */
-export const SCENES = { transfer, purchase, build, toll, takeover, collectFromAll, payAll, receive, pay, bankruptcy } as const;
+export const SCENES = { transfer, purchase, build, toll, tollWaived, takeover, collectFromAll, payAll, receive, pay, bankruptcy } as const;
 export type SceneName = keyof typeof SCENES;
 export type { Metal };

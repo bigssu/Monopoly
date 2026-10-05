@@ -20,7 +20,8 @@
 .ms-dim {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 72% 64% at 50% 50%, rgba(14, 20, 34, 0.72) 0%, rgba(10, 14, 24, 0.9) 60%, rgba(4, 6, 12, 0.98) 100%);
+  /* Dark enough that the bright board (cream tiles, labels) recedes behind the cut-in. */
+  background: radial-gradient(ellipse 72% 64% at 50% 50%, rgba(16, 22, 38, 0.9) 0%, rgba(10, 14, 24, 0.96) 60%, rgba(4, 6, 12, 0.99) 100%);
 }
 
 .ms-wallets, .ms-fg { position: absolute; inset: 0; }
@@ -194,7 +195,7 @@
 .mh-lot.is-owned .mh-flag { opacity: 1; }
 
 /* Construction site (build): the building rises out of the ground (clipped below it). */
-.mh-rise { position: absolute; left: 18%; width: 64%; bottom: 27%; height: 66%; overflow: hidden; }
+.mh-rise { position: absolute; left: 11%; width: 78%; bottom: 26%; height: 74%; overflow: hidden; }
 .mh-site.lv4 .mh-rise { left: 8%; width: 84%; height: 88%; bottom: 25%; }
 .mh-bld { position: absolute; inset: 0; transform: translateY(100%); }
 .mh-rays {

@@ -169,10 +169,10 @@ export function maxTier(a: Tier, b: Tier): Tier {
 
 /** Per-tier pacing (30 fps frames): flights, departure stagger, total length, dim, shake, ladder top. */
 export const TIER: Record<Tier, { min: number; max: number; stagger: number; frames: number; dim: number; shake: number; ladder: number }> = {
-  S: { min: 3, max: 5, stagger: 2, frames: 36, dim: 0.78, shake: 0, ladder: 4 },
-  M: { min: 6, max: 8, stagger: 2, frames: 54, dim: 0.86, shake: 2, ladder: 7 },
-  L: { min: 10, max: 12, stagger: 2, frames: 72, dim: 0.92, shake: 4, ladder: 9 },
-  XL: { min: 14, max: 16, stagger: 2, frames: 88, dim: 0.97, shake: 6, ladder: 12 },
+  S: { min: 3, max: 5, stagger: 2, frames: 36, dim: 0.92, shake: 0, ladder: 4 },
+  M: { min: 6, max: 8, stagger: 2, frames: 54, dim: 0.95, shake: 2, ladder: 7 },
+  L: { min: 10, max: 12, stagger: 2, frames: 72, dim: 0.97, shake: 4, ladder: 9 },
+  XL: { min: 14, max: 16, stagger: 2, frames: 88, dim: 0.98, shake: 6, ladder: 12 },
 };
 
 /** One flying coin: the coins (and value) it carries from the payer to the receiver. */

@@ -245,7 +245,8 @@ export class MoneyStage implements TweenHost {
       this.fxFree.push(n);
     }
     this.coins = new CoinPool(this.fg, () => this.clock);
-    this.root.append(this.dim, walletLayer, this.hero, this.fg);
+    // Wallets over the hero: a zoomed-in hero reaches into the seat edges; the piles stay readable.
+    this.root.append(this.dim, this.hero, walletLayer, this.fg);
     host.parent.append(this.root);
     void loadMoneyAtlas();
   }
@@ -335,8 +336,10 @@ export class MoneyStage implements TweenHost {
     const S = Math.min(W, H);
     const b = this.host.boardRect?.() ?? null;
     const c = b ? { x: b.x - pr.left + b.w / 2, y: b.y - pr.top + b.h / 2 } : { x: W / 2, y: H / 2 };
-    const coin = Math.round(Math.min(84, Math.max(30, S * 0.075)));
-    const hero = Math.round(S * 0.6);
+    // Zoomed in to fill the screen (MONEY-EVENTS §11): wallet coins ≈ 9 % of the short side (a
+    // readable pile ≈ 18–25 % tall at its seat edge), the hero box 80 % (its picture ≈ 60–65 %).
+    const coin = Math.round(Math.min(120, Math.max(30, S * 0.09)));
+    const hero = Math.round(S * 0.8);
     this.geom = { W, H, S, c, coin, hero };
     this.coins.center = c;
     this.root.style.setProperty('--pu', `${Math.max(9, S * 0.026).toFixed(1)}px`);
@@ -387,6 +390,11 @@ export class MoneyStage implements TweenHost {
     this.stats.scenes++;
     const wasLive = this.live;
     if (!wasLive) this.measure();
+    else {
+      // A follow-up scene in the same cut-in: the last one's plaques and stamp go.
+      for (const p of this.plaques) p.hide();
+      this.stamp.style.opacity = '0';
+    }
     this.live = true;
     this.root.classList.add('is-live');
     this.dim.style.opacity = String(dim);
@@ -396,6 +404,23 @@ export class MoneyStage implements TweenHost {
       this.host.camera?.('in', tier, f(6));
     }
     return true;
+  }
+
+  /**
+   * A scene kept the stage up for a follow-up that never came (the batch ended): take it down after
+   * the queue is idle (wallets sink, everything fades, parked).
+   */
+  releaseKept(): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.live || !this.kept) return;
+      this.kept = false;
+      const jobs: Promise<void>[] = [];
+      for (const s of SEATS) if (this.wallets[s].visible) jobs.push(this.wallets[s].exit(this, f(5)));
+      for (const p of this.plaques) jobs.push(this.tween(f(5), (u) => (p.el.style.opacity = String(Math.min(Number(p.el.style.opacity || 1), 1 - u)))));
+      jobs.push(this.poseTo({ o: 0 }, f(5)));
+      await Promise.all(jobs);
+      await this.close('S', false);
+    });
   }
 
   /** Take the stage down (unless `keep`: a follow-up scene continues the same cut-in). */

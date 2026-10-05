@@ -3,7 +3,7 @@
  * Rendering is stateless (`render(state)`), diffed inside each component.
  */
 import { getBoard, type GameState, type PlayerId, type Seat, type SpacesPerSide } from '@/engine';
-import { t } from '@/i18n';
+import { loc, t } from '@/i18n';
 import { Board } from '@/ui/board/Board';
 import { INNER, VB } from '@/ui/board/geometry';
 import { Stage } from '@/ui/stage/Stage';
@@ -22,6 +22,8 @@ import { disposeIconAtlas } from './iconAtlas';
 import { fxQualityOn, prefs } from '@/ui/shell/prefs';
 import { isNative } from '@/ui/shell/capacitor';
 import { Dealer } from '@/ui/dealer/Dealer';
+import { MoneyStage, type Rect as MoneyRect } from '@/ui/fx/money';
+import { groupColor, spaceIcon } from './util';
 import { DealerDirector } from '@/ui/dealer/director';
 
 /** Dev A/B knob `?dev=1&fxpool=6.12` (canvas size classes, present.ts SLOT_CLASSES). */
@@ -56,6 +58,11 @@ export class GameView {
   readonly vfx: FxHandle;
   private ladder = new PitchLadder();
   readonly menuSlot: HTMLElement;
+  /**
+   * Full-screen money cut-ins (docs/MONEY-EVENTS.md §10–§11): one layer for the screen's life,
+   * parked off-screen by a transform while idle (no layer, no timer).
+   */
+  readonly money: MoneyStage;
   readonly seats: Seat[];
   layout: GameLayout | null = null;
   /** Called when the device flips between portrait and landscape. */
@@ -147,6 +154,50 @@ export class GameView {
       h('div', { class: 'ro-inner' }, iconEl('rotate', 'ico ro-ico'), h('div', { class: 'ro-text', text: t('g.rotate') })),
     );
     this.root.append(this.table, this.fx, this.menuSlot, this.rotateOverlay);
+    this.money = this.createMoneyStage(spacesPerSide);
+  }
+
+  /** The money stage with its rect providers (cached layout rects) and the board camera. */
+  private createMoneyStage(spacesPerSide: SpacesPerSide): MoneyStage {
+    const defs = getBoard(spacesPerSide);
+    const toRect = (r: { x: number; y: number; width: number; height: number }): MoneyRect => ({ x: r.x, y: r.y, w: r.width, h: r.height });
+    const boardRect = (): DOMRect => this.rect('board', () => this.board.el.getBoundingClientRect());
+    // Camera (§2): 2D by default — the board pulls back a little under the vignette (transform on
+    // the board, written on the scene clock; a static 2D scale makes no layer). `?dev=1&mcam=3d`
+    // tilts it back in 3D as well (+3–4 compositor layers measured, docs/MONEY-EVENTS.md §11).
+    const cam3d = isDevHook() && new URLSearchParams(location.search).get('mcam') === '3d';
+    const camOff = isDevHook() && new URLSearchParams(location.search).get('mcam') === 'off';
+    const stage: MoneyStage = new MoneyStage({
+      parent: this.root,
+      boardRect: () => {
+        const r = boardRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      },
+      seatRect: (seat) => {
+        const p = this.state.players.find((q) => q.seat === seat);
+        const r = p ? this.rects.get(`p${p.id}`) : undefined;
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      },
+      tileRect: (i) => (defs[i] ? toRect(this.board.spaceRect(i, boardRect())) : null),
+      space: (i) => {
+        const sp = defs[i];
+        return sp ? { icon: spaceIcon(sp), name: loc(sp.short), color: groupColor(sp) ?? undefined } : null;
+      },
+      camera: camOff
+        ? undefined
+        : (state, _tier, ms) => {
+            const el = this.board.el;
+            void stage.tween(ms, (u) => {
+              const k = state === 'in' ? u * u * (3 - 2 * u) : 1 - u * u * (3 - 2 * u);
+              el.style.transform = k <= 0.001
+                ? ''
+                : cam3d
+                  ? `perspective(1400px) rotateX(${(9 * k).toFixed(2)}deg) scale(${(1 - 0.08 * k).toFixed(4)})`
+                  : `scale(${(1 - 0.08 * k).toFixed(4)})`;
+            });
+          },
+    });
+    return stage;
   }
 
   mount(parent: HTMLElement): void {
@@ -237,6 +288,11 @@ export class GameView {
   /** Drop every running effect and its DOM helpers (resize, skip-to-end, screen exit). */
   stopFx(): void {
     this.vfx.stopAll();
+    // A cut-in measured the old layout: take it down (its scenes resolve; state is applied).
+    if (this.money.live) {
+      this.money.park();
+      this.board.el.style.transform = '';
+    }
     this.stage.dropCloseUp();
   }
 
@@ -249,6 +305,8 @@ export class GameView {
   }
 
   dispose(): void {
+    this.money.destroy();
+    this.board.el.style.transform = '';
     this.dealer.dispose();
     this.stopPrefs();
     this.vfx.dispose();

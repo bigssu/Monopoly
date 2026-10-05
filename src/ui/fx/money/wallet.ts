@@ -18,8 +18,11 @@ import type { Pt } from './coins';
 import { f } from './clock';
 import { columnOverflows, countMs, easeOutCubic, METALS, pileOf, pileValue, planMerge, visibleCoins, type Break, type Flight, type Merge, type Metal, type Pile } from './denom';
 
-/** Coin slice / top-face proportions (sprites-money.ts SLICE / COIN_TOP: 40 × 6, 40 × 14). */
-const SLICE_K = 6 / 40;
+/**
+ * Coin slice / top-face proportions (sprites-money.ts SLICE / COIN_TOP: 40 × 6, 40 × 14). The slice
+ * is drawn 1.5× thicker than baked (a chunkier, taller pile that reads from across the table).
+ */
+const SLICE_K = 9 / 40;
 const CAP_K = 14 / 40;
 const CAP_FALLBACK: Record<Metal, string> = { gold: '#FFC94A', silver: '#DCE3EE', bronze: '#E69C61' };
 /** Tallest visible column, in coins. */
@@ -44,7 +47,7 @@ export function walletGeom(coin: number): WalletGeom {
   const cap = coin * CAP_K;
   const gap = coin * 0.2;
   const pad = coin * 0.28;
-  const label = Math.max(18, coin * 0.62);
+  const label = Math.max(20, coin * 0.64);
   const w = 3 * coin + 2 * gap + 2 * pad;
   const h = label + pad * 0.6 + MAX_VIS * slice + cap + pad * 0.4;
   return { coin, slice, cap, gap, pad, label, w, h };

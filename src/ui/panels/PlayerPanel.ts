@@ -213,11 +213,13 @@ export class PlayerPanel {
     // repaints the panel, docs/PERFORMANCE.md) in the gain/loss color, which returns to ink with
     // the final value (formerly a separate 800 ms main-thread color animation: ~24 more repaints).
     const dur = D(650);
-    const t0 = performance.now();
+    // Timed from the first frame step on the shared clock (its `now`: real or the manual test clock).
+    let t0 = -1;
     const color = up ? '#25A55A' : '#D2443D';
     let n = 0;
     this.cashNum.style.color = color;
     this.stopTween = onFrame((now) => {
+      if (t0 < 0) t0 = now;
       const k = Math.min(1, (now - t0) / Math.max(1, dur));
       if (k < 1 && n++ % 3) return true;
       const e = 1 - Math.pow(1 - k, 3);

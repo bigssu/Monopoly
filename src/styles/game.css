@@ -30,7 +30,8 @@
 .tok-badge > .ic-bm { width: 84%; height: 84%; }
 
 /* ≡ menu (top-left, upright) */
-.menu-slot { position: absolute; z-index: 30; }
+/* Above the money cut-in (z 45): pause stays reachable and visible during a scene. */
+.menu-slot { position: absolute; z-index: 50; }
 .menu-btn, .pause-btn {
   width: 100%;
   height: 100%;
