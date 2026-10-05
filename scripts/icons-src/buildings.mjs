@@ -151,4 +151,34 @@ B['cards-shield'] = svg(
   star(32, 30, 8, C.white, 5, 0.5)
 );
 
+// ---- cpu-hand: the CPU's pointing glove (src/ui/stage/CpuHand.ts) ----
+// A white cartoon glove with a dark outline, index finger up; the cuff is currentColor (the CPU
+// player's color). The fingertip is at (23.5, 4): CpuHand.ts anchors the press point there.
+{
+  const at = (o) => Object.entries(o).map(([k, v]) => `${k}="${v}"`).join(' ');
+  const glove = [
+    { x: 17, y: 25, width: 31, height: 27, rx: 10 }, // palm
+    { x: 27, y: 21.5, width: 11, height: 13, rx: 5.5 }, // curled fingers (knuckles)
+    { x: 35.5, y: 23.5, width: 10.5, height: 12.5, rx: 5.25 },
+    { x: 42, y: 28, width: 9, height: 11.5, rx: 4.5 },
+    { x: 18, y: 3, width: 11, height: 32, rx: 5.5 }, // index finger
+    { x: 8.5, y: 31, width: 15.5, height: 10, rx: 5, transform: 'rotate(-35 16 36)' }, // thumb
+  ];
+  const cuff = { x: 15, y: 47, width: 35, height: 13.5, rx: 5 };
+  const draw = (list, fill, extra = '') => list.map((o) => `<rect ${at(o)} fill="${fill}"${extra}/>`).join('');
+  // One merged outline: every shape stroked fat in ink first, then the fills on top.
+  const fat = ` stroke="${C.ink}" stroke-width="6" stroke-linejoin="round"`;
+  const crease = (d) => pathS(d, C.slateL, 2.2);
+  B['cpu-hand'] = svg(
+    `<g opacity=".16" transform="translate(1.5 2.5)">${draw([...glove, cuff], C.ink, fat)}</g>` +
+    draw([...glove, cuff], C.ink, fat) +
+    draw(glove, C.white) +
+    crease('M29.5 25.5V32') + crease('M38 28V34') + crease('M44.5 32V37') +
+    rect(21, 6.5, 3.2, 13, 1.6, '#E9EEF6') +
+    draw([cuff], CUR) +
+    rect(18, 49.5, 29, 2.8, 1.4, C.white, ' opacity=".4"') +
+    rect(15, 56, 35, 4.5, 2.25, '#1B2140', ' opacity=".22"')
+  );
+}
+
 export default B;
