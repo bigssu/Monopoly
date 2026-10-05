@@ -549,3 +549,34 @@ for (const size of [{ w: 1600, h: 1000 }, { w: 800, h: 450 }]) {
     });
   }
 }
+
+test.describe('a cut-in cut short (review round 1)', () => {
+  test.use({ viewport: { width: 1600, height: 1000 } });
+  const TAX = `s.players[me].position = 20; s.players[me].cash = 4560; s.testHooks = { diceQueue: [[1, 2]] };`;
+  const idleWithin = (page: Page, ms: number): Promise<boolean> =>
+    page.evaluate((ms) => Promise.race([window.__lotAndRoll!.whenIdle().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]), ms);
+
+  for (const how of ['resize', 'orientationchange'] as const) {
+    test(`${how} 300 ms into a cut-in: the scene finishes at once, the game reaches the next prompt`, async ({ page }) => {
+      const errors = watchConsole(page);
+      await boot(page, 1600, 1000);
+      await craft(page, 'S', TAX);
+      await page.locator('.st-prompt [data-action="Roll"]:not(:disabled)').click();
+      await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.money()?.t ?? 0), { timeout: 20_000, intervals: [16] }).toBeGreaterThan(300);
+      if (how === 'resize') await page.setViewportSize({ width: 1500, height: 1000 });
+      else await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
+      expect(await idleWithin(page, 20_000), 'the game goes on (no hang)').toBe(true);
+      await expect(page.locator('.st-prompt [data-action]:not(:disabled)').first()).toBeVisible();
+      const r = await page.evaluate(() => {
+        const s = window.__lotAndRoll!.getState()!;
+        return {
+          engine: s.players.map((p) => p.cash),
+          panel: [...document.querySelectorAll<HTMLElement>('.pp')].map((el) => ({ pid: Number(el.dataset.pid), cash: Number((el.querySelector('.pp-cash-n')?.textContent ?? '').replace(/\D/g, '')) })),
+        };
+      });
+      for (const p of r.panel) expect(p.cash, `panel ${p.pid} = engine cash`).toBe(r.engine[p.pid]);
+      await expectParked(page);
+      expect(errors, errors.join('\n')).toEqual([]);
+    });
+  }
+});

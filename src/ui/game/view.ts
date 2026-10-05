@@ -373,9 +373,10 @@ export class GameView {
   /** Drop every running effect and its DOM helpers (resize, skip-to-end, screen exit). */
   stopFx(): void {
     this.vfx.stopAll();
-    // A cut-in measured the old layout: take it down (its scenes resolve; state is applied).
+    // A cut-in measured the old layout: cut it short. Its scene finishes at once without being shown
+    // (MoneyStage.abort): 'settle' fires, the sequencer applies the state, the next scene plays.
     if (this.money.live) {
-      this.money.park();
+      this.money.abort();
       this.board.el.style.transform = '';
     }
     this.stage.dropCloseUp();

@@ -135,8 +135,12 @@ export class CoinPool {
     this.rand = mulberry(s);
   }
 
-  /** Schedule a flight. */
+  /** Schedule a flight. With no scene clock (the scene was cut short) it lands at once. */
   launch(spec: FlightSpec): void {
+    if (!this.clock()) {
+      queueMicrotask(() => spec.onLand?.());
+      return;
+    }
     const r = this.rand;
     const to = typeof spec.to === 'function' ? spec.to() : spec.to;
     const dx = to.x - spec.from.x;

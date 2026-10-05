@@ -286,9 +286,20 @@ export class MoneyStage implements TweenHost {
 
   /** Remove the stage (screen unmount). */
   destroy(): void {
-    this.clock?.dispose();
-    this.coins.clear();
+    // Like a resize: a scene in progress finishes at once (its 'settle' / done resolve) and parks.
+    this.abort();
     this.root.remove();
+  }
+
+  /**
+   * Cut a running cut-in short (resize / rotation, screen exit): what was ticking finishes at once,
+   * the scene body runs to its end without a clock (muted, nothing shown: the stage is parked), so
+   * its cues fire — the sequencer applies the state and the next queued scene plays as usual.
+   */
+  abort(): void {
+    // The rest of the cut-short scene runs silently (sound back on at the next `open()`).
+    if (this.clock || this.live) this.sound.enabled = false;
+    this.park();
   }
 
   /** Free one-shot sprite nodes (pool of 8; tests). */
@@ -460,6 +471,7 @@ export class MoneyStage implements TweenHost {
   open(tier: Tier, dim: number, factor = 1): boolean {
     if (headless()) return false;
     this.releaseClock();
+    this.sound.enabled = true;
     this.clock = new MoneyClock();
     this.clock.factor = factor;
     this.clock.monitor = this.monitor;
@@ -544,12 +556,14 @@ export class MoneyStage implements TweenHost {
     const c = this.clock;
     if (!c) return;
     this.clock = null;
+    // First let everything on the clock finish (tweens resolve, coins land, counts end) …
+    c.dispose();
+    // … then whatever is left (coins launched meanwhile land at once: no clock).
     this.coins.flush();
     for (const s of SEATS) this.wallets[s].settleCount();
     for (const p of this.plaques) p.stopCounting();
     for (const n of this.fxNodes) this.resetFx(n);
     this.fxFree = [...this.fxNodes];
-    c.dispose();
   }
 
   /** Idle: off-screen, no layers, no timers. */
@@ -570,6 +584,7 @@ export class MoneyStage implements TweenHost {
     this.root.style.transform = '';
     const was = this.live;
     this.live = false;
+    this.kept = false;
     if (this.pending) {
       this.scale = this.pending.scale;
       this.tilt = this.pending.tilt;

@@ -22,6 +22,8 @@ export const f = (n: number): number => n * FRAME;
 export type SceneTick = (t: number) => boolean | void;
 
 const SKIP_RATE = 5;
+/** Scene time a disposed clock's steps finish at (far past any scene). */
+const END_OF_TIME = Number.MAX_SAFE_INTEGER / 4;
 /** Float slack (ms): n frames of 33.33… ms must reach f(n). */
 const EPS = 1e-6;
 
@@ -79,9 +81,22 @@ export class MoneyClock {
     };
   }
 
-  /** Stop: pending waits resolve, steps are dropped, the frame step unregisters. */
+  /** Stop: every step runs once at the end of time, pending waits resolve, the frame step unregisters. */
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
+    // Finish what was ticking (a scene cut short by a resize, a quit or a follow-up scene): every
+    // step runs once at the end of time, so tweens reach u = 1 and resolve, coins land, counts end.
+    // Dropping them instead left their promises pending and the scene (and the game) hung.
+    const ticks = [...this.ticks];
+    this.ticks.clear();
+    for (const fn of ticks) {
+      try {
+        fn(END_OF_TIME);
+      } catch (e) {
+        console.error('[money]', e);
+      }
+    }
     this.ticks.clear();
     const w = this.waits;
     this.waits = [];
