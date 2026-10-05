@@ -16,7 +16,7 @@
 import type { Seat } from '@/engine';
 import { iconMarkup } from '@/content/icons';
 import { bank, dirtPlot, plotSign, vault } from '@/content/fx/sprites-money';
-import { t } from '@/i18n';
+import { fmtMoney, t } from '@/i18n';
 import { headless } from '../time';
 import { f, type MoneyClock } from './clock';
 import type { Pt } from './coins';
@@ -277,6 +277,8 @@ async function stream(x: Ctx, src: Src, dst: Dst, flights: readonly Flight[], o:
 
 /** Flights for a payment out of a wallet (or out of thin air for the bank / pot). */
 function payFlights(w: Wallet | null, amount: number, range: FlightRange): Flight[] {
+  // Nothing to pay (a bankrupt with no cash left): no decorative coins out of an empty pile.
+  if (amount <= 0) return [];
   if (!w) return flightsForAmount(amount, range);
   const plan = planDrain(w.pile, amount);
   return planFlights(plan, range);
@@ -926,7 +928,7 @@ export function collectFromAll(st: MoneyStage, a: CollectArgs): MoneyPlay {
     const mine = x.st.face(a.receiver.seat);
     await Promise.all(
       spots.map((sp) =>
-        revealPlaque(x, sp.i, sp.s, sp.at, { title: sp.s === mine ? t('m.collect.total', { n: total.toLocaleString() }) : a.title ?? t('m.collect'), amount: total }),
+        revealPlaque(x, sp.i, sp.s, sp.at, { title: sp.s === mine ? t('m.collect.total', { n: fmtMoney(total) }) : a.title ?? t('m.collect'), amount: total }),
       ),
     );
     await tremble(x, 5, 5);
@@ -1081,6 +1083,11 @@ export interface BankruptcyArgs extends SceneOpts {
   creditor: Party | null;
   /** Spaces handed over (≤ 8 shown, the rest flip at once). */
   properties: number[];
+  /**
+   * No single creditor: the players the remaining cash is split between (a pay-each card). The
+   * debtor's coins gather in the centre, then each share flies to its wallet; the rest goes to the bank.
+   */
+  receivers?: Array<Party & { amount: number }>;
 }
 
 /** E9: the debtor's pile empties to the creditor; their cities flip one by one to the creditor's colour. */
@@ -1088,6 +1095,7 @@ export function bankruptcy(st: MoneyStage, a: BankruptcyArgs): MoneyPlay {
   return runScene(st, 'bankruptcy', a.tier ?? 'XL', a, async (x) => {
     const dw = walletOf(x, a.debtor);
     const cw = a.creditor ? walletOf(x, a.creditor) : null;
+    const shares = cw ? [] : (a.receivers ?? []).filter((r) => r.amount > 0).map((r) => ({ r, w: walletOf(x, r) }));
     const g = x.st.geom;
     const shown = a.properties.slice(0, 8);
     const cards = shown.map((i) => cityCard(art(x, i), a.debtor.color)).join('');
@@ -1103,7 +1111,22 @@ export function bankruptcy(st: MoneyStage, a: BankruptcyArgs): MoneyPlay {
     const legs: Promise<void>[] = [];
     const t0 = x.c.t / f(1);
     legs.push(
-      stream(x, { wallet: dw }, cw ? { wallet: cw, sound: 'receive' } : { point: () => x.st.toward(x.st.face(a.debtor.seat), -0.45), sound: 'sink' }, flights, { start: t0, stagger: 3, sid: 0 }).then(() => undefined),
+      stream(
+        x,
+        { wallet: dw },
+        cw ? { wallet: cw, sound: 'receive' } : shares.length ? { point: () => g.c, sound: 'pot' } : { point: () => x.st.toward(x.st.face(a.debtor.seat), -0.45), sound: 'sink' },
+        flights,
+        { start: t0, stagger: 3, sid: 0 },
+      ).then(async () => {
+        // Split between the players owed: each share leaves the centre for its wallet.
+        if (!shares.length) return;
+        const t1 = x.c.t / f(1);
+        await Promise.all(
+          shares.map(({ r, w }, k) =>
+            stream(x, { point: () => g.c }, { wallet: w, sound: 'receive' }, flightsForAmount(r.amount, { min: 2, max: 3 }), { start: t1 + 3 * k, stagger: 2, sid: 1 + k, hopF: 4, travelF: 11, cueDepart: false }),
+          ),
+        );
+      }),
     );
     // Deeds flip one by one (stagger 5 f) into the creditor's colour (grey for the bank).
     const els = [...x.st.heroIn.querySelectorAll<HTMLElement>('.mh-card')];

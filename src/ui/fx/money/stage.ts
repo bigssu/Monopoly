@@ -23,6 +23,7 @@
  * MoneyClock per scene (fx/money/clock.ts) — the shared 30 Hz grid and THE TIME POLICY.
  */
 import type { Seat } from '@/engine';
+import { fmtMoney } from '@/i18n';
 import { headless, reducedMotion } from '../time';
 import { loadMoneyAtlas, paintFrame, animSize } from './atlas';
 import { MoneyClock, f } from './clock';
@@ -137,7 +138,8 @@ export class Plaque {
   }
   write(v: number): void {
     this.value = v;
-    this.aEl.textContent = (this.aEl.dataset.sign ?? '') + Math.round(v).toLocaleString();
+    // The app's language, like the wallets (not the device locale: other digits / separators).
+    this.aEl.textContent = (this.aEl.dataset.sign ?? '') + fmtMoney(Math.round(v));
   }
   place(p: Pt, rot: number, scale = 1, opacity = 1): void {
     this.el.style.transform = `translate(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px) translate(-50%,-50%) rotate(${rot}deg) scale(${scale.toFixed(3)})`;

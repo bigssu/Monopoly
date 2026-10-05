@@ -184,8 +184,19 @@ describe('moneymap: grouping (§4.3)', () => {
       { type: 'PropertyTransferred', spaceIndex: 6, from: 2, to: 0, level: 0 },
       { type: 'GameOver', result: {} as never },
     ]);
-    expect(g.map((x) => x.scene)).toEqual([{ kind: 'bankruptcy', debtor: 2, creditor: 0, properties: [4, 6] }]);
+    expect(g.map((x) => x.scene)).toEqual([{ kind: 'bankruptcy', debtor: 2, creditor: 0, properties: [4, 6], receivers: [] }]);
     expect(g[0]!.events).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('bankruptcy owed to several players (pay-each card): the shares are its receivers', () => {
+    const g = planMoney([
+      { type: 'Bankrupt', playerId: 0, creditorId: null, round: 4 },
+      mc(0, -23, 47, 'bankruptcy', 1), mc(1, 23, 3023, 'bankruptcy', 0),
+      mc(0, -23, 24, 'bankruptcy', 2), mc(2, 23, 3023, 'bankruptcy', 0),
+      mc(0, -24, 0, 'bankruptcy', 'bank'),
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0]!.scene).toMatchObject({ kind: 'bankruptcy', creditor: null, receivers: [{ id: 1, amount: 23 }, { id: 2, amount: 23 }] });
   });
 
   it('double-up: a won stake is income, a lost one a payment', () => {

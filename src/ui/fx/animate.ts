@@ -561,7 +561,7 @@ function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean
       });
     }
     case 'bankruptcy':
-      return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, keep });
+      return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, receivers: sc.receivers.map((r) => ({ ...party(r.id), amount: r.amount })), keep });
   }
 }
 

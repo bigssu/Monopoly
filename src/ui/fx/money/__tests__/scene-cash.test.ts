@@ -53,7 +53,7 @@ function start(st: MoneyStage, vs: GameState, sc: MoneyScene, keep: boolean): M.
     case 'sale':
       return M.transfer(st, { from: 'bank', to: party(sc.player), amount: sc.amount, keep });
     case 'bankruptcy':
-      return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, keep });
+      return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, receivers: sc.receivers.map((r) => ({ ...party(r.id), amount: r.amount })), keep });
   }
 }
 
@@ -95,7 +95,7 @@ describe('wallet labels = engine cash at settle, every scene of seeded games', (
               break;
             }
             for (const k of g.events) applyMoneyState(vs, r.events[k]!);
-            for (const seat of M.SCENES ? (['S', 'E', 'N', 'W'] as const) : []) {
+            for (const seat of ['S', 'E', 'N', 'W'] as const) {
               const w = st.wallets[seat];
               if (!w.visible) continue;
               const p = vs.players.find((q) => q.seat === seat)!;
@@ -116,7 +116,7 @@ describe('wallet labels = engine cash at settle, every scene of seeded games', (
         }
         endSkip();
       }
-      console.log(`[wallets] seed ${seed}:`, JSON.stringify(Object.fromEntries(seen)), `mismatches ${mism.length}`);
+      if (process.env.MONEY_VERBOSE) console.log(`[wallets] seed ${seed}:`, JSON.stringify(Object.fromEntries(seen)), `mismatches ${mism.length}`);
       expect(mism.slice(0, 20)).toEqual([]);
     }, 600_000);
   }
@@ -131,6 +131,7 @@ async function playBatch(st: MoneyStage, prev: GameState, events: readonly impor
   for (let i = 0; i < events.length; i++) {
     const g = starts.get(i);
     if (g) {
+      const k0 = kinds.length;
       kinds.push(g.scene.kind + (g.keep ? '+keep' : ''));
       const play = start(st, vs, g.scene, g.keep);
       let blocked = false;
@@ -148,6 +149,7 @@ async function playBatch(st: MoneyStage, prev: GameState, events: readonly impor
         const label = Number((w.el.dataset.v ?? '').replace(/\D/g, ''));
         if (label !== p.cash) mism.push(`${tag} ${g.scene.kind} seat ${seat}: wallet ${label} vs engine ${p.cash}`);
       }
+      kinds[k0] += `[${(['S', 'E', 'N', 'W'] as const).filter((q) => st.wallets[q].visible).join('')}]`;
       continue;
     }
     if (!grouped.has(i)) applyMoneyState(vs, events[i]!);
@@ -212,8 +214,10 @@ describe('wallet labels = engine cash: crafted card / debt / bankruptcy batches'
         all.push('  scenes: ' + (await playBatch(st, s, r.events, mism, name)).join(', '));
         s = r.state;
       }
-      console.log(`[crafted] ${name}\n` + all.join('\n'));
+      if (process.env.MONEY_VERBOSE) console.log(`[crafted] ${name}\n` + all.join('\n'));
       expect(mism).toEqual([]);
+      // A bankruptcy owed to several players shows their wallets receiving the shares.
+      if (name.includes('payer bankrupt')) expect(all.find((l) => l.startsWith('  scenes') && l.includes('bankruptcy'))).toContain('bankruptcy[SENW]');
     }, 120_000);
   }
 });

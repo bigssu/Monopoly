@@ -41,7 +41,14 @@ export type MoneyScene =
   | { kind: 'receive'; player: PlayerId; amount: number; source: 'salary' | 'bonus' | 'pot' | 'doubleUp'; cardId: CardId | null }
   | { kind: 'pay'; player: PlayerId; amount: number; sink: 'tax' | 'donation' | 'bail' | 'fine' | 'doubleUp'; cardId: CardId | null; spaceIndex: number | null }
   | { kind: 'sale'; player: PlayerId; amount: number; spaceIndex: number; building: Level | null }
-  | { kind: 'bankruptcy'; debtor: PlayerId; creditor: PlayerId | null; properties: number[] };
+  | {
+      kind: 'bankruptcy';
+      debtor: PlayerId;
+      creditor: PlayerId | null;
+      properties: number[];
+      /** No single creditor (a pay-each card): the players the remaining cash was split between. */
+      receivers: Array<{ id: PlayerId; amount: number }>;
+    };
 
 export type MoneySceneKind = MoneyScene['kind'];
 
@@ -163,16 +170,20 @@ export function planMoney(events: readonly GameEvent[]): MoneyGroup[] {
       case 'Bankrupt': {
         const idx = [i];
         const properties: number[] = [];
+        const receivers: Array<{ id: PlayerId; amount: number }> = [];
         for (let k = i + 1; k < events.length; k++) {
           const x = events[k]!;
-          if (isMC(x, 'bankruptcy')) idx.push(k);
+          if (isMC(x, 'bankruptcy')) {
+            idx.push(k);
+            if (e.creditorId === null && x.delta > 0) receivers.push({ id: x.playerId, amount: x.delta });
+          }
           else if (x.type === 'PropertyTransferred' && x.from === e.playerId) {
             idx.push(k);
             properties.push(x.spaceIndex);
           } else if (x.type === 'FestivalSet' && x.spaceIndex === null) continue;
           else break;
         }
-        add({ kind: 'bankruptcy', debtor: e.playerId, creditor: e.creditorId, properties }, idx);
+        add({ kind: 'bankruptcy', debtor: e.playerId, creditor: e.creditorId, properties, receivers }, idx);
         break;
       }
       case 'MoneyChanged':
