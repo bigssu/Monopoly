@@ -51,11 +51,40 @@ Panel contents (always visible): avatar token + name, cash (big, animated count-
 property chips in group colors with building pips, status badges (섬/island turns, cards held),
 a subtle "your turn" glow ring.
 
+#### Fixed view (one human against CPUs)
+
+When **exactly one** player is human and at least one is a CPU, the game is solo play on one
+screen, so the screen is fixed to that human and **nothing turns**. Two or more humans, and
+all-CPU demo games, keep the table-top model above unchanged. One policy decides this for every
+surface: `src/ui/orientation.ts` (`orientationFor(players)` → `mode`, `seat()`, `face()`,
+`readers()`); engine seats, turn order and saves are never changed — only what is drawn.
+
+* **Seat remap.** The human is drawn at the bottom (S) wherever they sat in setup: the table is
+  turned in quarter steps (k = the human's index in S, E, N, W; drawn seat =
+  `CYCLE[(index(seat) − k) mod 4]`), so everyone keeps their place relative to the human and the
+  turn order still runs S → E → N → W around the screen. Human at E: E→S, N→E, W→N, S→W;
+  at N: N→S, W→E, S→N, E→W; at W: W→S, S→E, E→N, N→W.
+* **Stage** stays at 0° for every turn (no rotation animation); prompt cards, the turn banner,
+  toasts, the info popover, close-up cards and the dealer all live on it, so they face S.
+* **Panels** keep their pinwheel boxes (layout.ts) but are all upright (0°): E / N / W lay out
+  like S (narrow and tall), so 800×450 needs no extra room.
+* **Board.** The top row would print upside-down for the reader at S, so it is printed upright
+  (rot 0) and the two top corners lean like the bottom ones (±45°). The side columns keep reading
+  along their edge (sideways, never upside-down). Same rects: hit areas, tokens, effects unchanged.
+* **CPU hand** still enters from the CPU's *drawn* edge so it is clear who acts, and lands on the
+  control on the upright Stage (its layer turns to the CPU's edge; the target mapping only assumes
+  an axis-aligned control, see CpuHand.ts).
+* **Money cut-ins** face S: one plaque at the front-centre under the hero (collect-from-all shows
+  one total, not four), hero / stamp / hammer upright. Wallets stand upright on their seat's panel
+  (where that player's cash is shown) and slide out past the nearer side; coins fly between those
+  real positions. The "one away" toast is a single upright copy.
+* **Result** faces S and has no ↻ rotate pill.
+
 ### 2.2 The Stage
 
 The board occupies the center square. The board's **inner area** (inside the ring of spaces) is
 the **Stage**. The Stage rotates (CSS transform, animated 400 ms) to face the seat of the player
-who must act. Everything interactive lives on the Stage: the dice, the "굴리기/Roll" button, the
+who must act (fixed view, §2.1: it never rotates and always faces S). Everything interactive lives on the Stage: the dice, the "굴리기/Roll" button, the
 buy/build/takeover decision cards, card draws, the island escape choice, the festival target
 picker, the travel destination prompt, the pay/sell flow, the turn banner.
 
