@@ -325,7 +325,7 @@ export class Dice {
     this.dice = [new Die(), new Die()];
     this.readout = h('div', { class: 'dice-readout' });
     this.pair = h('div', { class: 'dice-pair' }, this.dice[0].el, this.dice[1].el);
-    this.el = h('div', { class: 'dice' }, this.pair, this.readout);
+    this.el = h('div', { class: 'dice' }, this.readout, this.pair);
   }
 
   show(values: [number, number] | null): void {
@@ -358,10 +358,9 @@ export class Dice {
     await this.tumble([this.dice[0].plan(a, 0, 1), this.dice[1].plan(b, 60, -1)]);
     sfx.play('dice-land');
     haptic('light');
-    // The total sits BESIDE the dice (a badge to the right), never over or under them: the
-    // dice themselves show the faces, so a player can see doubles at a glance. The old readout
-    // (mini faces + total below the pair) overlapped the dice whenever a prompt squeezed the
-    // dice area on a tablet.
+    // The total sits ABOVE the dice (under the round line), never over them: the dice themselves
+    // show the faces, so a player can see doubles at a glance. The old readout (mini faces + total
+    // below the pair) overlapped the dice whenever a prompt squeezed the dice area on a tablet.
     this.readout.innerHTML = `<b class="dr-total">${total}</b>`;
     if (doubles) {
       this.el.classList.add('is-doubles');
