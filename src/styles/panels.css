@@ -225,8 +225,6 @@
   align-items: center;
   line-height: 1;
 }
-.pp-float.is-up .pp-float-note { background: #3DBB6E; color: #fff; }
-.pp-float.is-down .pp-float-note { background: #E8564F; color: #fff; }
 
 /* Strip (wide) variant: token and text scale with the short side. */
 .pp.is-wide .pp-tok { width: clamp(32px, min(20cqw, 30cqh), 104px); height: clamp(32px, min(20cqw, 30cqh), 104px); }
