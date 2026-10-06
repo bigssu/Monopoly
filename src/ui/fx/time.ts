@@ -11,7 +11,7 @@
  * | paused (`setHeld`)            | frozen                 | frozen                 | frozen      |
  * | skip tap                      | ÷5                     | ×5                     | ×5          |
  *
- * | the dice throw (stage/Dice.ts, throw.ts) | normal: thrown, 1.2–1.6 s (a flick) / ~1.2 s (a toss) ÷ speed, ×5 on skip | reduced motion: no trajectory, the in-place roll (~1 s: the roll is the key reveal, it keeps its time) | headless: 0 | paused: finishes (own clock steps) | the "throw me" wobble: a decoration (skipped under `noMotion()`) |
+ * | the dice throw (stage/Dice.ts, throw.ts) | normal: thrown, 1.1–1.9 s by the flick's strength / ~1.06 s (a toss) ÷ speed, ×5 on skip | reduced motion: no trajectory, the in-place roll (~1 s: the roll is the key reveal, it keeps its time) | headless: 0 | paused: finishes (own clock steps) | the "throw me" wobble and hint blink: decorations (skipped under `noMotion()`; its rattles still play) |
  *
  * - Reduced motion removes MOVEMENT, never TIME: a turn takes as long and shows the same things.
  *   It is the app's own setting (Settings → 애니메이션). The device's `prefers-reduced-motion` is

@@ -160,7 +160,15 @@ Instead of a roll button, the human's turn invites a throw and the dice are thro
 * **Gesture.** When a human's roll comes up, the dice pair wobbles three times (~1.2 s,
   transform only, stepped on the 30 Hz clock — not a Web Animation, whose start and end would
   promote and re-raster every layer painted above the dice; the pair is its own layer while
-  invited), and once more if nobody has thrown after 5 s; then nothing moves (zero idle load). A
+  invited), and once more if nobody has thrown after 5 s; then nothing moves (zero idle load).
+  Each lean plays a soft `dice-shake` rattle (gain 0.45: three with the first wobble, one with
+  the second; the sfx module's mute applies; no haptic), and the hint strip blinks with each
+  wobble: three opacity pulses in ~1.2 s (an `anim()` Web Animation, quantized to the 30 Hz grid,
+  on the hint's own layer — `.roll-hint.is-blink { will-change: opacity }` while the human's roll
+  card is up — so starting and ending a blink is compositor-only), then it rests fully visible.
+  Never perpetual: gate B's calm window stays at zero. A press stops the wobble, the blink and
+  any further rattle at once. Not for a CPU's roll. Reduced motion: no wobble, no blink, the
+  rattles still play at the same times (sound is not motion). A
   transparent pad (`Stage.armPad`, a `<button>`, `aria-label` from i18n) covers the Stage
   centre: the dice area and the roll card's strip, below the banner / round line, under the
   prompt card and under the dice in paint order (the dice ignore pointers). Press anywhere
@@ -177,37 +185,85 @@ Instead of a roll button, the human's turn invites a throw and the dice are thro
   the balance simulation are unchanged).
 * **Motion model** (`src/ui/stage/throw.ts`, pure, unit-tested): no physics library, no WebGL.
   Each die is a 2D point in the Stage's frame with planar friction (speed ∝ (1 − u)², stopping
-  exactly at the end of its roll), reflection off the four walls of the dice area (the dice slot
-  below the banner / round line / ranking strip × the Stage's inner width, inset by half a die;
-  restitution 0.55 on the normal, 0.86 kept on the tangential), and a one-line circle separation
-  between the two dice (pushed apart, part of the approaching velocity swapped). The spin is the
-  cube rolling (angle = distance / radius × 0.8), so it is proportional to the launch speed and
-  decays with the friction. A flick: the leading die leaves first, the other 60 ms later, a little
-  slower and a few degrees apart; the planner searches speeds and angles near the flick (within
-  10°, never faster than ~1 die per 30 Hz frame) for 2–3 wall hits per die and a rest point near
-  home; 1.2–1.6 s in all. A toss: ~1.5 die sizes forward, a small hop, at most one soft wall
-  touch, ~1.1 s. The end pose is planned (the rolled distance is scaled, or a short roll blended,
-  so each die arrives on the engine's face; the same resting tilt as before), the second half of
-  each roll steers it into its place in the pair, and the existing `BOUNCE` landing (lift and
-  squash; lower near the top wall so it never rises over the banner) plays over the roll. Up to
-  three wall hits sound a `dice-clack` (synthesized, gain by impact). No dust puff: it would cost
-  a layer. Time policy (`src/ui/fx/time.ts`): ÷ speed, ×5 on skip; reduced motion: no trajectory,
+  exactly at the end of its roll), reflection off four walls (restitution 0.55 on the normal off
+  the dice area's walls, 0.7 off the screen's edges; 0.86 kept on the tangential), and a one-line
+  circle separation between the two dice (pushed apart, part of the approaching velocity
+  swapped). The spin is the cube rolling (angle = distance / radius × 0.8), so it is proportional
+  to the speed and decays with the friction. The end pose is planned (the rolled distance is
+  scaled, or a short roll blended, so each die arrives on the engine's face; the same resting
+  tilt as before), the second half of each roll rolls it back into its place in the pair (baked
+  into the path, so the cube turns on the way home; a flick blends with a smootherstep, zero
+  speed and acceleration at the end, so a long way home lands without a jump), and the existing
+  `BOUNCE` landing (lift and squash; lower near the top wall) plays over the roll. Up to four
+  wall hits sound a `dice-clack` (synthesized, gain by impact). No dust puff: it would cost a
+  layer. Time policy (`src/ui/fx/time.ts`): ÷ speed, ×5 on skip; reduced motion: no trajectory,
   the in-place roll (~1 s); headless: instant.
+* **Strength = release speed** (owner request 2026-10-06: "the faster my finger pushes, the faster
+  and farther the dice fly"). The launch speed and the roll length are monotonic (linear) in the
+  release speed, clamped between a gentle minimum and a hard maximum (`flickLaunch`, `THROW.launch`
+  / `flickRoll` / `flickMax`); the planner only picks the angles (the leading die within 8° of
+  the flick and its spread, the trailing one a few degrees off and 4–8 % slower, 60 ms later) for
+  the throw whose dice come to rest nearest home. A faster flick therefore always launches faster,
+  runs a longer path, lasts longer and hits more walls; a slow one stays short. "Die/s" = die
+  sizes per second (the die is ~100 layout px on a 1600×1000 screen, ×0.92 on screen under the
+  roll card); travel and walls measured on that screen, seat S:
+
+  | release (px/s) | strength | launch (die/s) | roll / whole throw (speed 1) | free path, walls (1600×1000, seat S) |
+  |---|---|---|---|---|
+  | < 300 (tap, Enter / Space) | toss | 4.5 | 1000 ms / **1.06 s** | ~1.5 dice forward, ≤ 1 soft touch, inside the dice area |
+  | 300 | 0 | 8 | 1100 ms / 1.13 s | ~2.9 dice, no wall |
+  | 600 | 0.11 | 10.9 | 1189 ms / 1.21 s | ~4.2 dice, no wall |
+  | 1200 (medium) | 0.33 | 16.7 | 1367 ms / **1.39 s** | ~7 dice, 0–1 wall per die, 1–2 clacks |
+  | 1800 | 0.56 | 22.4 | 1544 ms / 1.56 s | ~10 dice, reaches the screen's edge, 1 wall per die |
+  | 2400 | 0.78 | 28.2 | 1722 ms / 1.73 s | ~13 dice, 1–2 walls per die |
+  | ≥ 3000 (cap) | 1 | 34 (≈ 1.1 die per 30 Hz frame) | 1900 ms / **1.90 s** | 14–18 dice, edge to edge, ~2 walls per die, 2–3 clacks |
+
+  The result is still only the engine's: direction and strength change the look, never the faces.
+* **Walls = the screen's edges** (owner request 2026-10-06: "bounce off the outer edges of the
+  screen"). A flick's walls are the VIEWPORT (inside the safe-area insets, less a margin of
+  max(6 px, 1.2 % of the short side)), mapped into the Stage's frame (`screenWalls`) and inset so a
+  whole die stays on screen (0.6 die at the sides, 0.75 at the frame's top for the hop, 0.7 at
+  its bottom for the shadow). The frame (pair px → screen px: scale, turn, offset; `frameFrom`)
+  is measured from the two dice where they stand when the throw starts (one layout read), so it
+  holds the Stage's turn toward the seat and every scale on the way (the dice area's 0.92 under
+  a prompt). The Stage turns in quarter steps, so "screen edge" is the physical screen edge for
+  every seat: a flick is converted from screen to Stage space by the Stage's angle
+  (`screenToStage`), the walls back the other way, and a stroke toward the right edge reaches the
+  right edge whether the Stage faces S, E, N or W; in the fixed view the Stage stays at 0°. The
+  dice fly over the board's tiles and the player panels, ricochet off the screen border and roll
+  back home to the Stage centre. A toss keeps the dice area's walls (`tossBox`), unchanged.
+* **Flight layer.** A flick flies in a top-level element created for the throw and removed at
+  the landing (`Dice.openFlight`, `.dice-fly`): in `.game`, z-index 38 (over the board and the
+  panels at 5, under the effects layer 40, the money stage 45 and the menu 50), inside the safe
+  area, `pointer-events: none` (it never takes a tap, nor hides one from a prompt card under it),
+  holding one `.dice-fly-frame` turned and scaled like the Stage (a static 2D transform: no layer
+  of its own), so the dice keep drawing in their own pair px and keep facing the seat. A toss
+  stays in the pair, as before.
 * **Rendering paths**, chosen by the same switch as the canvas effects (`fxQualityOn`):
-  * canvas effects on (the web build by default): one temporary software canvas, sized to the
-    throw's bounding box (not the Stage), dirty-rect cleared, removed at the landing — one layer
-    while flying, as the old tumble;
+  * canvas effects on (the web build by default): one temporary software canvas in the flight
+    frame, sized to the throw's bounding box (an axis-aligned box on the screen too, the turns
+    being quarter turns; up to most of the screen for a strong flick), dirty-rect cleared,
+    removed at the landing — one layer while flying, as the old tumble;
   * canvas effects off (the **Android app by default**: the owner's Samsung tablet drew canvases
-    as white boxes): no canvas at all; the two DOM cubes are posed (`pose`) and translated on the
-    30 Hz clock, one layer per die while flying.
-  Dev A/B: `?dev=1&dice=dom|canvas`. Reduced motion keeps the in-place tumble (a canvas over the
-  pair, as before).
+    as white boxes): no canvas at all; the two DOM cubes move into the flight frame (an invisible
+    `.die-ph` stand-in keeps each one's place in the pair), are posed (`pose`) and translated on
+    the 30 Hz clock — one layer per die while flying — and go back to the pair at the landing.
+  Either way the overlay exists only while the dice fly (peak layers as before: two dice, or one
+  canvas), nothing runs after the landing (0 clock callbacks). Dev A/B: `?dev=1&dice=dom|canvas`.
+  Reduced motion keeps the in-place tumble (a canvas over the pair, as before).
 * **Setting** "굴리기 버튼 보이기 / Show roll button" (default off): the roll button and its "꾹
   누르면 주사위를 흔들어요" hint come back beside the pad and work exactly as before.
 * **CPU.** The hand presses the dice on the pad, holds them while they rattle (`HAND.holdRoll`),
-  flicks a short stroke toward the board centre (`HAND.flick`), and the throw follows the stroke.
-* Tests: `src/ui/stage/__tests__/throw.test.ts`, `e2e/dice-throw.spec.ts` (flicks in four
-  directions, the toss, keyboard, cancel, canvas path, the setting, reduced motion, the wobble).
+  flicks a short stroke toward the board centre (`HAND.flick`), and the throw follows the stroke
+  at a medium strength picked per turn (`cpuFlick`: 900–2200 px/s and ±12°, from the game's seed
+  and the turn — random-looking, the same on a replay): some CPU throws reach the screen's edges,
+  some stay short, none is the maximum.
+* Tests: `src/ui/stage/__tests__/throw.test.ts` (walls, faces, direction, the strength mapping and
+  its monotonicity, the clamp, durations, the screen walls for every seat, the seat mapping, the
+  toss unchanged, `cpuFlick`), `e2e/dice-throw.spec.ts` (flicks in four directions over the
+  screen, slow vs fast on both render paths, turned seats reaching their screen edge, the toss,
+  keyboard, cancel, canvas path, the setting, reduced motion, the wobble with its rattles and the
+  hint's blink, a press stopping them). Filmstrip of a fast flick: `docs/assets/dice-flick-filmstrip.png`.
 
 ### 2.5 Screens
 
