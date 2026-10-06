@@ -28,6 +28,7 @@ import { type MoneyStage, type SpaceArt } from './stage';
 import { rotate, type Wallet } from './wallet';
 import './strings';
 import { SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
+import { outBack } from '../vfx/ease';
 
 export interface Party {
   seat: Seat;
@@ -195,10 +196,6 @@ function trueUp(c: MoneyClock, sceneMs: number): number {
   return 1 + Math.min(MAX_TRUE_UP - 1, left / (c.factor * sceneMs));
 }
 
-const easeOutBack = (u: number, s = 1.70158): number => {
-  const c3 = s + 1;
-  return 1 + c3 * (u - 1) ** 3 + s * (u - 1) ** 2;
-};
 const smooth = (u: number): number => u * u * (3 - 2 * u);
 /** Damped wobble 0 → 0 (follow-through after an impact). */
 const wobble = (u: number, cycles = 1.5): number => Math.sin(Math.PI * 2 * cycles * u) * (1 - u) ** 1.6;
@@ -353,7 +350,7 @@ async function heroIn(x: Ctx, html: string, seat: Seat, cls: string, o: Partial<
   const g = x.st.geom;
   const at = o.at ?? g.c;
   x.st.setHero(html, { x: at.x, y: at.y, s: 0.5, rz: x.st.rot(seat), rx: 40, o: 0 }, cls);
-  await x.st.poseTo({ s: o.s ?? 1, rx: o.rx ?? 14, o: 1 }, f(10), (u) => easeOutBack(u, 1.4));
+  await x.st.poseTo({ s: o.s ?? 1, rx: o.rx ?? 14, o: 1 }, f(10), (u) => outBack(u, 1.4));
 }
 
 /** A short scale punch on the hero (a coin lands, the total locks in); < 1 = a squash. */
@@ -393,7 +390,7 @@ function revealPlaque(x: Ctx, i: number, seat: Seat, at: Pt, o: PlaqueOpts): Pro
   const amount = o.amount === undefined ? null : o.amount;
   p.set({ title: o.title ?? '', amount: amount === null ? null : 0, sign: o.sign ?? '', tone: o.tone });
   if (amount !== null) void p.count(x.c, amount, f(BEATS_F.plaque - 1));
-  return x.st.tween(f(BEATS_F.plaque), (u) => p.place(at, x.st.rot(seat), 0.35 + 0.65 * easeOutBack(u, 2.2), Math.min(1, u * 2.5)));
+  return x.st.tween(f(BEATS_F.plaque), (u) => p.place(at, x.st.rot(seat), 0.35 + 0.65 * outBack(u, 2.2), Math.min(1, u * 2.5)));
 }
 
 /** The coins about to leave lift and shimmer (anticipation) before the first one goes. */
@@ -641,7 +638,7 @@ export function purchase(st: MoneyStage, a: PurchaseArgs): MoneyPlay {
         void x.st.fx('sparkle4', lotPoint(x, a.seat, -0.18), { scale: x.st.geom.hero / 150, tint: a.playerColor, fps: 16 });
         void x.st.fx('coin_burst', plotPt(), { scale: x.st.geom.hero / 150 });
         if (flag) {
-          await x.st.tween(f(9), (u) => (flag.style.transform = `translateY(${((1 - easeOutBack(u, 2.4)) * 70).toFixed(1)}%) scale(${(0.3 + 0.7 * easeOutBack(u, 2.4)).toFixed(3)})`));
+          await x.st.tween(f(9), (u) => (flag.style.transform = `translateY(${((1 - outBack(u, 2.4)) * 70).toFixed(1)}%) scale(${(0.3 + 0.7 * outBack(u, 2.4)).toFixed(3)})`));
           await x.st.tween(f(5), (u) => (flag.style.transform = `scale(${(1 + 0.12 * wobble(u, 1)).toFixed(3)},${(1 - 0.14 * wobble(u, 1)).toFixed(3)})`));
         }
       },
@@ -739,11 +736,11 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
         // Anticipation: the site crouches; then the building springs up past its height (≈ 18 %
         // overshoot), lands with a squash and settles (squash & stretch, follow-through).
         await x.st.poseTo({ s: x.st.heroPose.s * 0.95 }, f(4), smooth);
-        void x.st.poseTo({ s: x.st.heroPose.s / 0.95 }, f(6), (u) => easeOutBack(u, 1.6));
+        void x.st.poseTo({ s: x.st.heroPose.s / 0.95 }, f(6), (u) => outBack(u, 1.6));
         void x.st.fx('dust_puff', lotPoint(x, a.seat, 0.02), { scale: g.hero / 150, tint: '#E9D3B0', fps: 16 });
         if (rise) {
           await x.st.tween(f(a.level === 4 ? 12 : 10), (u) => {
-            const k = easeOutBack(u, 2.6);
+            const k = outBack(u, 2.6);
             rise.style.transform = `translateY(${((1 - k) * 100).toFixed(2)}%) scale(${(1 - 0.1 * (1 - u)).toFixed(3)},${(1 + 0.18 * Math.sin(Math.PI * u)).toFixed(3)})`;
           });
           x.st.sound.cue(a.level === 4 ? 'landmark' : 'build', { pitch: 1.12 });
@@ -754,7 +751,7 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
         }
         if (a.level === 4) {
           x.st.heroIn.querySelector('.mh-site')?.classList.add('is-rays');
-          void x.st.poseTo({ s: 1.12, rx: 6 }, f(8), (u) => easeOutBack(u, 2));
+          void x.st.poseTo({ s: 1.12, rx: 6 }, f(8), (u) => outBack(u, 2));
           x.st.sound.buzz('heavy');
           void x.st.shake(6, 12);
           for (let k = 0; k < 4; k++) {
@@ -1288,7 +1285,7 @@ export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
       return x.c.after(f(k * 3)).then(() =>
         x.st.tween(f(BEATS_F.lift), (u) => {
           if (!b) return;
-          const rise = (b.classList.contains('mh-sold-c') ? 12 : 30) * easeOutBack(u, 1.4);
+          const rise = (b.classList.contains('mh-sold-c') ? 12 : 30) * outBack(u, 1.4);
           b.style.transform = `translateY(${(-rise).toFixed(2)}%) rotate(${(Math.sin(u * Math.PI * 6) * 3 * (1 - u * 0.5)).toFixed(2)}deg)`;
         }),
       );
@@ -1332,7 +1329,7 @@ export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
     const badge = root.querySelector<HTMLElement>('.mh-bankb');
     x.st.sound.cue('pass-start', { pitch: 0.9 });
     await x.st.tween(f(6), (u) => {
-      if (badge) badge.style.transform = `scale(${easeOutBack(u, 2).toFixed(3)})`;
+      if (badge) badge.style.transform = `scale(${outBack(u, 2).toFixed(3)})`;
     });
     const flights = flightsForAmount(total, { min: 6, max: 8 });
     await stream(x, { point: () => heroPt(x, BANK_AT.x, BANK_AT.y) }, { wallet: w, sound: 'receive' }, flights, {

@@ -15,6 +15,7 @@
 import { haptic, type HapticKind } from '@/ui/audio/haptics';
 import { sfx, type SfxName, type SfxOpts } from '@/ui/audio/sfx';
 import { ladderStep } from './denom';
+import { mulberry32 } from '../vfx/rng';
 
 /** Coin bus: concurrent clinks / minimum spacing (ms) / one clink's length (ms). */
 export const COIN_VOICES = 6;
@@ -37,25 +38,14 @@ const defaultOut: SoundOut = {
 
 const semis = (s: number): number => 2 ** (s / 12);
 
-/** Deterministic jitter source (the visuals' RNG is separate from the game's). */
-function rng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 export class CoinSound {
   private voices: number[] = [];
   private lastClink = -Infinity;
   private lastChaChing = -Infinity;
   private lastHaptic = -Infinity;
   private variant = 0;
-  private rand = rng(7);
+  /** Deterministic jitter (the visuals' RNG is separate from the game's). */
+  private rand = mulberry32(7).next;
   /** Muted (headless scenes, tests). */
   enabled = true;
 

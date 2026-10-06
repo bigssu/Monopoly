@@ -259,8 +259,6 @@ export function countMs(amount: number): number {
 }
 
 /** Ease-out cubic. */
-export const easeOutCubic = (t: number): number => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
-
 /** Pentatonic ladder (semitones) for arriving coins, capped by the tier's top. */
 export const LADDER = [0, 2, 4, 7, 9, 12, 14, 16] as const;
 export function ladderStep(i: number, top: number): number {

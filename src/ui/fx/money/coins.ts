@@ -16,6 +16,8 @@
 import { atlasReady, coinAnim, frameBox } from './atlas';
 import { FRAME, type MoneyClock } from './clock';
 import type { Metal } from './denom';
+import { outQuad } from '../vfx/ease';
+import { mulberry32 } from '../vfx/rng';
 
 export interface Pt {
   x: number;
@@ -71,25 +73,12 @@ interface Active extends FlightSpec {
   flying: boolean;
 }
 
-function mulberry(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const easeOutQuad = (u: number): number => 1 - (1 - u) * (1 - u);
-
 export class CoinPool {
   readonly nodes: HTMLElement[] = [];
   readonly shadows: HTMLElement[] = [];
   private free: HTMLElement[] = [];
   private active: Active[] = [];
-  private rand = mulberry(1234);
+  private rand = mulberry32(1234).next;
   private stop: (() => void) | null = null;
   /** The clock the frame step is registered on (a new scene clock re-arms). */
   private armedOn: MoneyClock | null = null;
@@ -132,7 +121,7 @@ export class CoinPool {
 
   /** Re-seed (deterministic filmstrips / tests). */
   seed(s: number): void {
-    this.rand = mulberry(s);
+    this.rand = mulberry32(s).next;
   }
 
   /** Schedule a flight. With no scene clock (the scene was cut short) it lands at once. */
@@ -250,7 +239,7 @@ export class CoinPool {
       let y: number;
       let s: number;
       if (e < hopMs) {
-        const u = easeOutQuad(e / hopMs);
+        const u = outQuad(e / hopMs);
         x = a.from.x + a.hopV.x * u;
         y = a.from.y + a.hopV.y * u;
         s = 1 + 0.18 * Math.sin((Math.PI / 2) * u);

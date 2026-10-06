@@ -16,8 +16,9 @@ import { fmtMoney } from '@/i18n';
 import { atlasReady, frameBox, sliceUrl, topAnim } from './atlas';
 import type { Pt } from './coins';
 import { f } from './clock';
-import { columnOverflows, countMs, easeOutCubic, METALS, pileOf, pileValue, planMerge, visibleCoins, type Break, type Flight, type Merge, type Metal, type Pile } from './denom';
+import { columnOverflows, countMs, METALS, pileOf, pileValue, planMerge, visibleCoins, type Break, type Flight, type Merge, type Metal, type Pile } from './denom';
 import { SEAT_ANGLE } from '@/ui/orientation';
+import { outCubic } from '../vfx/ease';
 
 /**
  * Coin slice / top-face proportions (sprites-money.ts SLICE / COIN_TOP: 40 × 6, 40 × 14). The slice
@@ -238,7 +239,7 @@ export class Wallet {
     this.el.classList.add('is-on');
     const from = this.hiddenRise();
     await host.tween(ms, (u) => {
-      this.rise = from * (1 - easeOutCubic(u));
+      this.rise = from * (1 - outCubic(u));
       this.place();
     });
   }
@@ -379,7 +380,7 @@ export class Wallet {
   tick(t: number): boolean {
     if (!this.countMs) return false;
     const u = (t - this.countT0) / this.countMs;
-    const v = u >= 1 ? this.target : Math.round(this.countFrom + (this.target - this.countFrom) * easeOutCubic(u));
+    const v = u >= 1 ? this.target : Math.round(this.countFrom + (this.target - this.countFrom) * outCubic(u));
     if (u >= 1) this.countMs = 0;
     if (v !== this.shown && (u >= 1 || t - this.lastWrite >= 66)) {
       this.shown = v;

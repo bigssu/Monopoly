@@ -29,7 +29,7 @@ import { loadMoneyAtlas, paintFrame, animSize } from './atlas';
 import { MoneyClock, f } from './clock';
 import { CoinPool, type Pt } from './coins';
 import type { Tier } from './denom';
-import { easeOutCubic } from './denom';
+import { outCubic } from '../vfx/ease';
 import { CoinSound } from './sound';
 import { Wallet, walletGeom, type TweenHost, type UprightSlide } from './wallet';
 import type { MoneyAnimName as FxAnimName } from '@/content/fx/money-manifest';
@@ -178,7 +178,7 @@ export class Plaque {
         const u = Math.min(1, (t - t0) / ms);
         if (u >= 1 || t - last >= 66) {
           last = t;
-          this.write(from + (to - from) * easeOutCubic(u));
+          this.write(from + (to - from) * outCubic(u));
         }
         if (u >= 1) {
           resolve();
@@ -508,12 +508,12 @@ export class MoneyStage implements TweenHost {
         void c.until(f(RASTER_HOLD_F)).then(() => {
           if (this.clock !== c) return;
           this.scaler.style.transform = `scale(${(1 / k).toFixed(5)})`;
-          void this.tween(f(5), (u) => (this.root.style.opacity = String(Math.max(0.01, easeOutCubic(u)))));
+          void this.tween(f(5), (u) => (this.root.style.opacity = String(Math.max(0.01, outCubic(u)))));
         });
       } else {
         this.scaler.style.transform = k === 1 ? '' : `scale(${(1 / k).toFixed(5)})`;
         this.root.style.opacity = '0';
-        void this.tween(f(5), (u) => (this.root.style.opacity = String(easeOutCubic(u))));
+        void this.tween(f(5), (u) => (this.root.style.opacity = String(outCubic(u))));
       }
       this.host.camera?.('in', tier, f(6));
     }
@@ -665,7 +665,7 @@ export class MoneyStage implements TweenHost {
   }
 
   /** Tween the hero pose to `to`. */
-  poseTo(to: Partial<HeroPose>, ms: number, ease: (u: number) => number = easeOutCubic): Promise<void> {
+  poseTo(to: Partial<HeroPose>, ms: number, ease: (u: number) => number = outCubic): Promise<void> {
     const from = { ...this.heroPose };
     return this.tween(ms, (u) => {
       const k = ease(u);
