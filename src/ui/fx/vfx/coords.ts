@@ -5,6 +5,7 @@
  * unit `u` (= board px / 32, the layout's --u) and handles seat rotation for the multi-seat table.
  */
 import type { PlayerId, Seat } from '@/engine';
+import { SEAT_ANGLE } from '@/ui/orientation';
 
 export interface RectLike {
   x: number;
@@ -18,8 +19,7 @@ export interface Pt {
   y: number;
 }
 
-/** Rotation that makes content upright for a seat (same values as `SEAT_ANGLE` in ui/game/util.ts). */
-export const SEAT_ANGLE: Record<Seat, number> = { S: 0, E: -90, N: 180, W: 90 };
+export { SEAT_ANGLE };
 /** "Up" for a seat = from its panel towards the board centre. */
 export const SEAT_DIR: Record<Seat, readonly [number, number]> = { S: [0, -1], N: [0, 1], E: [-1, 0], W: [1, 0] };
 

@@ -7,7 +7,7 @@ import { atlasNode, prepareIconAtlas, type AtlasEntry } from './iconAtlas';
 import { getCard, type CardId } from '@/content/cards';
 import { GROUP_COLORS, HUB_COLOR } from '@/content/board';
 import { fmtMoney, t } from '@/i18n';
-import type { Player, Seat, SpaceDef } from '@/engine';
+import type { Player, SpaceDef } from '@/engine';
 import { h } from '@/ui/shell/dom';
 
 // ---------------------------------------------------------------------------
@@ -173,8 +173,7 @@ export function setPlayerVars(el: HTMLElement, colorId: string): PlayerColor {
 // Seats / board
 // ---------------------------------------------------------------------------
 
-/** Rotation that makes content face a seat (DESIGN §2.1). */
-export const SEAT_ANGLE: Record<Seat, number> = { S: 0, E: -90, N: 180, W: 90 };
+export { SEAT_ANGLE } from '@/ui/orientation';
 
 export function groupColor(sp: SpaceDef): string | null {
   if (sp.kind === 'hub') return HUB_COLOR;

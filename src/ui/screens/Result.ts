@@ -22,9 +22,8 @@ import { anim, gridTimeout, noMotion } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
 import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { DUR, EASE } from '@/ui/fx/motion';
-import { orientationFor } from '@/ui/orientation';
+import { orientationFor, SEAT_CYCLE } from '@/ui/orientation';
 
-const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];
 /** Vertical px kept free at the bottom (S edge) for the rotate pill. */
 const PILL_ROOM = 46;
 

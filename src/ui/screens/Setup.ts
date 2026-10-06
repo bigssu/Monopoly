@@ -24,7 +24,6 @@ import {
   NAME_MAX,
   normalizeDraft,
   pick,
-  SEAT_ORDER,
   seatNumber,
   toggleSeat,
   validateDraft,
@@ -32,8 +31,8 @@ import {
   type SetupDraft,
 } from '@/ui/shell/setupModel';
 import { colorVars, segmented, toggleChip, tokenAvatar } from '@/ui/shell/widgets';
+import { SEAT_ANGLE, SEAT_CYCLE } from '@/ui/orientation';
 
-const SEAT_ROT: Record<Seat, number> = { S: 0, E: -90, N: 180, W: 90 };
 
 function seatName(d: SetupDraft, seat: Seat): string {
   return d.seats[seat].name ?? t('setup.defaultName', { n: seatNumber(d, seat) });
@@ -162,7 +161,7 @@ registerScreen('setup', (root) => {
       prop('cards-escape', 'p5'),
       board,
     );
-    SEAT_ORDER.forEach((seat, i) => table.append(renderSeat(seat, i)));
+    SEAT_CYCLE.forEach((seat, i) => table.append(renderSeat(seat, i)));
     return h('section', { class: 'setup-table-wrap', 'aria-label': t('setup.hint') }, table);
   }
 
@@ -170,7 +169,7 @@ registerScreen('setup', (root) => {
     const s = draft.seats[seat];
     const anchor = h('div', {
       class: `seat-anchor seat-${seat} ${s.on ? 'is-on' : 'is-off'}`,
-      '--rot': `${SEAT_ROT[seat]}deg`,
+      '--rot': `${SEAT_ANGLE[seat]}deg`,
       '--order': String(order),
       'data-seat': seat,
     });
@@ -230,7 +229,7 @@ registerScreen('setup', (root) => {
 
   function openEditor(seat: Seat): void {
     closeEditor?.();
-    const rot = h('div', { class: `seat-editor-rot seat-${seat}`, '--rot': `${SEAT_ROT[seat]}deg` });
+    const rot = h('div', { class: `seat-editor-rot seat-${seat}`, '--rot': `${SEAT_ANGLE[seat]}deg` });
     const panel = h('div', { class: 'dlg seat-editor', 'data-seat': seat });
     rot.append(panel);
 
@@ -475,7 +474,7 @@ registerScreen('setup', (root) => {
     );
 
     const problem = validateDraft(draft);
-    const freeSeat = SEAT_ORDER.find((seat) => !draft.seats[seat].on);
+    const freeSeat = SEAT_CYCLE.find((seat) => !draft.seats[seat].on);
     const addAi = h(
       'button',
       {

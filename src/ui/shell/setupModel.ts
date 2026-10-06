@@ -15,9 +15,9 @@ import {
 } from '@/engine';
 import { PLAYER_COLORS, TOKEN_IDS } from '@/content/palette';
 import { BOARD_SIDE_OPTIONS, type SpacesPerSide } from '@/content/board';
+import { SEAT_CYCLE } from '@/ui/orientation';
 
 /** Seat order used for turn order and for the players array. */
-export const SEAT_ORDER: readonly Seat[] = ['S', 'E', 'N', 'W'];
 
 export type Controller = 'human' | 'easy' | 'normal';
 
@@ -79,7 +79,7 @@ export function defaultDraft(): SetupDraft {
 }
 
 export function activeSeats(d: SetupDraft): Seat[] {
-  return SEAT_ORDER.filter((s) => d.seats[s].on);
+  return SEAT_CYCLE.filter((s) => d.seats[s].on);
 }
 
 /** 1-based number of a seat among the active seats (for the automatic name). */
@@ -111,7 +111,7 @@ export function normalizeDraft(raw: unknown): SetupDraft {
     rules: RULE_LEVELS.includes(r.rules as RuleLevel) ? (r.rules as RuleLevel) : def.rules,
   };
   const seats = (r.seats ?? {}) as Partial<Record<Seat, Partial<SeatDraft>>>;
-  for (const s of SEAT_ORDER) {
+  for (const s of SEAT_CYCLE) {
     const v = seats[s] ?? {};
     const d = def.seats[s];
     out.seats[s] = {

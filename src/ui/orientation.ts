@@ -28,6 +28,9 @@ type ViewMode = 'fixed' | 'table';
 /** Seats in turn order around the table (S bottom, E right, N top, W left). */
 export const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];
 
+/** Rotation (deg, CSS rotate) that makes content upright for a player at a seat (DESIGN §2.1). */
+export const SEAT_ANGLE: Readonly<Record<Seat, number>> = { S: 0, E: -90, N: 180, W: 90 };
+
 type Who = Pick<Player, 'isCpu' | 'seat'>;
 
 /** 'fixed' when exactly one player is human and at least one is a CPU; else 'table'. */

@@ -4,12 +4,11 @@ import { activeFrameTicks, flushAll, setAnimSpeed, setManualClock, setReducedMot
 import { createCoords, rotateVec, SEAT_ANGLE, SEAT_DIR, seatLocal } from '../coords';
 import { backingScale, createFx } from '../engine';
 import { buildPreset } from '../presets';
-import { SEAT_ANGLE as UI_SEAT_ANGLE } from '@/ui/game/util';
 import { fakeEnv, fakeSource } from './helpers';
 
 describe('coords + seat rotation (VFX.md §3.4)', () => {
-  it('matches the UI seat angles and seat "up" vectors', () => {
-    expect(SEAT_ANGLE).toEqual(UI_SEAT_ANGLE);
+  it('seat "up" vectors follow the seat angles', () => {
+    expect(SEAT_ANGLE).toEqual({ S: 0, E: -90, N: 180, W: 90 });
     for (const seat of ['S', 'E', 'N', 'W'] as Seat[]) {
       const up = seatLocal(seat, 0, -1);
       expect(up.x).toBeCloseTo(SEAT_DIR[seat][0], 9);
