@@ -51,7 +51,7 @@ export interface Settings {
    * keeps a 30-minute table game from leaving someone watching for half the session.
    */
   endOnFirstBankruptcy: boolean;
-  /** Allow building on any own city once per turn before rolling. Default off. */
+  /** Ignored (the old build-anywhere rule, removed 2026-10-06); kept so saved games still load. */
   buildAnywhere: boolean;
   /** Prompt soft timer in seconds (UI only; 0 = off). */
   promptTimer: 0 | 15 | 30;
@@ -349,7 +349,7 @@ export interface GameState {
   lastDice: [number, number] | null;
   /** The current roll was doubles and earns another roll after resolution. */
   extraRoll: boolean;
-  /** buildAnywhere: remote build already used this turn. */
+  /** Ignored (the old build-anywhere rule, removed 2026-10-06); kept so saved games still load. */
   remoteBuildUsed: boolean;
   /** Players in the order they went bankrupt. */
   bankruptOrder: PlayerId[];

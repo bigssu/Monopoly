@@ -260,13 +260,8 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
   const can = (t: Action['type']) => legal.some((a) => a.type === t);
 
   switch (ph.kind) {
-    case 'preRoll': {
-      const builds = legal.filter((a): a is Extract<Action, { type: 'Build' }> => a.type === 'Build');
-      const good = builds.filter((a) => p.cash >= 2 * (nextBuildCost(state, a.spaceIndex) ?? Infinity));
-      const best = pickBest(good, (a) => toll10Gain(state, a.spaceIndex));
-      if (best && !easy) return best;
+    case 'preRoll':
       return { type: 'Roll', playerId };
-    }
 
     case 'island':
       if (can('UseEscapeCard')) return { type: 'UseEscapeCard', playerId };

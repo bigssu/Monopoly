@@ -73,7 +73,7 @@ describe('fuzz: 200 seeded CPU games', () => {
       cpu(3, { auction: true }),
       cpu(2, { roundLimit: 30 }),
       cpu(4, { endOnFirstBankruptcy: false, roundLimit: null }),
-      cpu(4, { startCash: 2000, buildAnywhere: true, takeover: false }),
+      cpu(4, { startCash: 2000, takeover: false }),
     ];
     for (let seed = 1; seed <= 200; seed++) {
       const settings = variants[seed % variants.length]!;

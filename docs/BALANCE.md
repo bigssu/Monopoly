@@ -3,7 +3,7 @@
 Owner: engine. Source of truth for numbers: `src/engine/economy.ts` (money rules),
 `src/content/board.ts` (prices), `src/content/cards.ts` (card amounts).
 Reproduce everything below with `npm run sim` (500 seeds, 4 × normal CPU, default settings);
-flags: `--seeds N --players 2|3|4 --rounds 10|15|20|30|inf --level easy|normal --cash N --auction --elimination --no-takeover --build-anywhere --strict`.
+flags: `--seeds N --players 2|3|4 --rounds 10|15|20|30|inf --level easy|normal --cash N --auction --elimination --no-takeover --strict`.
 
 ## Targets (DESIGN §8, as updated)
 

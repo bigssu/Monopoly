@@ -141,7 +141,7 @@ follow. Every CPU decision is shown being made: a hand (white glove, cuff in the
 reaches in from the CPU's seat edge, presses the control it chose — the dice on the throw pad (a
 roll: held while they rattle, then a short flick toward the board centre that the throw follows),
 a prompt button (buy, pass, build, bail, the island roll, sell, bid…) or, for board picks (travel, festival, free upgrade, typhoon
-target, build-anywhere), the board space — and the action is dispatched at the release
+target), the board space — and the action is dispatched at the release
 (`src/ui/stage/CpuHand.ts`; mapping in `handTarget.ts`; timings `HAND` in `src/ui/fx/motion.ts`).
 
 ### 2.4 Feel
@@ -420,8 +420,8 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
   * Festival marker on that city: toll ×2 (applies on top of everything; cap ×2 — only one
     festival marker exists on the board at a time).
 * Build cost (per level, paid when upgrading, one level per landing/visit; owner may only build
-  when landing on their own city — like 모두의마블 — no remote building; setting `buildAnywhere`
-  off by default): L1 `0.50P`, L2 `0.60P`, L3 `0.70P`, L4 landmark `1.00P`. Landmark requires L3.
+  when landing on their own city — like 모두의마블 — no remote building; the old `buildAnywhere` setting is
+  ignored, kept only so saves load): L1 `0.50P`, L2 `0.60P`, L3 `0.70P`, L4 landmark `1.00P`. Landmark requires L3.
 * Property value (for asset ranking / takeover) = `P + Σ build costs paid`.
 * **Takeover (인수)**: after paying toll on an opponent's city that is **not** a landmark, the
   visitor may buy it for `2 × property value` (goes to the owner). Buildings stay. Setting on by

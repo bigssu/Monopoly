@@ -164,15 +164,11 @@ describe('buying & building', () => {
     expect(r.state.phase).toMatchObject({ kind: 'preRoll', playerId: 1 });
   });
 
-  it('no remote building by default; buildAnywhere allows one pre-roll build per turn', () => {
+  it('no remote building: before the roll the only action is the roll (an old saved buildAnywhere is ignored)', () => {
     const s0 = edit(game(), (st) => own(st, 2, 0, 0));
     expect(legalActions(s0)).toEqual([roll(0)]);
     const s1 = edit(game({ buildAnywhere: true }), (st) => own(st, 2, 0, 0));
-    expect(legalActions(s1)).toContainEqual({ type: 'Build', playerId: 0, spaceIndex: 2 });
-    const r = act(s1, { type: 'Build', playerId: 0, spaceIndex: 2 });
-    expect(r.state.properties[2]!.level).toBe(1);
-    expect(r.state.phase).toMatchObject({ kind: 'preRoll', playerId: 0 });
-    expect(legalActions(r.state)).toEqual([roll(0)]);
+    expect(legalActions(s1)).toEqual([roll(0)]);
   });
 
   it('hubs cannot be built on', () => {

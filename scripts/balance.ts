@@ -29,7 +29,6 @@ const settings: Settings = {
   auction: flag('auction'),
   takeover: !flag('no-takeover'),
   endOnFirstBankruptcy: !flag('elimination'),
-  buildAnywhere: flag('build-anywhere'),
   rules: (arg('rules') ?? base.rules) as Settings['rules'],
   // --rules-version 1 replays the rules from before the fun rules (docs/research/08-fun-analysis.md).
   rulesVersion: Number(arg('rules-version') ?? base.rulesVersion),

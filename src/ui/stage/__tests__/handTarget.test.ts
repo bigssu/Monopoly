@@ -39,7 +39,7 @@ function walk(settings: Settings, seeds: readonly number[], visit: (s: GameState
 
 const VARIANTS: Array<[string, Settings]> = [
   ['easy', defaultSettings({ players: defaultPlayers(4, { cpu: true }), rules: 'easy' })],
-  ['normal + auction + build anywhere', defaultSettings({ players: defaultPlayers(4, { cpu: true }), rules: 'normal', auction: true, buildAnywhere: true })],
+  ['normal + auction', defaultSettings({ players: defaultPlayers(4, { cpu: true }), rules: 'normal', auction: true })],
   ['advanced, 2 players, no round limit', defaultSettings({ players: defaultPlayers(2, { cpu: true }), rules: 'advanced', roundLimit: null, takeover: true })],
 ];
 
@@ -69,8 +69,8 @@ describe('cpuHandTarget', () => {
     const pre = at({ kind: 'preRoll', playerId: 0, rollAgain: false });
     // The turn's roll: the hand presses the pad (the dice) and flicks.
     expect(cpuHandTarget(pre, { type: 'Roll', playerId: 0 })).toEqual({ kind: 'pad', selector: '.roll-pad' });
-    // Build anywhere has no button: the hand taps the city on the board.
-    expect(cpuHandTarget(pre, { type: 'Build', playerId: 0, spaceIndex: 5 })).toEqual({ kind: 'space', space: 5, selector: null });
+    // No building before the roll (the old build-anywhere rule is gone).
+    expect(cpuHandTarget(pre, { type: 'Build', playerId: 0, spaceIndex: 5 })).toMatchObject({ kind: 'none' });
 
     const buy = at({ kind: 'buy', playerId: 0, spaceIndex: 3, price: 100 });
     expect(cpuHandTarget(buy, { type: 'Buy', playerId: 0 })).toEqual({ kind: 'control', selector: '[data-action="Buy"]', space: 3, hold: false });

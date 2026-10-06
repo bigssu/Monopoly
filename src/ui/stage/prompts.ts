@@ -288,14 +288,6 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
   const tags = h('div', { class: 'pc-tags' });
   if (ph.rollAgain) tags.append(tag(t('g.doubles.again'), 'gold', 'dice-face-6'));
   if (p.expressPending) tags.append(tag(t('g.express'), 'gold', 'hub-rail'));
-  const build = legalActions(ctx.state).filter((a) => a.type === 'Build');
-  if (build.length && !ctx.cpu) {
-    tags.append(tag(t('g.buildAnywhere.hint'), 'info', 'villa'));
-    ctx.board.setPicking(
-      build.map((a) => (a as Extract<Action, { type: 'Build' }>).spaceIndex),
-      (i) => ctx.act({ type: 'Build', playerId: ph.playerId, spaceIndex: i }),
-    );
-  }
   const el = h('div', { class: `pcard pc-roll${ctx.cpu ? ' is-cpu' : ''}${rollBtn ? ' has-button' : ''}` });
   if (tags.childNodes.length) el.append(tags);
   if (rollBtn) el.append(rollBtn);

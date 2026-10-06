@@ -39,7 +39,7 @@ const OFFERED_IN: Record<ActionType, ReadonlyArray<Phase['kind']>> = {
   UseEscapeCard: ['island'],
   ChooseTravel: ['travel'],
   Buy: ['buy'],
-  Build: ['build', 'preRoll'],
+  Build: ['build'],
   Takeover: ['takeover'],
   SetFestival: ['festival'],
   FreeUpgrade: ['freeUpgrade'],
@@ -76,8 +76,6 @@ export function cpuHandTarget(state: GameState, a: Action): HandTarget {
   if (!OFFERED_IN[a.type].includes(ph.kind) && !swapPass) return { kind: 'none', reason: `${a.type} has no control in the ${ph.kind} prompt` };
   // The turn's roll: the pad (the roll button, when shown in Settings, is not what the hand uses).
   if (a.type === 'Roll' && ph.kind === 'preRoll') return { kind: 'pad', selector: '.roll-pad' };
-  // Build anywhere (preRoll): humans pick the city on the board; there is no button for it.
-  if (a.type === 'Build' && ph.kind === 'preRoll') return { kind: 'space', space: a.spaceIndex, selector: null };
   if (BOARD_PICK.has(a.type) && 'spaceIndex' in a) return { kind: 'space', space: a.spaceIndex, selector: controlSelector(a) };
   const space = 'spaceIndex' in a ? a.spaceIndex : phaseSpace(ph);
   return { kind: 'control', selector: controlSelector(a), space, hold: a.type === 'Roll' };

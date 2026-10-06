@@ -504,7 +504,6 @@ function startTurn(ctx: Ctx, pid: PlayerId): void {
   s.current = pid;
   s.turn += 1;
   s.extraRoll = false;
-  s.remoteBuildUsed = false;
   p.consecutiveDoubles = 0;
   emit(ctx, { type: 'TurnStarted', playerId: pid, round: s.round, turn: s.turn });
   if (p.islandTurns > 0) return setPhase(ctx, islandPhase(ctx, pid));
@@ -1221,15 +1220,6 @@ function drawCard(ctx: Ctx, pid: PlayerId, chosen?: CardId): void {
 // Legal actions
 // ---------------------------------------------------------------------------
 
-function remoteBuildOptions(state: GameState, pid: PlayerId): number[] {
-  if (!state.settings.buildAnywhere || state.remoteBuildUsed) return [];
-  const p = state.players[pid]!;
-  return ownedCities(state, pid).filter((i) => {
-    const c = nextBuildCost(state, i);
-    return c !== null && p.cash >= c;
-  });
-}
-
 /** Sale options while in debt (or any time for analysis): [action, cash raised]. */
 export function saleOptions(state: GameState, pid: PlayerId): Array<{ action: Action; amount: number }> {
   const out: Array<{ action: Action; amount: number }> = [];
@@ -1250,10 +1240,7 @@ export function legalActions(state: GameState): Action[] {
   const pass: Action = { type: 'Pass', playerId: pid };
   switch (ph.kind) {
     case 'preRoll':
-      return [
-        { type: 'Roll', playerId: pid },
-        ...remoteBuildOptions(state, pid).map((i): Action => ({ type: 'Build', playerId: pid, spaceIndex: i })),
-      ];
+      return [{ type: 'Roll', playerId: pid }];
     case 'island': {
       const out: Action[] = [{ type: 'Roll', playerId: pid }];
       if (p.cash >= ECONOMY.bail) out.push({ type: 'PayBail', playerId: pid });
@@ -1386,15 +1373,6 @@ function dispatch(ctx: Ctx, action: Action): void {
 
   switch (ph.kind) {
     case 'preRoll':
-      if (action.type === 'Build') {
-        const cost = nextBuildCost(s, action.spaceIndex)!;
-        const prop = propertyAt(s, action.spaceIndex);
-        pay(ctx, pid, 'bank', cost, 'build', action.spaceIndex);
-        prop.level = (prop.level + 1) as Level;
-        s.remoteBuildUsed = true;
-        emit(ctx, { type: 'Built', playerId: pid, spaceIndex: action.spaceIndex, level: prop.level, cost, free: false });
-        return setPhase(ctx, { kind: 'preRoll', playerId: pid, rollAgain: ph.rollAgain });
-      }
       return doRoll(ctx, pid, action.type === 'Roll' ? action.gauge : undefined);
 
     case 'island':
