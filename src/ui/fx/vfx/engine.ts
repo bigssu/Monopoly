@@ -52,8 +52,6 @@ export interface FxOptions extends CoordSource {
   highlight?(target: HighlightTarget, ms: number): void;
   /** Atlas loader (tests / demo can inject); default loads public/fx via BASE_URL. */
   loadAtlas?(): Promise<FxAtlas | null>;
-  /** Software canvas (`willReadFrequently`), default true (docs/PERFORMANCE.md). */
-  softwareCanvas?: boolean;
   /** Seed of the effect RNG stream. */
   seed?: number;
   /** Register `window.__fx` (dev only). */
@@ -74,8 +72,6 @@ export interface FxOptions extends CoordSource {
   worker?: boolean;
   /** Initial quality setting (default 'high'; the game passes the user's pref, default 'auto'). */
   quality?: FxQuality;
-  /** Dev A/B knobs (VFX.md §15): crisp-scale cap, draw every n-th tick. */
-  tune?: { sMax?: number; drawEvery?: number };
   /**
    * Keep the (hidden) canvas backing store between effects and reuse it when the next region fits:
    * saves the first-draw allocation (≈ 2.5 ms, 10 ms at 4× for 0.9 MP) at the cost of ≤ 3.6 MB CPU
@@ -213,7 +209,8 @@ export function createFx(o: FxOptions): FxHandle {
   const aq = new AdaptiveQuality(ADAPTIVE_DEFAULTS, typeof performance !== 'undefined' ? performance.now() : 0);
   const transitions: FxStats['quality']['transitions'] = [];
   const tierNow = (): FxTier => (quality === 'auto' ? aq.tier : quality);
-  const software = o.softwareCanvas ?? true;
+  /** Software canvases (`willReadFrequently`, docs/PERFORMANCE.md). */
+  const software = true;
   /** Full atlas on the main thread (main backend: tests, manual clock, no worker support). */
   let atlas: FxAtlas | null = null;
   let atlasP: Promise<FxAtlas | null> | null = null;
@@ -628,7 +625,7 @@ export function createFx(o: FxOptions): FxHandle {
   /** Crisp backing scale: 1.5 capped by the DPR (1 on quality 'low'). */
   function sMax(): number {
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    return Math.min(o.tune?.sMax ?? 9, tierNow() === 'low' ? 1 : 1.5, Math.max(dpr, 0.5));
+    return Math.min(tierNow() === 'low' ? 1 : 1.5, Math.max(dpr, 0.5));
   }
 
   // Adaptive quality (setting 'auto', VFX.md §15.4): director.ts AdaptiveQuality.
@@ -661,7 +658,7 @@ export function createFx(o: FxOptions): FxHandle {
     // Presentation rate: every FX frame (30 Hz); on quality 'low', tails (no timeline beats left, no
     // young particle: fading / drifting) every 2nd frame (15 Hz).
     if (runner.frame !== drawnFrame) sinceDraw++;
-    const every = o.tune?.drawEvery ?? (tierNow() === 'low' && tailOnly() ? 2 : 1);
+    const every = tierNow() === 'low' && tailOnly() ? 2 : 1;
     const empty = pool.liveCount === 0 && lastDrawn === 0;
     if ((runner.frame !== drawnFrame && sinceDraw >= every && !empty) || forceDraw) {
       drawnFrame = runner.frame;

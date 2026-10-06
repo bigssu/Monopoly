@@ -33,21 +33,6 @@ import { groupColor, spaceIcon } from './util';
 import { DealerDirector } from '@/ui/dealer/director';
 import { orientationFor, type Orientation } from '@/ui/orientation';
 
-/** Dev A/B knob `?dev=1&fxpool=6.12` (canvas size classes, present.ts SLOT_CLASSES). */
-function devPool(): number[] | null {
-  const v = isDevHook() ? new URLSearchParams(location.search).get('fxpool') : null;
-  return v ? v.split('.').map(Number) : null;
-}
-
-/** Dev A/B knobs (`?dev=1&fxs=0.75&fxe=2`): crisp backing-scale cap, draw every n-th FX tick. */
-function devTune(): { sMax?: number; drawEvery?: number } {
-  const q = new URLSearchParams(location.search);
-  const o: { sMax?: number; drawEvery?: number } = {};
-  if (q.get('fxs')) o.sMax = Number(q.get('fxs'));
-  if (q.get('fxe')) o.drawEvery = Number(q.get('fxe'));
-  return o;
-}
-
 export class GameView {
   readonly root: HTMLElement;
   /** Shakeable wrapper around board + panels. */
@@ -133,7 +118,7 @@ export class GameView {
       // ~27-33 MB GPU layer at the moments the canvas is largest (layer-memory gate, docs/VFX.md §14).
       shake: (px, ms) => void shakeAll([this.fx], px, ms),
       highlight: (target, ms) => this.staticHighlight(target, ms),
-      dom: isDevHook() && new URLSearchParams(location.search).get('fxdom') === '0' ? {} : {
+      dom: {
         pop: (i, o) => this.board.popIcon(i, o),
         zoomPunch: (i, k) => this.board.zoomPunch(i, k),
         dim: (i, on) => this.board.dimIcon(i, on),
@@ -148,15 +133,12 @@ export class GameView {
       // Idle: park the canvas off the layer and keep its backing store (no Paint to park / unpark, no
       // first-draw allocation; no frame callback or timer while idle) — docs/VFX.md §15.3.
       retainBacking: true,
-      // Dev A/B knobs for devices (VFX.md §10.4, §15.4): ?dev=1&fxsw=0 (GPU canvas), fxk / fxpool / fxs / fxe / fxdom.
       // ONE canvas (a 400×400 backing, upgraded once to 960×600 if the effects outgrow it), painted
       // by the FX worker: each extra shown canvas is a GPU layer and every show/hide is a Paint on
       // the main thread, while a larger backing only costs the worker a larger copy (docs/VFX.md §15).
-      pool: devPool() ?? [6, 12],
-      maxCanvases: Number((isDevHook() && new URLSearchParams(location.search).get('fxk')) || 1),
+      pool: [6, 12],
+      maxCanvases: 1,
       frameBudget: 0.5e6,
-      ...(isDevHook() ? { tune: devTune() } : {}),
-      softwareCanvas: !(isDevHook() && new URLSearchParams(location.search).get('fxsw') === '0'),
       // Android app: paint on the main thread, like the dice canvas (no OffscreenCanvas placeholder).
       ...(isNative() ? { worker: false } : {}),
       dev: isDevHook(),

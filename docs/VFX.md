@@ -1264,8 +1264,8 @@ p99 16.8 → 33.4 ms, 33 ms 초과 7 → 22, Paint 17 → 22/s, F6 380 ms/s로 �
   다음 효과에서 low를 다시 시도. dev(`?dev=1`)는 전환을 콘솔에 남기고 `fx().quality.transitions`로 노출.
   한 창에 늦은 틱 1–2개는 게임 자체의 이벤트 프레임(렌더·프롬프트 — 효과를 꺼도 생김)이라 제외: p95만 보면 4× 데모에서
   high → low → minimal로 곧장 떨어졌다. 현재 기준: 4× 데모 게임 60 s 내내 high, **10×** 스로틀에서는 high → low → minimal → (20 s) low.
-- 설정 변경은 즉시 적용(`prefs.onChange` → `setQuality`), 결과 화면 색종이도 설정을 따름. dev A/B: `?dev=1&fxq=auto|high|low|off`,
-  `&fxk=`(보이는 캔버스 수), `&fxpool=6.12`(크기 등급), `&fxs=`(배율 상한), `&fxe=`(n틱마다 그리기), `&fxdom=0`(DOM 훅 끔).
+- 설정 변경은 즉시 적용(`prefs.onChange` → `setQuality`), 결과 화면 색종이도 설정을 따름. dev A/B: `?dev=1&fxq=auto|high|low|off`
+  (`fxk`·`fxpool`·`fxs`·`fxe`·`fxdom`·`fxsw` 노브는 2026-10-06에 지우고 출시 값으로 고정).
 
 ### 15.5 최종 게이트 (`npm run perf -- --full --unique`, 4× CPU, DPR 2, 품질 자동 = high 유지)
 
@@ -1301,7 +1301,7 @@ p99 16.8 → 33.4 ms, 33 ms 초과 7 → 22, Paint 17 → 22/s, F6 380 ms/s로 �
 - 표시 fps 33.5(DrawFrame 31.0): 워커 프레임이 메인 커밋과 다른 vsync에 들어가는 경우가 ~2.5/s 남는다(고유 34.6/s). 게이트
   안이지만 경계. 워커에서 rAF로 그리면 더 나빠진다(56.9). 실기기 30 Hz 패널에서는 디스플레이가 합친다.
 - 워커의 복사 비용(큰 효과 동안 960×600 백킹)은 메인 스레드 밖이지만 배터리 비용은 남는다 — 게임에서 400×400으로 시작해
-  필요할 때만 커진다. 실기기 A/B: `?dev=1&fxpool=6&fxk=1`(작은 캔버스만), `&fxk=2`(2장).
+  필요할 때만 커진다.
 - 워커 백엔드는 헤드리스 결정적 스크린샷에서 쓰이지 않는다(수동 클록 = 메인 페인터, 같은 코드). 실시간 경로는 perf `fx` 페이즈와
   e2e 스킵 테스트가 지나간다.
 - `Dice.clientCenters`/`Stage.cardClientCenter`(주사위·카드 위치)는 움직이는 요소라 캐시하지 않았다(주사위 굴림·카드 뽑기 프레임).

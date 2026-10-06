@@ -525,8 +525,8 @@ node scripts/perf.mjs --phases play          # 프레임 게이트만 (+ 환경 
 node scripts/perf-frames.mjs --query fxq=off  # 효과 끔(설정 "끄기")으로 같은 긴 프레임 분석
 node scripts/fx/fx-mix.mjs --runs 2 "" "fxq=off" "fxq=low"   # 효과 비용 A/B (효과만 도는 장면, 메인 ms/s ±5)
 ```
-dev 노브(`?dev=1&…`, `src/ui/game/view.ts`): `fxq=auto|high|low|off`(품질), `fxk=`(보이는 FX 캔버스 수), `fxpool=6.12`(크기 등급),
-`fxs=`(백킹 배율 상한), `fxe=`(n틱마다 그리기), `fxdom=0`(효과의 DOM 훅 끔), `fxsw=0`(가속 캔버스).
+dev 노브(`?dev=1&…`, `src/ui/game/view.ts`): `fxq=auto|high|low|off`(품질). 실기기 A/B용이던 `fxk`·`fxpool`·`fxs`·`fxe`·`fxdom`·`fxsw`는
+2026-10-06에 지우고 출시 값(캔버스 1장, 크기 등급 6·12, 소프트웨어 캔버스)으로 고정했다.
 `play` 단계는 이어서 `floor`(빈 페이지, 같은 조건)를 재서 표 아래에 "environment floor"로 출력한다. play의 "vsync 두 번 초과"
 개수가 floor 수준이면 그 프레임은 게임이 아니라 이 기계의 것이다(4.5 참고).
 Playwright는 devDependency `@playwright/test`를 쓰고, Chromium 경로는 `CHROMIUM_PATH`로 바꿀 수 있음(기본:
