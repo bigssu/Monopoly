@@ -15,9 +15,9 @@ import { playVoice, stopVoice } from '@/ui/audio/voice';
 import { EASE } from '@/ui/fx/motion';
 import { anim, animSpeed, gamePace, onFrame, reducedMotion } from '@/ui/fx/time';
 import { h } from '@/ui/game/util';
+import { flapFrame } from './cadence';
 import { DEALER_SPRITES, type DealerExpr, type DealerLine } from './lines';
 
-const FLAP_MS = 120;
 /** How long the expression shows before the mouth starts moving, and after it stops. */
 const LEAD_MS = 350;
 const TAIL_MS = 700;
@@ -163,21 +163,19 @@ export class Dealer {
     }, ms);
   }
 
-  /** Expression first, then the mouth flaps (talk-a / talk-b) until the voice ends. */
+  /**
+   * Expression first, then the mouth flaps (talk-a / talk-b) until the voice ends; the expression
+   * comes back every 3rd frame, or every 6th when it raises the arms (cadence.ts: half the arm raises).
+   */
   private flapAfter(expr: DealerExpr, token: number): void {
     if (reducedMotion()) return; // a still expression; the bubble carries the line
     let start = -1;
-    let frame = -1;
     this.stopFlap = onFrame((now) => {
       if (token !== this.token) return false;
       if (start < 0) start = now;
       const t = now - start - LEAD_MS;
       if (t < 0) return true;
-      const f = Math.floor(t / FLAP_MS) % 3;
-      if (f !== frame) {
-        frame = f;
-        this.setSprite(f === 0 ? 'talk-a' : f === 1 ? 'talk-b' : expr);
-      }
+      this.setSprite(flapFrame(t, expr));
       return true;
     });
   }
