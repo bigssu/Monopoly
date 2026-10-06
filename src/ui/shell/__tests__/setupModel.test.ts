@@ -77,7 +77,7 @@ describe('setup draft', () => {
     expect(d.seats.S.on).toBe(true);
     expect(d.seats.S.colorId).not.toBe(d.seats.N.colorId);
     expect(d.seats.S.tokenId).not.toBe(d.seats.N.tokenId);
-    expect(d.roundLimit).toBe(15);
+    expect(d.roundLimit).toBe(30);
     expect(d.startCash).toBe(5000);
     expect(d.promptTimer).toBe(30);
   });

@@ -52,8 +52,16 @@ const SEAT_DEFAULTS: Record<Seat, { tokenId: string; colorId: string }> = {
   W: { tokenId: 'robot', colorId: 'yellow' },
 };
 
+/**
+ * The setup screen's defaults (owner, 2026-10-06): 30 rounds and a 30 s turn timer. The engine's
+ * own `defaultSettings()` keeps 15 / 15 — seeded tests, the balance simulation and the dev hook's
+ * demo games are measured against it.
+ */
+export const SETUP_DEFAULT_ROUNDS = 30;
+export const SETUP_DEFAULT_TIMER = 30;
+
 export function defaultDraft(): SetupDraft {
-  const base = defaultSettings();
+  const base = defaultSettings({ roundLimit: SETUP_DEFAULT_ROUNDS, promptTimer: SETUP_DEFAULT_TIMER });
   const seat = (s: Seat, on: boolean): SeatDraft => ({ on, name: null, ...SEAT_DEFAULTS[s], controller: 'human' });
   return {
     seats: { S: seat('S', true), E: seat('E', false), N: seat('N', true), W: seat('W', false) },

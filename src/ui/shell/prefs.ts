@@ -42,6 +42,12 @@ export interface Prefs {
   moneyRes: MoneyResPref;
   /** Money cut-in 3D (hero tilt + board camera): auto by device tier, or forced on / off. */
   money3d: Money3dPref;
+  /**
+   * Which defaults revision the stored prefs have seen. 2 (2026-10-06): the setup defaults became
+   * 30 rounds / 30 s; a store from before that still holding the OLD defaults (15 / 15) is moved to
+   * the new ones once, while any other value the player chose is kept.
+   */
+  defaultsRev: number;
   /** Show the roll button beside the throw pad (off: press, hold and flick the dice). */
   rollButton: boolean;
 }
@@ -100,8 +106,20 @@ function detectLang(): Lang {
   }
 }
 
+const DEFAULTS_REV = 2;
+
+/** Once per store: values still at the pre-revision-2 defaults (15 rounds, 15 s) move to 30 / 30. */
+export function migrateDefaults(p: Prefs, rev: unknown): Prefs {
+  if (typeof rev === 'number' && rev >= DEFAULTS_REV) return p;
+  const promptTimer = p.promptTimer === 15 ? 30 : p.promptTimer;
+  const lastSetup = p.lastSetup
+    ? { ...p.lastSetup, roundLimit: p.lastSetup.roundLimit === 15 ? 30 : p.lastSetup.roundLimit, promptTimer: p.lastSetup.promptTimer === 15 ? 30 : p.lastSetup.promptTimer }
+    : null;
+  return { ...p, promptTimer, lastSetup, defaultsRev: DEFAULTS_REV };
+}
+
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto', rollButton: false };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 30, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto', rollButton: false, defaultsRev: DEFAULTS_REV };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -126,6 +144,7 @@ function sanitize(raw: unknown): Prefs {
     moneyRes: MONEY_RES_PREFS.includes(r.moneyRes as MoneyResPref) ? (r.moneyRes as MoneyResPref) : d.moneyRes,
     money3d: MONEY_3D_PREFS.includes(r.money3d as Money3dPref) ? (r.money3d as Money3dPref) : d.money3d,
     rollButton: r.rollButton === true,
+    defaultsRev: DEFAULTS_REV,
   };
 }
 
@@ -133,7 +152,8 @@ function read(): Prefs {
   const raw = kvGet(PREFS_KEY);
   if (!raw) return defaultPrefs();
   try {
-    return sanitize(JSON.parse(raw));
+    const parsed: unknown = JSON.parse(raw);
+    return migrateDefaults(sanitize(parsed), (parsed as { defaultsRev?: unknown } | null)?.defaultsRev);
   } catch {
     return defaultPrefs();
   }
