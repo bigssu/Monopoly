@@ -5,7 +5,7 @@
  */
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
-import { haptic, haptics } from '@/ui/audio/haptics';
+import { haptic, setHapticsEnabled } from '@/ui/audio/haptics';
 import { prefs } from '@/ui/shell/prefs';
 import { anim } from '@/ui/fx/time';
 import { FocusTrap } from '@/ui/shell/focus';
@@ -146,7 +146,7 @@ export class GameMenu {
         } catch {
           /* prefs unavailable */
         }
-        haptics.setEnabled(v);
+        setHapticsEnabled(v);
       }),
       this.item('save', t('g.menu.saveQuit'), () => {
         this.close();

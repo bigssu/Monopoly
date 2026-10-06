@@ -13,8 +13,7 @@ import '@/ui/screens/Result';
 
 import { createGame, defaultPlayers, defaultSettings } from '@/engine';
 import { setLang, t } from '@/i18n';
-import { haptics, installHaptics } from '@/ui/audio/haptics';
-import { createHaptics } from '@/ui/audio/nativeHaptics';
+import { setHapticsEnabled } from '@/ui/audio/haptics';
 import { installSfx, sfx } from '@/ui/audio/sfx';
 import { SynthSfx } from '@/ui/audio/synth';
 import { installVoiceHost } from '@/ui/audio/voice';
@@ -49,7 +48,7 @@ function applyPrefs(p: Readonly<Prefs>): void {
   setLang(p.lang);
   synth.setMuted(!p.sound);
   synth.setVolume(p.volume);
-  haptics.setEnabled(p.haptics);
+  setHapticsEnabled(p.haptics);
   setFrameRate(p.batterySaver ? 30 : 60);
   setPace(p.gamePace);
   setMusicEnabled(p.music && p.sound);
@@ -106,7 +105,6 @@ async function boot(): Promise<void> {
     else if (name === 'result') void playMusic('win', { loop: false, after: 'title' });
     else void playMusic('title');
   });
-  installHaptics(createHaptics(prefs.get().haptics));
   applyPrefs(prefs.get());
   prefs.onChange((next) => applyPrefs(next));
 
