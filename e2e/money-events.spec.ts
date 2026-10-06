@@ -107,10 +107,13 @@ async function expectWalletsMatch(page: Page, entry: LogEntry): Promise<void> {
   for (const [seat, label] of Object.entries(entry.wallets)) expect(Number(label.replace(/\D/g, '')), `${entry.scene} wallet ${seat} = engine cash`).toBe(cash[seat]);
 }
 
-/** Pose-to-pose beats (MONEY-EVENTS §12): every cut-in ≥ 3 s on screen, a still hold ≥ 1 s before it hands back. */
+/**
+ * Pose-to-pose beats (MONEY-EVENTS §12) + EVENT_EXTEND (fx/time.ts, +0.5 s motion, +0.5 s still):
+ * every cut-in ≥ 4.1 s on screen, a still hold ≥ 1.5 s before it hands back.
+ */
 function expectBeats(e: LogEntry): void {
-  expect(e.liveMs, `${e.play}: ${e.liveMs} ms on screen`).toBeGreaterThanOrEqual(2950);
-  expect(e.stillMs, `${e.play}: still ${e.stillMs} ms`).toBeGreaterThanOrEqual(950);
+  expect(e.liveMs, `${e.play}: ${e.liveMs} ms on screen`).toBeGreaterThanOrEqual(3950);
+  expect(e.stillMs, `${e.play}: still ${e.stillMs} ms`).toBeGreaterThanOrEqual(1450);
 }
 
 /** Parked and idle: off-screen, no scene clock, no frame callback. */
@@ -521,7 +524,8 @@ const SCENARIOS: Array<{ name: string; patch: string; pre?: string[]; action: st
 for (const size of [{ w: 1600, h: 1000 }, { w: 800, h: 450 }]) {
   for (const seat of ['S', 'N']) {
     test(`filmstrips ${size.w}x${size.h} seat ${seat}`, async ({ page }) => {
-      test.setTimeout(420_000);
+      // Six cut-ins of 4–6.5 s (EVENT_EXTEND), screenshot every 2 ticks: ~100 s each on this VM.
+      test.setTimeout(720_000);
       const errors = watchConsole(page);
       await boot(page, size.w, size.h);
       mkdirSync(STRIPS, { recursive: true });
