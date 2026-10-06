@@ -27,12 +27,10 @@
   flex-direction: column;
   align-items: center;
   gap: calc(var(--u) * 0.35);
-  /* Top and bottom (the banner, and the roll control / prompt buttons at the acting seat's edge):
-     clear of the pop-out buildings standing on those edges' spaces (--bld-out, set by Board.ts). */
-  padding:
-    max(calc(var(--u) * 0.75), calc(var(--u) * (var(--bld-out, 0) + 0.1)))
-    calc(var(--u) * 0.5)
-    max(calc(var(--u) * 0.7), calc(var(--u) * (var(--bld-out, 0) + 0.15)));
+  /* Bottom (the acting seat's edge: the roll control and the prompt buttons) clears the pop-out
+     buildings standing on that edge's spaces (--bld-out, set by Board.ts). Constant, so nothing
+     moves between prompts; the top keeps its small margin (prompt room on small screens). */
+  padding: calc(var(--u) * 0.75) calc(var(--u) * 0.5) max(calc(var(--u) * 0.7), calc(var(--u) * (var(--bld-out, 0) + 0.15)));
   font-size: max(12px, calc(var(--u) * 0.72));
   color: var(--ink);
   /* Own compositing layer, always (it already was one for every turn's rotation): prompt cards,
