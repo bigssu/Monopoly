@@ -86,12 +86,7 @@ export function f(x: number): string {
 export const clamp = (x: number, a = 0, b = 1): number => Math.min(b, Math.max(a, x));
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 export const easeOut = (t: number): number => 1 - (1 - clamp(t)) ** 3;
-export const easeOutQuad = (t: number): number => 1 - (1 - clamp(t)) ** 2;
 export const easeIn = (t: number): number => clamp(t) ** 2;
-export const easeInOut = (t: number): number => {
-  const x = clamp(t);
-  return x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
-};
 export const rad = (deg: number): number => (deg * Math.PI) / 180;
 
 /** Complete SVG document. `defs` goes into <defs>. */

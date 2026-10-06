@@ -193,8 +193,6 @@ export const BOARD: readonly SpaceDef[] = [
 ];
 
 export const BOARD_SIZE = BOARD.length; // 32
-/** Legacy name kept for callers that explicitly need the original 32-space board. */
-export const BOARD32 = BOARD;
 
 /** Extra cities live here so larger board variants only change content in one place. */
 const EXTRA_CITIES: Readonly<Record<SideId, readonly Omit<SpaceDef, 'index'>[]>> = {
