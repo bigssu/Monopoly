@@ -7,7 +7,7 @@
  *   + src/content/fx/manifest.ts (typed animation table)  + docs/assets/fx-contact-sheet.png
  *
  * Flags:  --no-sheet   skip the contact sheet
- *         FX_QUALITY=0.9 (webp quality), FX_DPR=2 (override baked DPR), CHROMIUM_PATH / PLAYWRIGHT_MODULE as perf.mjs.
+ *         FX_QUALITY=0.9 (webp quality), FX_DPR=2 (override baked DPR), CHROMIUM_PATH as perf.mjs.
  */
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';

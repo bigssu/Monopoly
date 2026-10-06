@@ -2,8 +2,8 @@
 // Usage: node scripts/icon-sheet.mjs [--no-shot]
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { launchChromium } from './fx/common.mjs';
 import { loadAll } from './lib/load-icons.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -47,13 +47,7 @@ console.log('wrote', htmlPath);
 
 if (!process.argv.includes('--no-shot')) {
   try {
-    const req = createRequire(import.meta.url);
-    let pw;
-    for (const p of ['playwright', 'playwright-core', '/opt/node22/lib/node_modules/playwright']) {
-      try { pw = req(p); break; } catch {}
-    }
-    if (!pw) throw new Error('playwright not found');
-    const browser = await pw.chromium.launch();
+    const browser = await launchChromium();
     const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
     await page.goto('file://' + htmlPath);
     const out = arg('out') || path.join(here, '..', 'docs', 'assets', 'icon-sheet.png');

@@ -201,7 +201,6 @@ Windows 재현 명령(별도 터미널에서 `npm run preview -- --host 127.0.0.
 
 ```powershell
 $env:CHROMIUM_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-$env:PLAYWRIGHT_MODULE = (Resolve-Path node_modules\playwright\index.mjs).Path
 node scripts/perf.mjs --url http://127.0.0.1:4179 --phases boot,mount,play,layers --seconds 20 --layer-seconds 15
 ```
 
@@ -530,8 +529,8 @@ dev 노브(`?dev=1&…`, `src/ui/game/view.ts`): `fxq=auto|high|low|off`(품질)
 `fxs=`(백킹 배율 상한), `fxe=`(n틱마다 그리기), `fxdom=0`(효과의 DOM 훅 끔), `fxsw=0`(가속 캔버스).
 `play` 단계는 이어서 `floor`(빈 페이지, 같은 조건)를 재서 표 아래에 "environment floor"로 출력한다. play의 "vsync 두 번 초과"
 개수가 floor 수준이면 그 프레임은 게임이 아니라 이 기계의 것이다(4.5 참고).
-Playwright 모듈/Chromium 경로는 `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH`로 바꿀 수 있음(기본: `/opt/node22/lib/node_modules/playwright`,
-`/opt/pw-browsers/chromium`). 게이트 하나라도 실패하면 종료 코드 1.
+Playwright는 devDependency `@playwright/test`를 쓰고, Chromium 경로는 `CHROMIUM_PATH`로 바꿀 수 있음(기본:
+`/opt/pw-browsers/chromium`, 없으면 Playwright 자체 브라우저; `scripts/fx/common.mjs`). 게이트 하나라도 실패하면 종료 코드 1.
 **멈춤 방지(2026-10-06)**: 2026-10-06 실행에서 cap 단계의 트레이스가 `Tracing.tracingComplete`를 받지 못해 26분 동안
 아무 출력 없이 멈췄고, 그 실행을 기다리느라 APK 푸시가 늦어졌다. 원인은 `trace()`의 `Tracing.end`와 완료 이벤트 대기에만 시간
 제한이 없던 것이다(다른 대기는 모두 제한이 있다). 지금은 두 대기가 max(60 s, 트레이스 길이 × 4)로 제한되고, cap 단계는

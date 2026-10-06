@@ -11,19 +11,13 @@
  * Main-thread ms/s here is stable to ±5 (unlike the CPU demo game), so it is the A/B tool for engine
  * changes; "fxq=off" is the same scenario with effects off (static highlight + sound).
  */
-import { spawn } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { launchChromium, serve } from './common.mjs';
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); if (i < 0) return d; const v = argv[i + 1]; argv.splice(i, 2); return v; };
-const ROOT = opt('root', resolve(dirname(fileURLToPath(import.meta.url)), '../..')); const SECS = +opt('secs', 29), RUNS = +opt('runs', 1), PORT = +opt('port', 4195), TRACE = opt('trace', '0') === '1', LAYERS = opt('layers', '0') === '1';
+const ROOT = opt('root', undefined); const SECS = +opt('secs', 29), RUNS = +opt('runs', 1), PORT = +opt('port', 4195), TRACE = opt('trace', '0') === '1', LAYERS = opt('layers', '0') === '1';
 const variants = argv.length ? argv : [''];
-const { chromium } = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/node_modules/playwright/index.mjs').href);
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore', detached: true });
-process.on('exit', () => { try { process.kill(-server.pid); } catch {} });
-const base = `http://localhost:${PORT}`;
-for (let i = 0; i < 80; i++) { try { if ((await fetch(base)).ok) break; } catch { await new Promise((r) => setTimeout(r, 250)); } }
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
+const base = await serve(PORT, ROOT);
+const browser = await launchChromium();
 const MIX = [
   [0, 'ringPulse', { at: { space: 3 }, player: 0, sparkles: 3 }], [300, 'diceLand', {}], [900, 'hopDust', { space: 8, long: false, dir: 180 }], [1100, 'plotClaim', { space: 8, player: 0, price: 300 }],
   [2400, 'ringPulse', { at: { space: 14 }, player: 1, sparkles: 3 }], [2700, 'diceLand', {}], [3300, 'hopDust', { space: 14, long: true, dir: 90 }], [3500, 'tollPay', { payer: 1, receiver: 0, amount: 600, space: 14 }],

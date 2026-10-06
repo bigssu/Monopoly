@@ -44,17 +44,13 @@
  * Presented fps = max(renderer DrawFrame, viz Display::DrawAndSwap): the FX worker's canvas frames
  * reach the display without a renderer DrawFrame.
  *
- * Needs Playwright + Chromium: PLAYWRIGHT_MODULE / CHROMIUM_PATH, else the global install at
- * /opt/node22/lib/node_modules/playwright and /opt/pw-browsers/chromium.
+ * Chromium: CHROMIUM_PATH, else /opt/pw-browsers/chromium, else Playwright's own (scripts/fx/common.mjs).
  */
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { ROOT, launchChromium, serve } from './fx/common.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const opt = (k, d) => {
   const i = argv.indexOf(`--${k}`);
@@ -86,48 +82,8 @@ if (opt('full', false) && !CFG.phases.includes('full')) CFG.phases.push('full');
 if (opt('unique', false) && !CFG.phases.includes('unique')) CFG.phases.push('unique');
 
 // ------------------------------------------------------------------------------------ setup
-async function loadChromium() {
-  const candidates = [process.env.PLAYWRIGHT_MODULE, '/opt/node22/lib/node_modules/playwright/index.mjs'].filter(Boolean);
-  for (const c of candidates) if (existsSync(c)) return (await import(pathToFileURL(c).href)).chromium;
-  const req = createRequire(resolve(ROOT, 'package.json'));
-  for (const m of ['playwright', 'playwright-core']) {
-    try {
-      return (await import(pathToFileURL(req.resolve(m)).href)).chromium;
-    } catch {
-      /* next */
-    }
-  }
-  throw new Error('Playwright not found: set PLAYWRIGHT_MODULE');
-}
-const chromium = await loadChromium();
-const CHROMIUM = process.env.CHROMIUM_PATH || (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
-
-let server = null;
-const base = CFG.url || `http://localhost:${CFG.port}`;
-if (!CFG.url) {
-  // Own process group, so the preview server dies with us (npx forks it).
-  server = spawn('npx', ['vite', 'preview', '--port', String(CFG.port), '--strictPort'], { cwd: ROOT, stdio: 'ignore', detached: true });
-  const kill = () => {
-    try {
-      process.kill(-server.pid);
-    } catch {
-      /* gone */
-    }
-  };
-  process.on('exit', kill);
-  process.on('SIGINT', () => process.exit(130));
-  process.on('SIGTERM', () => process.exit(143));
-  let up = false;
-  for (let i = 0; i < 80 && !up; i++) {
-    try {
-      up = (await fetch(base + '/')).ok;
-    } catch {
-      await new Promise((r) => setTimeout(r, 250));
-    }
-  }
-  if (!up) throw new Error(`preview server did not start on ${base} (run \`npx vite build\` first)`);
-}
-const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
+const base = CFG.url || (await serve(CFG.port));
+const browser = await launchChromium();
 const [VW, VH] = CFG.viewport;
 const out = { cpuThrottle: `${CFG.throttle}x`, dpr: CFG.dpr, viewport: [VW, VH], chromium: browser.version() };
 let lastLog = Date.now();

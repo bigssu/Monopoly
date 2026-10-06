@@ -18,16 +18,12 @@
  *   --scenarios <list>  comma list of `title,play` (default both).
  *   --quiet             only print the JSON.
  *
- * Needs the global Playwright (/opt/node22/lib/node_modules/playwright) + Chromium
- * (/opt/pw-browsers/chromium); override with PLAYWRIGHT_MODULE / CHROMIUM_PATH.
- * Suggested package.json line:  "perf:render": "node scripts/perf-render.mjs"
+ * Chromium: CHROMIUM_PATH, else /opt/pw-browsers/chromium, else Playwright's own (scripts/fx/common.mjs).
  */
-import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ROOT, launchChromium, serve } from './fx/common.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = (() => {
   const a = {};
   const argv = process.argv.slice(2);
@@ -54,10 +50,6 @@ const CFG = {
 };
 const log = (...m) => { if (!CFG.quiet) console.error(...m); };
 
-const PW = process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/node_modules/playwright/index.mjs';
-const { chromium } = await import(pathToFileURL(PW).href).then((m) => (m.chromium ? m : m.default));
-const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium';
-
 const median = (a) => {
   if (!a.length) return 0;
   const s = [...a].sort((x, y) => x - y);
@@ -68,24 +60,7 @@ const r2 = (n) => Math.round(n * 100) / 100;
 
 // ---------------------------------------------------------------------------------------------
 // server
-let server = null;
-let base = CFG.url;
-if (!base) {
-  base = `http://localhost:${CFG.port}`;
-  // Own process group: `npx` forks the actual server, which a plain kill() would leave running.
-  server = spawn('npx', ['vite', 'preview', '--port', String(CFG.port), '--strictPort', '--host', 'localhost'], { cwd: ROOT, stdio: 'ignore', detached: true });
-  process.on('exit', () => {
-    try {
-      process.kill(-server.pid);
-    } catch {
-      /* already gone */
-    }
-  });
-  for (let i = 0; i < 40; i++) {
-    try { if ((await fetch(base + '/')).ok) break; } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-}
+let base = CFG.url || (await serve(CFG.port));
 base = base.replace(/\/$/, '');
 
 // ---------------------------------------------------------------------------------------------
@@ -481,7 +456,7 @@ function printTable(res) {
 // ---------------------------------------------------------------------------------------------
 let exitCode = 0;
 try {
-  const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
+  const browser = await launchChromium();
   const version = browser.version();
   const scenarios = [];
   if (CFG.scenarios.includes('title')) scenarios.push(await runScenario(browser, 'title', `${base}/?dev=1`, CFG.titleSeconds, false));
@@ -502,13 +477,5 @@ try {
 } catch (e) {
   console.error(e);
   exitCode = 1;
-} finally {
-  if (server) {
-    try {
-      process.kill(-server.pid);
-    } catch {
-      /* already gone */
-    }
-  }
 }
 process.exit(exitCode);

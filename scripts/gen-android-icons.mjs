@@ -14,8 +14,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { launchChromium } from './fx/common.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const res = path.join(root, 'android', 'app', 'src', 'main', 'res');
@@ -41,13 +41,7 @@ const obsoleteSplashPaths = [
 ];
 
 // ---------- browser ----------
-const req = createRequire(import.meta.url);
-let pw;
-for (const p of ['/opt/node22/lib/node_modules/playwright', 'playwright', 'playwright-core']) {
-  try { pw = req(p); break; } catch {}
-}
-if (!pw) throw new Error('playwright not found');
-const browser = await pw.chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 
 const logoBox = (px) => `<img alt="" src="${logoData}" style="width:${px}px;height:${px}px;display:block">`;

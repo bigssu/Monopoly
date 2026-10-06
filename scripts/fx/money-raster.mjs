@@ -7,12 +7,8 @@
  *
  *   npx vite build && node scripts/fx/money-raster.mjs [--viewport 1600x1000] [--dpr 2] [--tiers high,mid,low] [--m3d 1]
  */
-import { existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { launchChromium, serve } from './common.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const arg = (k, d) => {
   const i = process.argv.indexOf(`--${k}`);
   return i > 0 ? process.argv[i + 1] : d;
@@ -23,25 +19,8 @@ const TIERS = String(arg('tiers', 'high,mid,low')).split(',');
 const M3D = arg('m3d', null);
 const PORT = Number(arg('port', 4185));
 
-const pw = process.env.PLAYWRIGHT_MODULE ?? '/opt/node22/lib/node_modules/playwright/index.mjs';
-const { chromium } = await import(pathToFileURL(pw).href);
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore', detached: true });
-process.on('exit', () => {
-  try {
-    process.kill(-server.pid);
-  } catch {
-    /* gone */
-  }
-});
-for (let i = 0; i < 80; i++) {
-  try {
-    if ((await fetch(`http://localhost:${PORT}/`)).ok) break;
-  } catch {
-    /* not yet */
-  }
-  await new Promise((r) => setTimeout(r, 250));
-}
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined), args: ['--no-sandbox'] });
+const base = await serve(PORT);
+const browser = await launchChromium();
 
 function pictureLayers(events) {
   const out = [];
@@ -63,7 +42,7 @@ for (const tier of TIERS) {
   const ctx = await browser.newContext({ viewport: { width: VW, height: VH }, deviceScaleFactor: DPR });
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
-  await page.goto(`http://localhost:${PORT}/?dev=1&mres=${tier}${M3D ? `&m3d=${M3D}` : ''}`);
+  await page.goto(`${base}/?dev=1&mres=${tier}${M3D ? `&m3d=${M3D}` : ''}`);
   await page.waitForFunction(() => window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 30000 });
   await page.evaluate(() => {
     const h = window.__lotAndRoll;

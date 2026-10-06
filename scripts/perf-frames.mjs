@@ -11,12 +11,8 @@
  * build (`lr:prompt-build`, with its element count) with the User Timing API.
  * Also prints the per-kind prompt build stats (`window.__lrPromptStats`: JS ms, DOM elements).
  */
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { launchChromium, serve } from './fx/common.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const opt = (k, d) => {
   const i = argv.indexOf(`--${k}`);
@@ -28,28 +24,8 @@ const DPR = Number(opt('dpr', 2));
 const RUNS = Number(opt('runs', 1));
 const PORT = Number(opt('port', 4186));
 
-const PW = process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/node_modules/playwright/index.mjs';
-const { chromium } = await import(pathToFileURL(PW).href).then((m) => (m.chromium ? m : m.default));
-const CHROMIUM = process.env.CHROMIUM_PATH || (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
-
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore', detached: true });
-const kill = () => {
-  try {
-    process.kill(-server.pid);
-  } catch {
-    /* gone */
-  }
-};
-process.on('exit', kill);
-const base = `http://localhost:${PORT}`;
-for (let i = 0; i < 80; i++) {
-  try {
-    if ((await fetch(base + '/')).ok) break;
-  } catch {
-    await new Promise((r) => setTimeout(r, 250));
-  }
-}
-const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
+const base = await serve(PORT);
+const browser = await launchChromium();
 
 for (let run = 1; run <= RUNS; run++) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: DPR });

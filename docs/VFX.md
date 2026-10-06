@@ -242,7 +242,7 @@ npm run fx:atlas              위 스크립트 실행 (node scripts/fx/bake-atla
 scripts/fx/contact-sheet.mjs  아틀라스 + 프레임 재생 컨택트 시트 PNG (docs/assets/fx-contact-sheet.png) — 시각 검토용
 ```
 
-- 도구: 전역 Playwright(`/opt/node22/lib/node_modules/playwright`, `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH` 재정의는 `scripts/perf.mjs`와 동일 규칙), Chromium `/opt/pw-browsers/chromium`. 추가 devDependency: **`maxrects-packer`(MIT, 순수 JS)** 1개. `sharp` 등 네이티브 의존성 불필요(WebP 인코딩은 Chromium `OffscreenCanvas.convertToBlob`).
+- 도구: devDependency `@playwright/test`, Chromium `/opt/pw-browsers/chromium`(`CHROMIUM_PATH`로 재정의, `scripts/fx/common.mjs`). 추가 devDependency: **`maxrects-packer`(MIT, 순수 JS)** 1개. `sharp` 등 네이티브 의존성 불필요(WebP 인코딩은 Chromium `OffscreenCanvas.convertToBlob`).
 - 알고리즘(프로토타입 검증):
   1. 각 프레임: SVG → `data:` URL → `Image.decode()` → `OffscreenCanvas(ceil(w×1.5×k), ceil(h×1.5×k))`에 그리기 → `getImageData`로 알파>6 바운딩 박스 → 트림.
   2. 클래스(색/마스크)별로 `new MaxRectsPacker(1024, 1024, 2, { smart:true, pot:true, allowRotation:false })` (색은 256×512로 충분; 프레임이 늘면 자동 탐색).
@@ -824,7 +824,7 @@ node scripts/fx/bake.mjs --no-sheet   # 컨택트 시트 생략
 node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--parts: 1000 px 단위 검토용 조각 저장)
 ```
 
-환경 변수: `PLAYWRIGHT_MODULE`, `CHROMIUM_PATH`(기본 `/opt/node22/lib/node_modules/playwright/index.mjs`, `/opt/pw-browsers/chromium`), `FX_DPR`(기본 2), `FX_QUALITY`(WebP, 기본 0.9). 산출물은 저장소에 커밋하므로 일반 빌드/CI는 Playwright가 필요 없다.
+환경 변수: `CHROMIUM_PATH`(기본 `/opt/pw-browsers/chromium`), `FX_DPR`(기본 2), `FX_QUALITY`(WebP, 기본 0.9). 산출물은 저장소에 커밋하므로 일반 빌드/CI는 Playwright가 필요 없다.
 
 ### 파이프라인
 

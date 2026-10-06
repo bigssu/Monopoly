@@ -10,7 +10,7 @@
  *
  * The money atlas is separate from the canvas-VFX atlases (atlas-color / atlas-mask): only the money
  * stage loads it. White (borrowed mask) sprites are tinted in the DOM with `mask-image`.
- * Flags: --no-sheet. Env: FX_QUALITY (0.9), FX_DPR (2), CHROMIUM_PATH / PLAYWRIGHT_MODULE.
+ * Flags: --no-sheet. Env: FX_QUALITY (0.9), FX_DPR (2), CHROMIUM_PATH.
  */
 import { mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
