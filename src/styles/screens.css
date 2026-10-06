@@ -200,7 +200,7 @@
 .native-webview .settings-overlay { animation: none; }
 
 /* Screen headers (rules/settings) */
-.shell-head, .rules-head, .settings-head {
+.rules-head, .settings-head {
   display: flex;
   align-items: center;
   gap: .7em;

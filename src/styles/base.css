@@ -124,15 +124,6 @@ h1, h2, h3, h4, .display, .num {
 
 /* Safe-area helpers (Android cutouts / gesture bars). */
 .safe-pad { padding: max(12px, var(--safe-t)) max(12px, var(--safe-r)) max(12px, var(--safe-b)) max(12px, var(--safe-l)); }
-.safe-t { padding-top: max(12px, var(--safe-t)); }
-.safe-r { padding-right: max(12px, var(--safe-r)); }
-.safe-b { padding-bottom: max(12px, var(--safe-b)); }
-.safe-l { padding-left: max(12px, var(--safe-l)); }
-
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
 
 /* ------------------------------------------------------------------ chip */
 /* One pill for status / player / toggle labels. Geometry is em-based: the host sets font-size
@@ -244,10 +235,8 @@ h1, h2, h3, h4, .display, .num {
 
 .btn-icon { padding: 0; width: 48px; height: 48px; border-radius: 16px; font-size: 1em; }
 .btn-icon .ico { width: 24px; height: 24px; }
-.btn-round { border-radius: 50%; }
 .btn-lg { font-size: 1.45em; min-height: 60px; padding: .6em 1.5em; border-radius: 22px; --btn-depth: 6px; }
 .btn-xl { font-size: 1.75em; min-height: 68px; padding: .6em 1.6em; border-radius: 24px; --btn-depth: 7px; }
-.btn-block { display: flex; width: 100%; }
 
 /* ------------------------------------------------------------------ focus */
 
