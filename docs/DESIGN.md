@@ -47,9 +47,26 @@ Every seat has a **player panel** on its edge, **rotated to face the seat**:
 * `E` panel: `rotate(-90deg)` – right column
 * `W` panel: `rotate(90deg)` – left column
 
-Panel contents (always visible): avatar token + name, cash (big, animated count-up/down), owned
-property chips in group colors with building pips, status badges (섬/island turns, cards held),
-a subtle "your turn" glow ring.
+Panel contents (always visible): avatar token + name, cash (big, animated count-up/down), total
+assets with status badges (섬/island turns, cards held), the owned chips, a subtle "your turn"
+glow ring.
+
+**Player panel (owner review 2026-10-06: "show only what I bought", "far too long").** The card
+lists **only the spaces that player owns**: one chip per city / hub (its landmark picture on the
+group colour, hubs round), colour groups in board order with hubs last (`ownedChips`,
+`src/ui/panels/owned.ts`), wrapping in rows. A complete colour (or every hub) gets a gold rim, a
+landmark a thicker gold rim + ★, villa / building / hotel 1–3 white pips, the festival city a red
+dot. Nothing is drawn for unowned or other players' spaces, and there is no legend; owning nothing
+shows one muted line ("아직 땅이 없어요" / "No land yet"). The chips area is a button (tap: the
+dealer, or a toast, explains it) labelled "소유한 땅 N곳" / "Land owned: N". The card is **only as
+tall as its content**: the panel box (layout.ts, unchanged, so the board never moves) keeps its
+size and the card stands on its seat edge (the box's pre-rotation bottom; fixed view N / E: the
+top edge, `cardOnTop`); the rest of the box is empty and lets taps through. Chip size comes from
+the box (`PlayerPanel.setBox`, `chipSize`): about half the token, shrinking only if the rows would
+not fit. Effects keep their targets on the card: coins, wallets and floats use the card's rect,
+which the view computes from the layout and `PlayerPanel.cardHeight()` (`cardRect`, no DOM read)
+and recomputes when the chip rows change. 1600×1000: 479 → about 180 px tall (two chip rows about
+225); 800×450: 216 → about 100 px. Comparison: `docs/assets/panel-simplify-before.png` / `-after.png`.
 
 #### Fixed view (one human against CPUs)
 

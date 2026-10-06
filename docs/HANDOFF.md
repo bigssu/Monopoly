@@ -12,6 +12,9 @@
   임시 레이어로 날아갔다 제자리로; CPU는 턴마다 중간 세기; 차례가 오면 꿈틀마다 달그락 소리 + 안내 글자 깜박임. DESIGN §2.4).
   이벤트 연출 +1초: 동작 +0.5초, 마지막 장면 +0.5초(상수 하나 `EVENT_EXTEND`, `src/ui/fx/time.ts`; 컷인 4.1 s 이상,
   `docs/MONEY-EVENTS.md` §12.4, `docs/VFX.md` §16).
+  **플레이어 카드 단순화**: 패널은 그 플레이어가 산 도시·교통 칩만 보인다(남의 땅·"1칸 남음"·범례 없음, 없으면 "아직 땅이
+  없어요" 한 줄). 카드 높이는 내용만큼이고 자리 쪽 가장자리에 붙는다(1600×1000 479 → 약 180 px, 보드 크기·위치 그대로).
+  설계 `docs/DESIGN.md` §2.1 "Player panel", 비교 `docs/assets/panel-simplify-before.png`·`-after.png`. 실제 태블릿에서는 아직 못 봤다.
 - 브랜치 `feat/dealer-rules-sound` (원격과 동일, 커밋되지 않은 변경 없음). PR은 아직 없다. PR 대상 브랜치는 `ccr-d6694140-gxcpml`.
 - 마지막 전체 검증(로컬 `npm run release:check`): 단위 422개, e2e 63개 통과, APK에 최신 번들 포함 확인.
 - **CPU 손(2026-10-05, `main`).** CPU가 결정할 때마다 흰 장갑 손(소매는 CPU 색, 아이콘 `cpu-hand`)이 그 자리
