@@ -5,6 +5,7 @@
  *   npm run fun                                  # 400 seeds × players 2/3/4 × rules easy/normal/advanced, 30 rounds
  *   npm run fun -- --seeds 1000 --rounds 30 --players 4 --rules normal --detail
  *   npm run fun -- --mixed                       # normal vs easy CPUs at one table (seats alternate)
+ *   npm run fun -- --rules-version 1             # the rules from before rules version 2 (the "before" tables)
  *
  * Only reads engine output (events + states); it never changes a rule.
  */
@@ -301,14 +302,14 @@ export function summarize(ms: GameMetrics[], players: number): Summary {
   };
 }
 
-export function runConfig(opts: { players: number; rules: RuleLevel; rounds: number | null; seeds: number; from?: number; mixed?: boolean; cpuLevel?: CpuLevel }): Summary {
+export function runConfig(opts: { players: number; rules: RuleLevel; rounds: number | null; seeds: number; from?: number; mixed?: boolean; cpuLevel?: CpuLevel; rulesVersion?: number }): Summary {
   const base = defaultSettings();
   const out: GameMetrics[] = [];
   const from = opts.from ?? 1;
   for (let seed = from; seed < from + opts.seeds; seed++) {
     const players = defaultPlayers(opts.players, { cpu: true, cpuLevel: opts.cpuLevel ?? 'normal' });
     if (opts.mixed) players.forEach((p, i) => (p.cpuLevel = (i + seed) % 2 === 0 ? 'normal' : 'easy'));
-    const settings: Settings = { ...base, players, roundLimit: opts.rounds, rules: opts.rules };
+    const settings: Settings = { ...base, players, roundLimit: opts.rounds, rules: opts.rules, rulesVersion: opts.rulesVersion ?? base.rulesVersion };
     out.push(playMeasured(settings, seed));
   }
   return summarize(out, opts.players);
@@ -338,9 +339,10 @@ function main(): void {
   const roundsArg = arg('rounds') ?? '30';
   const rounds = roundsArg === 'inf' ? null : Number(roundsArg);
   const from = Number(arg('from') ?? 1);
+  const rulesVersion = arg('rules-version') ? Number(arg('rules-version')) : undefined;
   if (flag('mixed')) {
     for (const rules of ['easy', 'normal', 'advanced'] as RuleLevel[]) {
-      const s = runConfig({ players: 4, rules, rounds, seeds, from, mixed: true });
+      const s = runConfig({ players: 4, rules, rounds, seeds, from, mixed: true, rulesVersion });
       console.log(`mixed 2 normal + 2 easy, rules ${rules}: normal CPUs win ${pct(s.normalWinShare ?? NaN)} (fair = 50%)`);
     }
     return;
@@ -353,14 +355,14 @@ function main(): void {
   const t0 = Date.now();
   for (const players of playersList) {
     for (const rules of rulesList) {
-      const s = runConfig({ players, rules, rounds, seeds, from });
+      const s = runConfig({ players, rules, rounds, seeds, from, rulesVersion });
       if (flag('detail')) printDetail(`${players}p ${rules} ${rounds ?? '∞'} rounds`, s);
       rows.push(
         `| ${players} | ${rules} | ${f2(s.rounds)} | ${f2(s.decisionsPerTurn)} | ${pct(s.obviousShare)} | ${f1(s.interactionsPerGame)} (${f1(s.nonTollInteractions)}) | ${f1(s.eventKinds)} | ${f1(s.leadChanges)} | ${pct(s.comeback10)} | ${pct(s.lastToWin10)} | ${pct(s.dullShare)} | ${pct(s.bigSwingShare)} | ${pct(s.winRateBySeat[0]!)} | ${pct(s.winRateBySeat[players - 1]!)} |`,
       );
     }
   }
-  console.log(`\nFun metrics — ${seeds} seeds per row, round limit ${rounds ?? '∞'}, all CPUs normal (${Date.now() - t0} ms)\n`);
+  console.log(`\nFun metrics — ${seeds} seeds per row, round limit ${rounds ?? '∞'}, rules version ${rulesVersion ?? 'current'}, all CPUs normal (${Date.now() - t0} ms)\n`);
   console.log(rows.join('\n'));
 }
 

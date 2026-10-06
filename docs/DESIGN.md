@@ -470,6 +470,46 @@ Singapore (merlion-like fountain → use "lion fountain" generic), Tokyo (torii/
 * The board has **19** cities (G2 has 3, G1/G7 have 2, others 3) — the §3 table is authoritative.
 * The seat that starts is randomized by the UI (P1 has a measurable advantage in simulation).
 
+### 4.2 Rule levels and the fun rules (rules version 2, 2026-10-06)
+
+Setup picks a rule level; the engine only reads flags (`ruleFlags(settings)` in
+`src/engine/settings.ts`). Spec of the first levels: `docs/superpowers/specs/2026-10-04-rule-levels-design.md`.
+Why the fun rules exist and how they were measured: `docs/research/08-fun-analysis.md`; numbers:
+`docs/BALANCE.md` "Fun rules".
+
+| Level | Rules |
+|---|---|
+| 쉬움 easy | §4 only (with §4.1). |
+| 보통 normal (default) | late toll · card choice (one face down) · manual toll pass / shield · typhoon targeting · finish the round after a first bankruptcy + seat bonus · **대축제 Grand Festival** (the festival held again on the same city: ×2 → ×3 → ×5) · and the version-2 rules below marked N |
+| 고급 advanced | normal + hub growth · double-up at Start · dice gauge · the version-2 rule marked A |
+
+Rules version 2 (`Settings.rulesVersion = 2`, set by `defaultSettings()`; a game keeps the version it
+started with, so saves from before play on with the old rules):
+
+* **N 행운 금고 (lucky vault)** — bail, card fines (벌금, 수리비) and double-up losses go into the donation
+  pot instead of the bank, and the bank adds **100** to the pot at the start of every round (from
+  round 2). Landing exactly on Start (or the 복지기금 지급 card) still takes the whole pot.
+* **N 뉴스 속보 (news flash)** — at the start of rounds 4, 8, 12, … one headline, for that round
+  (no repeat until all six have run; one with nothing to hit is skipped):
+  통행료 대목 (every toll ×2) · 지진 (one colour group with buildings: every building there −1 level,
+  landmarks stand) · 건설 붐 (build costs ×½) · 인수 세일 (takeover price 1.5 × value) ·
+  나눔의 날 (the richest gives 10 % of cash to the poorest; MoneyReason `news`) · 금고 대박 (the bank
+  matches the pot, at least 200). The round line shows the active one (`통행료 ×2`, `건설비 ½`, `인수 1.5배`).
+* **N 역전 카드 (comeback cards)** — two cards join the deck (appended, so the original deck order and
+  every easy-rules outcome are unchanged): **땅 맞교환** (choose an opponent's non-landmark city; it
+  becomes yours and your least valuable non-landmark city becomes theirs, buildings stay with the land;
+  a shield blocks it; Pass keeps your city) and **선두 습격** (the richest other player pays you 20 % of
+  their cash; no effect if you are the richest). When the drawer is last by total assets and the leader
+  has ≥ 1.25 × their assets, the first (face-up) card offered comes from 맞교환 / 습격 / 복지기금 지급 /
+  건물 보너스 / 복권.
+* **N 더블 보너스 카드 (doubles bonus card)** — rolling doubles (not the third, which still sends you
+  to the island) draws an event card after the landing resolves, then you roll again. One per roll.
+* **N 모 아니면 도 (all or nothing)** — at the tax office: pay 10 % of cash, or roll one die: 4–6 pays
+  nothing, 1–3 pays double (same expected cost). Either way the money goes to the pot.
+* **A 되찾기 (win-back)** — after a takeover, the player who lost the city may take it back for
+  **1 × value** (not 2 ×) when they land on it, while the taker still owns it. A win-back gives no new
+  right; a shield still blocks it.
+
 ## 5. Engine architecture (`src/engine`)
 
 * `types.ts` — `GameState`, `Player`, `Space`, `Property`, `Phase` (discriminated union),

@@ -180,3 +180,50 @@ Late toll was first ×1.5 … ×3.5 (step 0.5): 76.0 % (normal) / 80.0 % (advanc
 in a late bankruptcy and only 14–18 % reached the round cap — a bust race rather than a final
 stretch. Step 0.25 (×1.25 … ×2.25) keeps roughly a third of games going to the cap. Seat
 advantage is unchanged versus easy; the UI's random start order still applies.
+
+## Fun rules (rules version 2, 2026-10-06)
+
+Why and what: `docs/research/08-fun-analysis.md`; rules: `docs/DESIGN.md` §4.2. "Before" is the same
+code with `--rules-version 1` (it replays the old rules exactly: same numbers as the build before).
+Fun metrics: `npm run fun` (`scripts/fun.ts`, 1,000 seeds per row, CPU normal, start cash 3,000,
+**30 rounds** — the setup default). Easy rules are unchanged (identical rows).
+
+| players · rules | rounds before → after | decisions/turn | interactions/game (non-toll) | event kinds/game | lead changes | comeback R10 | last at R10 wins | dull turns | turns with a 500+ swing |
+|---|---|---|---|---|---|---|---|---|---|
+| **2 · normal** (owner's default) | 24.71 → 24.45 (−1 %) | 1.26 → 1.59 | 10.4 (1.7) → 14.4 (5.2) | 17.5 → 20.7 | 3.2 → 4.2 | 34.5 → 42.1 % | 34.1 → 42.0 % | 15.8 → 9.8 % | 12.0 → 22.3 % |
+| 2 · advanced | 24.88 → 24.31 (−2 %) | 1.33 → 1.70 | 10.5 (1.8) → 14.7 (5.3) | 19.2 → 22.4 | 3.3 → 4.1 | 32.9 → 36.8 % | 32.0 → 36.8 % | 14.3 → 9.1 % | 12.5 → 22.8 % |
+| 3 · normal | 20.97 → 22.40 (+7 %) | 1.28 → 1.57 | 23.4 (4.9) → 32.2 (11.1) | 20.1 → 23.7 | 4.8 → 6.7 | 43.2 → 51.0 % | 13.9 → 20.4 % | 12.7 → 8.8 % | 19.0 → 28.7 % |
+| 3 · advanced | 20.90 → 22.34 (+7 %) | 1.34 → 1.66 | 23.3 (4.9) → 32.6 (11.5) | 21.9 → 25.4 | 5.0 → 6.8 | 42.6 → 51.9 % | 14.1 → 19.5 % | 11.2 → 8.4 % | 19.8 → 29.4 % |
+| 4 · normal | 17.29 → 19.63 (+13.5 %) | 1.30 → 1.56 | 34.0 (8.7) → 47.0 (17.0) | 20.6 → 24.8 | 6.1 → 8.4 | 44.8 → 58.5 % | 6.7 → 12.5 % | 10.7 → 8.0 % | 25.3 → 33.3 % |
+| 4 · advanced | 17.33 → 19.49 (+12.5 %) | 1.36 → 1.65 | 34.4 (8.9) → 47.2 (17.2) | 22.4 → 26.5 | 6.3 → 8.2 | 45.6 → 57.4 % | 8.7 → 11.1 % | 9.3 → 7.5 % | 26.3 → 34.2 % |
+
+"Comeback R10" = the leader by total assets at the start of round 10 does not win; "last at R10 wins" = the
+player in last place then does (fair: 50 % / 33 % / 25 %). 2 players, normal, per game: cards drawn
+4.9 → 12.9 (distinct 4.3 → 9.1), pot collected 1.28 × 207 → 3.51 × 856, city swaps 0.87, raids and
+other card payments between players 0.44 → 1.62, takeovers 0.72 → 1.85.
+
+Seat fairness (1,000 seeds, normal, 30 rounds), seat 1 … last: 2p 49.1 / 50.9 → 51.9 / 48.1 %; 3p
+34.9 / 35.1 / 30.0 → 34.4 / 34.0 / 31.6 %; 4p 27.4 / 25.2 / 24.6 / 22.8 → 25.6 / 28.2 / 25.3 / 20.9 %.
+CPU normal vs easy at one table (2 + 2, seats alternate): normal wins 63.7 → 65.9 % (normal rules),
+59.3 → 63.0 % (advanced), 59.8 % (easy, unchanged).
+
+`npm run sim` (500 seeds, 4 × normal, normal rules), before → after:
+
+| | 15 rounds (engine default) | 30 rounds (setup default) | 30 rounds, 2 players |
+|---|---|---|---|
+| Mean rounds | 13.07 → 13.70 | 17.03 → 19.81 | 24.73 → 24.53 |
+| Ended before the cap | 66.6 → 53.0 % | 97.8 → 94.0 % | 62.4 → 63.6 % |
+| Victory: bankruptcy (2p: last standing) | 57.8 → 43.8 % | 83.2 → 68.8 % | 34.4 → 16.4 % |
+| Victory: triple / line / hubs | 0.2 / 1.8 / 6.6 → 0.8 / 2.6 / 5.8 % | 0.8 / 3.8 / 10.0 → 3.8 / 8.6 / 12.8 % | 3.0 / 10.2 / 14.8 → 5.8 / 23.8 / 17.6 % |
+| Bankruptcy before round 5 / 8 | 0.0 / 1.4 → 0.0 / 1.2 % | 0.0 / 1.4 → 0.0 / 1.2 % | 0 / 0 → 0 / 0 % |
+
+What moves the length (4 players, normal, 30 rounds, 600 seeds, one rule off at a time vs 19.6 with
+all on): lucky vault off 18.5, comeback cards off 18.8, doubles card off 19.0, news off 19.3, all or
+nothing off 19.8. Every rule adds a little money or a little defence, so the first bankruptcy comes
+later; a vault seed of 50 instead of 100 only saves 0.2 rounds and halves the jackpot (624 → 473), so
+it stays 100.
+
+Watch item: in 2-player games more money means more instant set wins (line 10 → 24 %). A city swap
+that would complete a winning set for either side is not offered (before that rule: line 26 %); the
+rest comes from players simply affording more cities. If 2-player games end on a line too often at
+the table, the lever is the line rule (count hubs on the side, or require a built side).
