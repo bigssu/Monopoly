@@ -187,7 +187,7 @@ export const SITUATIONS: Record<string, Situation> = {
     priority: P.big,
     expr: 'cheer',
     takes: [
-      ['같은 색을 전부 모았어요! 독점 완성!', 'You own the whole color set! Monopoly!'],
+      ['같은 색을 전부 모았어요! 독점 완성!', 'You own the whole color set! A full set!'],
       ['대단해요! 한 지역을 통째로 손에 넣었어요!', 'Amazing! You own the whole region!'],
     ],
   },
@@ -244,8 +244,8 @@ export const SITUATIONS: Record<string, Situation> = {
     priority: P.big,
     expr: 'cheer',
     takes: [
-      ['와아! 랜드마크 완성! 이제 아무도 이 땅을 빼앗을 수 없어요!', 'Landmark complete! Nobody can take this land now!'],
-      ['드디어 랜드마크! 이 도시의 자랑이 탄생했어요!', 'A landmark at last! The pride of the city!'],
+      ['와아! 명소 완성! 이제 아무도 이 땅을 빼앗을 수 없어요!', 'Landmark complete! Nobody can take this land now!'],
+      ['드디어 명소! 이 도시의 자랑이 탄생했어요!', 'A landmark at last! The pride of the city!'],
     ],
   },
 
@@ -290,7 +290,7 @@ export const SITUATIONS: Record<string, Situation> = {
     expr: 'point',
     takes: [
       ['이 땅, 인수할 수 있어요! 저라면 빼앗아 오겠어요!', "You can take over this land! I'd grab it!"],
-      ['기회예요! 인수하면 상대의 수입을 막을 수 있어요!', 'Chance! Take it over and cut their income!'],
+      ['기회예요! 인수하면 상대의 수입을 막을 수 있어요!', 'Your shot! Take it over and cut their income!'],
     ],
   },
   'takeover.advice.no': {
@@ -626,13 +626,13 @@ export const SITUATIONS: Record<string, Situation> = {
       ['누가 땅을 노려요! 방패를 쓸까요?', "Someone's after your land! Raise the shield?"],
     ],
   },
-  'olympics.up': {
+  'festival.grand': {
     level: 'min',
     priority: P.big,
     expr: 'cheer',
     takes: [
-      ['올림픽급 축제! 통행료가 더 크게 뛰었어요!', 'An Olympic-sized festival! The toll leaps higher!'],
       ['축제가 또 열렸어요! 이 도시는 이제 무시무시해요!', 'Another festival here! This city is fearsome now!'],
+      ['대축제예요! 통행료가 더 크게 뛰었어요!', 'A Grand Festival! The toll leaps higher!'],
     ],
   },
   'hub.grow': {
@@ -690,6 +690,27 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [['게이지를 보고, 원하는 순간에 손을 떼 보세요!', 'Watch the gauge and let go when you like!']],
   },
 
+  // --- Rules version 2 (docs/research/08-fun-analysis.md) ----------------------------------------
+  'news.tollFever': { level: 'min', priority: P.big, expr: 'nervous', takes: [['뉴스 속보! 이번 라운드는 통행료가 두 배예요! 조심조심!', 'News flash! Tolls are doubled this round! Tread carefully!']] },
+  'news.quake': { level: 'min', priority: P.big, expr: 'surprised', takes: [['뉴스 속보! 지진이에요! 건물들이 흔들려요!', 'News flash! An earthquake! The buildings are shaking!']] },
+  'news.buildBoom': { level: 'min', priority: P.big, expr: 'cheer', takes: [['뉴스 속보! 건설 붐! 이번 라운드는 건설비가 반값이에요!', 'News flash! A building boom — half-price building this round!']] },
+  'news.takeoverSale': { level: 'min', priority: P.big, expr: 'point', takes: [['뉴스 속보! 인수 세일! 이번 라운드는 인수가 싸요!', 'News flash! A takeover sale — takeovers are cheaper this round!']] },
+  'news.shareDay': { level: 'min', priority: P.big, expr: 'laugh', takes: [['뉴스 속보! 나눔의 날이에요! 1등이 꼴찌에게 돈을 나눠요!', 'News flash! Share day — the leader shares with the last player!']] },
+  'news.vaultBoom': { level: 'min', priority: P.big, expr: 'cheer', takes: [['뉴스 속보! 기부함이 두 배로! 출발 칸에 딱 멈추면 대박이에요!', 'News flash! The donation pot doubles — land exactly on Start to grab it!']] },
+  'bonus.card': { level: 'normal', priority: P.event, expr: 'present', takes: [['더블 보너스! 카드 한 장 더 뽑아요!', 'Doubles bonus! Draw an extra card!']] },
+  'comeback.offer': { level: 'normal', priority: P.advice, expr: 'point', takes: [['역전 찬스! 꼴찌에게만 오는 특별한 카드예요!', 'Comeback chance! A special card just for the last player!']] },
+  'card.swap': { level: 'normal', priority: P.event, expr: 'point', takes: [['땅 맞교환 카드! 상대의 도시를 노려 봐요!', "Land Swap! Go after an opponent's city!"]] },
+  'card.raid': { level: 'normal', priority: P.event, expr: 'laugh', takes: [['선두 습격! 1등의 지갑을 털어요!', "Leader Raid! Raid the leader's wallet!"]] },
+  'swap.pick': { level: 'normal', priority: P.advice, expr: 'point', takes: [['어느 도시를 가져올까요? 비싼 도시가 좋겠죠?', 'Which city do you want? A pricey one, maybe?']] },
+  'swap.done': { level: 'min', priority: P.big, expr: 'surprised', takes: [['맞교환 성공! 땅 주인이 바뀌었어요!', 'Swap done! The cities changed hands!']] },
+  'gamble.advice.roll': { level: 'normal', priority: P.advice, expr: 'dice', takes: [['모 아니면 도! 지금은 주사위에 걸어 볼 만해요!', 'All or nothing! A roll looks worth it now!']] },
+  'gamble.advice.pay': { level: 'normal', priority: P.advice, expr: 'thinking', takes: [['지금은 안전하게 세금을 내는 게 좋겠어요.', 'Better to play it safe and pay the tax now.']] },
+  'gamble.win': { level: 'min', priority: P.big, expr: 'cheer', takes: [['면제! 세금이 한 푼도 안 나갔어요!', 'Tax free! Not a coin paid!']] },
+  'gamble.lose': { level: 'min', priority: P.big, expr: 'sad', takes: [['아이고, 세금이 두 배! 기부함만 신났네요!', 'Ouch, double tax! At least the donation pot is happy!']] },
+  'winback.advice': { level: 'normal', priority: P.advice, expr: 'point', takes: [['빼앗긴 땅을 되찾을 기회예요! 지금은 반값이에요!', 'A chance to win back your city — at half the usual price!']] },
+  'winback.done': { level: 'min', priority: P.big, expr: 'cheer', takes: [['되찾았어요! 역시 내 땅은 내 땅!', 'Won it back! Home sweet home!']] },
+  'jackpot.win': { level: 'min', priority: P.big, expr: 'cheer', takes: [['기부함 잭팟! 쌓인 돈을 몽땅 가져가요!', 'Jackpot! The whole donation pot is yours!']] },
+
   // --- Rule explanations (first landing on a kind) ---------------------------------------------
   'explain.sets': {
     level: 'min',
@@ -706,7 +727,7 @@ export const SITUATIONS: Record<string, Situation> = {
   'explain.tax': { level: 'normal', priority: P.info, expr: 'present', takes: [['세무서예요. 가진 현금에 따라 세금을 내요.', 'The tax office. You pay based on your cash.']] },
   'explain.festival': { level: 'normal', priority: P.info, expr: 'present', takes: [['축제 칸이에요! 내 도시 하나에 축제를 열면 통행료가 두 배가 돼요.', 'Festival! Pick one of your cities to double its toll.']] },
   'explain.travel': { level: 'normal', priority: P.info, expr: 'present', takes: [['자유여행 칸이에요! 다음 턴에 원하는 칸으로 바로 날아가요.', 'Travel! Next turn, fly straight to any space.']] },
-  'explain.takeover': { level: 'normal', priority: P.info, expr: 'present', takes: [['통행료를 낸 뒤엔 그 땅을 웃돈 주고 인수할 수 있어요. 랜드마크는 안 돼요!', 'After paying a toll you may buy the land at a premium — except landmarks!']] },
+  'explain.takeover': { level: 'normal', priority: P.info, expr: 'present', takes: [['통행료를 낸 뒤엔 그 땅을 웃돈 주고 인수할 수 있어요. 명소는 안 돼요!', 'After paying a toll you may buy the land at a premium — except landmarks!']] },
 
   // --- Endings -------------------------------------------------------------------------------------
   'win.triple': { level: 'min', priority: P.end, expr: 'trophy', takes: [['트리플 독점 승리! 세 지역을 모두 차지했어요! 축하합니다!', 'Triple monopoly win! Three regions! Congratulations!']] },
@@ -732,11 +753,29 @@ export interface DealerLine {
   expr: DealerExpr;
   ko: string;
   en: string;
+  /** A recorded voice ships (`public/voice/<id>.ogg`); false = shown as text only (VOICE_PENDING). */
+  voice: boolean;
 }
+
+/**
+ * Takes whose Korean voice is not recorded yet (new or reworded lines: the rules version 2 lines,
+ * and the IP rewording 랜드마크 → 명소 / the festival's grand name). They show as text until
+ * `ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs` is run on a machine with the key; then
+ * remove their ids here (the dealer test checks every other line ships its file).
+ */
+export const VOICE_PENDING: ReadonlySet<string> = new Set([
+  'festival.grand.2', 'landmark.done.1', 'landmark.done.2', 'explain.takeover.1',
+  'news.tollFever.1', 'news.quake.1', 'news.buildBoom.1', 'news.takeoverSale.1', 'news.shareDay.1', 'news.vaultBoom.1',
+  'bonus.card.1', 'comeback.offer.1', 'card.swap.1', 'card.raid.1', 'swap.pick.1', 'swap.done.1',
+  'gamble.advice.roll.1', 'gamble.advice.pay.1', 'gamble.win.1', 'gamble.lose.1', 'winback.advice.1', 'winback.done.1', 'jackpot.win.1',
+]);
 
 /** Every take as a flat list (generators, integrity tests). */
 export const DEALER_LINES: readonly DealerLine[] = Object.entries(SITUATIONS).flatMap(([situation, s]) =>
-  s.takes.map(([ko, en], k) => ({ id: `${situation}.${k + 1}`, situation, level: s.level, priority: s.priority, expr: s.expr, ko, en })),
+  s.takes.map(([ko, en], k) => {
+    const id = `${situation}.${k + 1}`;
+    return { id, situation, level: s.level, priority: s.priority, expr: s.expr, ko, en, voice: !VOICE_PENDING.has(id) };
+  }),
 );
 
 const LEVEL_RANK: Record<DealerLevel, number> = { min: 0, normal: 1, full: 2 };

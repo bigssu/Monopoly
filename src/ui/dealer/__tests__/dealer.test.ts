@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { chooseAction, createGame, defaultPlayers, defaultSettings, type GameEvent, type GameState } from '@/engine';
-import { DEALER_LINES, DEALER_SPRITES, SITUATIONS } from '../lines';
+import { DEALER_LINES, DEALER_SPRITES, SITUATIONS, VOICE_PENDING } from '../lines';
 import { DealerDirector, newMemo, pickLine, situationForEvent, situationForPrompt } from '../director';
 
 const PUB = join(__dirname, '..', '..', '..', '..', 'public');
@@ -20,12 +20,24 @@ describe('dealer catalog', () => {
     }
   });
 
-  it('ships a voice file and a duration for every line', () => {
+  it('ships a voice file and a duration for every recorded line, and no stale file for a pending one', () => {
     const manifest = JSON.parse(readFileSync(join(PUB, 'voice', 'manifest.json'), 'utf8')) as Record<string, number>;
     for (const l of DEALER_LINES) {
+      if (!l.voice) {
+        // Text only until recorded (VOICE_PENDING): an old recording of other words must not ship.
+        expect(existsSync(join(PUB, 'voice', `${l.id}.ogg`)), l.id).toBe(false);
+        expect(manifest[l.id], l.id).toBeUndefined();
+        continue;
+      }
       expect(existsSync(join(PUB, 'voice', `${l.id}.ogg`)), l.id).toBe(true);
       expect(manifest[l.id], l.id).toBeGreaterThan(500);
     }
+    for (const id of VOICE_PENDING) expect(DEALER_LINES.some((l) => l.id === id), id).toBe(true);
+  });
+
+  it('uses no name from the reference games in what the dealer says (docs/research/02 §2)', () => {
+    const banned = /올림픽|Olympic|랜드마크|Monopoly|Chance|황금열쇠|우주여행|사회복지기금|세계여행|마블/;
+    for (const l of DEALER_LINES) expect(`${l.ko} ${l.en}`, l.id).not.toMatch(banned);
   });
 
   it('ships every sprite, including each expression a line uses', () => {

@@ -36,6 +36,8 @@ export interface DealerMemo {
 export const newMemo = (): DealerMemo => ({ greeted: false, tollStreak: new Map(), explained: new Set(), leader: null, lowCash: new Set() });
 
 const LOW_CASH = 300;
+/** A donation pot this big is a jackpot when someone collects it. */
+const JACKPOT = 800;
 const board = (s: GameState) => getBoardInfo(s.settings.spacesPerSide ?? 7).board;
 
 /**
@@ -46,7 +48,7 @@ const board = (s: GameState) => getBoardInfo(s.settings.spacesPerSide ?? 7).boar
 const REACTIONS = new Set<GameEvent['type']>([
   'DiceRolled', 'PassedStart', 'PropertyBought', 'CannotAfford', 'Built', 'TollPaid', 'TakenOver', 'TakeoverBlocked',
   'CardUsed', 'SentToIsland', 'Escaped', 'FestivalSet', 'TravelGranted', 'BuildingSold', 'PropertySold', 'Bankrupt',
-  'AuctionEnded', 'MoneyChanged', 'DoubleUpRolled',
+  'AuctionEnded', 'MoneyChanged', 'DoubleUpRolled', 'Gambled', 'CitySwapped',
 ]);
 
 /** Situation for an event, called just before its animation (`when: 'before'`) or after it. */
@@ -103,7 +105,7 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
       return !vs.players[ev.ownerId]!.isCpu && vs.players[ev.payerId]!.isCpu ? 'toll.receive' : 'toll.small';
     }
     case 'TakenOver':
-      return 'takeover.done';
+      return ev.winBack ? 'winback.done' : 'takeover.done';
     case 'TakeoverBlocked':
       return 'takeover.blocked';
     case 'CardDrawn':
@@ -116,9 +118,18 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
       return ev.method === 'served' ? null : 'island.escape';
     case 'FestivalSet':
       if (ev.spaceIndex === null) return null;
-      return ev.previous === ev.spaceIndex ? 'olympics.up' : 'festival.set';
+      return ev.previous === ev.spaceIndex ? 'festival.grand' : 'festival.set';
     case 'CardsOffered':
-      return 'card.choice';
+      return ev.underdog ? 'comeback.offer' : 'card.choice';
+    // Rules version 2 (docs/research/08-fun-analysis.md).
+    case 'NewsFlash':
+      return `news.${ev.id}`;
+    case 'BonusCard':
+      return 'bonus.card';
+    case 'Gambled':
+      return ev.win ? 'gamble.win' : 'gamble.lose';
+    case 'CitySwapped':
+      return 'swap.done';
     case 'DoubleUpOffered':
       return 'doubleup.offer';
     case 'DoubleUpRolled':
@@ -141,6 +152,7 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
     case 'OneAway':
       return 'one.away';
     case 'MoneyChanged':
+      if (ev.reason === 'pot' && ev.delta >= JACKPOT) return 'jackpot.win';
       return ev.reason === 'tax' ? 'tax.pay' : ev.reason === 'donation' && ev.delta < 0 ? 'donation.pay' : null;
     case 'GameOver': {
       const v = ev.result.victory;
@@ -182,7 +194,9 @@ export function situationForPrompt(s: GameState): string | null {
     case 'preRoll':
       return ruleFlags(s.settings).diceGauge ? 'gauge.hint' : 'roll.nudge';
     case 'target':
-      return 'target.pick';
+      return ph.card === 'swap' ? 'swap.pick' : 'target.pick';
+    case 'gamble':
+      return chooseAction(s, p.id).type === 'Gamble' ? 'gamble.advice.roll' : 'gamble.advice.pay';
     case 'useCard':
       if (ph.card === 'shield') return 'use.shield';
       return chooseAction(s, p.id).type === 'UseCard' ? 'use.pass.yes' : 'use.pass.no';
@@ -192,6 +206,7 @@ export function situationForPrompt(s: GameState): string | null {
       return chooseAction(s, p.id).type === 'Build' ? 'build.advice.yes' : 'build.advice.no';
     case 'takeover':
       if (ph.ownerHasShield) return 'takeover.shield';
+      if (ph.winBack) return 'winback.advice';
       return chooseAction(s, p.id).type === 'Takeover' ? 'takeover.advice.yes' : 'takeover.advice.no';
     case 'island':
       return 'island.advice';

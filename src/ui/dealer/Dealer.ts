@@ -123,7 +123,8 @@ export class Dealer {
       this.hideTimer = window.setTimeout(() => token === this.token && this.end(), TAIL_MS * gamePace());
     };
 
-    if (getLang() === 'ko' && this.voiceOn()) {
+    // A line without a recorded voice yet (lines.ts VOICE_PENDING) is shown as text only.
+    if (getLang() === 'ko' && this.voiceOn() && line.voice) {
       void playVoice(line.id, finish).then((ms) => {
         if (token !== this.token) return;
         if (ms === null) this.silent(line, token);
