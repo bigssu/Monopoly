@@ -171,10 +171,50 @@ The table below defines the unchanged seven-space default. Eight/nine insert one
 the Setup preview and playable board. Card destinations, AI, movement, travel, and victory checks use that game profile.
 The 3200-unit SVG canvas and CSS `board / 32` sizing unit remain unchanged.
 Visually, the board is a navy/teal travel-map ring: four special stops are circular waypoints,
-ordinary destinations are separate rounded cards, and group/owner colors appear as small badges
-and seals rather than continuous property bands. Corner indices and cell centers remain unchanged;
+ordinary destinations are separate rounded cards, and group colors appear as a small badge rather
+than continuous property bands. Corner indices and cell centers remain unchanged;
 visible circular corners use matching circular hit regions. These changes reduce specific visual similarities;
 they do not establish legal clearance for a store release.
+
+### Ownership and buildings (owner feedback 2026-10-06: "fill the card with the owner's color, show the building outside the card")
+
+* **Owner fill.** An owned city or hub card is filled with the owner's full player color
+  (`palette.hex`). Its name and price use `inkOn(color)` (`src/content/palette.ts`): white where
+  white reaches 4.5:1, else a deep shade of that color (in the current palette every color takes its
+  deep shade, ≥ 5:1; the palette's `dark` is under 2:1 on its own color). A soft halo (paint-order
+  stroke) sits behind the text. The city art stays on a white plate and the group badge keeps a white
+  ring, so the color group still reads. The price stays visible on owned cards. Taking over a space
+  re-renders the card in the new owner's color (the existing stamp animation plays). When a space
+  goes back to the bank (sale, bankruptcy to the bank), the card returns to the empty look, which is
+  the static base raster.
+* **Pop-out buildings.** A built space shows ONE element for its current level: villa, building,
+  hotel or landmark (`.bb` in `.board-bldgs`, `Board.renderBuilding`). The roof or accent is in the
+  owner's color, with a white rim and a soft shadow; the landmark has a static glow. It stands on
+  the card's inner edge (the edge facing the Stage). 30 % of the box is on the card and 70 % sticks
+  out over the inner area. It is upright for that side's reader (the card text's rotation). In the
+  fixed view (§2.1) the top row is printed upright for S, so its buildings hang below the card (0 %
+  on the card, so the name stays clear) and are capped to the same reach. Box size is a share of the
+  space width: villa 55 %, building 65 %, hotel 75 %, landmark 95 %, with a minimum of about 22 px.
+  The price, badge and city art move down below the part that stands on the card.
+* **Corners.** When both spaces next to an inner corner are built, the one that sticks out further
+  slides away from the corner along its edge until it clears the other's reach. Ties go to the
+  space after the corner; in the fixed view the top row slides. Both shrink by the same factor if
+  that is needed to keep the sliding one on its own space. Geometry: `buildingLayout`
+  (`src/ui/board/geometry.ts`), tested for 7/8/9 per side in both views: inside the board, no two
+  buildings overlap, reach ≤ `BLD_OUT_MAX` (66.5 % of a space width).
+* **Layers.** ring (SVG + base raster) < Stage backdrop (`.board-stage-bg`, now drawn by the board)
+  < buildings < highlight marks < Stage content < tokens < effects. Buildings never take taps
+  (`pointer-events: none`). The Stage's bottom padding (the acting seat's edge) clears `--bld-out`
+  (the deepest reach), so the dice, the roll control and the prompt buttons stay off that edge's
+  buildings. The padding is constant, so nothing moves between prompts. The top keeps its small
+  margin: padding both sides squeezed the 800×450 prompt cards (toll table cut off). So the turn
+  banner can cover the middle of the far row's buildings, and a wide prompt card can cover
+  side-column buildings while it is open.
+* **Build cut-in.** The hero building flies to the pop-out building's box (`MoneyHost.buildingRect`),
+  and the building pops as it lands (`Board.popIcon`: a stepped `scale`, no compositor layer).
+* **Performance.** The fill is part of the live card SVG, which owned spaces already had (no
+  re-raster). There is at most one element per built space, it is static at rest, and it creates no
+  new layer (it paints under the Stage's own layer).
 
 The option is optional in save version 1: an absent value means 7. Saves preserve their board size; unsupported values or
 board-index/array mismatches are rejected. Immutable board profiles permit different-sized simulations to run independently.
