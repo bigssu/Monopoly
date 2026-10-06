@@ -323,11 +323,7 @@ export const MONEY_SPRITES: SpriteDef[] = [
   ...METALS.map((m): SpriteDef => ({ name: `coin_slice_${m}`, cls: 'color', w: SLICE.w, h: SLICE.h, n: 1, fps: 1, loop: false, k: 2, tile: true, edgeOk: true, svg: () => coinSlice(m) })),
   ...METALS.map((m): SpriteDef => ({ name: `coin_top_${m}`, cls: 'color', w: COIN_TOP.w, h: COIN_TOP.h, n: 1, fps: 1, loop: false, k: 2, edgeOk: true, svg: () => coinTop(m) })),
   { name: 'coin_burst', cls: 'color', w: 64, h: 64, n: 6, fps: 20, loop: false, k: 0.5, svg: coinBurst },
-  // Heroes: drawn as inline SVG on the stage (sharp at 60 % of the screen); small baked copies for
-  // the contact sheet and any bitmap use.
-  { name: 'vault', cls: 'color', w: 96, h: 96, n: 2, fps: 1, loop: false, k: 0.3, svg: (i) => vault(i === 1) },
-  { name: 'bank', cls: 'color', w: 96, h: 96, n: 1, fps: 1, loop: false, k: 0.3, svg: () => bank() },
-  { name: 'plot_sign', cls: 'color', w: 64, h: 72, n: 1, fps: 1, loop: false, k: 0.3, svg: () => plotSign() },
-  { name: 'dirt_plot', cls: 'color', w: 128, h: 76, n: 1, fps: 1, loop: false, k: 0.3, svg: () => dirtPlot() },
+  // The heroes (vault, bank, plot sign, dirt plot) are not baked: the stage draws them as inline SVG
+  // (sharp at 60 % of the screen) straight from the functions above.
   ...borrowed,
 ];

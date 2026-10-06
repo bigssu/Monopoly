@@ -12,10 +12,6 @@ export const MONEY_ANIM_NAMES = [
   'coin_top_silver',
   'coin_top_bronze',
   'coin_burst',
-  'vault',
-  'bank',
-  'plot_sign',
-  'dirt_plot',
   'hammer',
   'siren',
   'sparkle4',
@@ -27,7 +23,7 @@ export type MoneyAnimName = (typeof MONEY_ANIM_NAMES)[number];
 /** Paths relative to the app base (public/fx/*). Loaded only by the money stage. */
 export const MONEY_FILES = { json: 'fx/money.json', atlas: 'fx/money.webp' } as const;
 
-export const MONEY_FRAME_TOTAL = 60;
+export const MONEY_FRAME_TOTAL = 55;
 
 /** Nominal size (CSS px at scale 1), frame count, fps, bake shrink, whole-cell frames. */
 export const MONEY_ANIMS: Record<MoneyAnimName, { n: number; fps: number; w: number; h: number; k: number; fixedBox: boolean }> = {
@@ -41,10 +37,6 @@ export const MONEY_ANIMS: Record<MoneyAnimName, { n: number; fps: number; w: num
   coin_top_silver: { n: 1, fps: 1, w: 40, h: 14, k: 2, fixedBox: false },
   coin_top_bronze: { n: 1, fps: 1, w: 40, h: 14, k: 2, fixedBox: false },
   coin_burst: { n: 6, fps: 20, w: 64, h: 64, k: 0.5, fixedBox: false },
-  vault: { n: 2, fps: 1, w: 96, h: 96, k: 0.3, fixedBox: false },
-  bank: { n: 1, fps: 1, w: 96, h: 96, k: 0.3, fixedBox: false },
-  plot_sign: { n: 1, fps: 1, w: 64, h: 72, k: 0.3, fixedBox: false },
-  dirt_plot: { n: 1, fps: 1, w: 128, h: 76, k: 0.3, fixedBox: false },
   hammer: { n: 1, fps: 1, w: 64, h: 64, k: 0.75, fixedBox: false },
   siren: { n: 4, fps: 12, w: 64, h: 64, k: 0.6, fixedBox: false },
   sparkle4: { n: 6, fps: 20, w: 48, h: 48, k: 0.45, fixedBox: false },

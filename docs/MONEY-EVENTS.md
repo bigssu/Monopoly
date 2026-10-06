@@ -180,7 +180,7 @@
 
 - 머니 아틀라스는 **캔버스 VFX 아틀라스와 별개**다. `atlas-color`(512²)·`atlas-mask`(1024²)는 바뀌지 않았고, 머니
   무대만 `money.webp`를 읽는다(디코드 1024×512 = 2 MB).
-- `money.webp` 1024×512 78 KB, `money.json` 8 KB, 타일 3장 3.7 KB. FX 비트맵 전체(기존 262 KB 포함) 약 352 KB
+- `money.webp` 1024×512 72 KB, `money.json` 7 KB, 타일 3장 3.7 KB. FX 비트맵 전체(기존 262 KB 포함) 약 345 KB
   (예산 ≤ 500 KB, `src/content/fx/__tests__/money-atlas.test.ts`가 검사).
 - 코인 셀은 48 공칭 px × DPR 2 × 1.2 = 116 px. 비행 코인 표시 크기(1600×1000에서 약 94 CSS px)에서는 약간 확대된다
   (기획 §2 "픽셀이 보여도 허용"). 히어로(금고·은행·표지판·공사 현장)는 같은 생성 함수의 SVG를 **인라인으로** 그려
