@@ -5,7 +5,7 @@
  */
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
-import { haptic, setHapticsEnabled } from '@/ui/audio/haptics';
+import { haptic } from '@/ui/audio/haptics';
 import { prefs } from '@/ui/shell/prefs';
 import { anim } from '@/ui/fx/time';
 import { FocusTrap } from '@/ui/shell/focus';
@@ -118,7 +118,7 @@ export class GameMenu {
   }
 
   private renderMain(): void {
-    const p = safePrefs();
+    const p = prefs.get();
     this.sheet.innerHTML = '';
     const resume = this.item('play', t('g.menu.resume'), () => this.close(), 'is-primary');
     this.sheet.append(
@@ -132,22 +132,9 @@ export class GameMenu {
         this.close();
         this.hnd.onSettings();
       }),
-      this.toggleItem('sound-on', 'sound-off', t('g.menu.sound'), p.sound, (v) => {
-        try {
-          prefs.set({ sound: v });
-        } catch {
-          /* prefs unavailable */
-        }
-        sfx.setMuted(!v);
-      }),
-      this.toggleItem('vibrate', 'vibrate', t('g.menu.haptics'), p.haptics, (v) => {
-        try {
-          prefs.set({ haptics: v });
-        } catch {
-          /* prefs unavailable */
-        }
-        setHapticsEnabled(v);
-      }),
+      // main.ts applies every pref change (prefs.onChange → applyPrefs).
+      this.toggleItem('sound-on', 'sound-off', t('g.menu.sound'), p.sound, (v) => prefs.set({ sound: v })),
+      this.toggleItem('vibrate', 'vibrate', t('g.menu.haptics'), p.haptics, (v) => prefs.set({ haptics: v })),
       this.item('save', t('g.menu.saveQuit'), () => {
         this.close();
         this.hnd.onSaveQuit();
@@ -176,14 +163,5 @@ export class GameMenu {
     const b = h('button', { class: 'menu-x', type: 'button', 'aria-label': t('g.menu.close') }, iconEl('close', 'ico'));
     b.addEventListener('click', () => this.close());
     return b;
-  }
-}
-
-function safePrefs(): { sound: boolean; haptics: boolean } {
-  try {
-    const p = prefs.get();
-    return { sound: p.sound, haptics: p.haptics };
-  } catch {
-    return { sound: true, haptics: true };
   }
 }
