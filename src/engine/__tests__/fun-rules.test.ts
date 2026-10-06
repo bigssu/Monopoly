@@ -270,6 +270,8 @@ describe('comeback cards', () => {
       own(st, 31, 0, 0);
       st.phase = { kind: 'target', playerId: 0, card: 'swap', options: [2, 25, 26, 28, 30] };
     });
+    // A swap never decides the game: Hanoi (which would hand them the line) is not even offered.
+    expect(swapOptions(s, 0)).toEqual([25, 26, 28, 30]);
     // Taking a side-D city breaks their line instead: fine. Hanoi alone: keep.
     expect(chooseAction(s, 0)).not.toEqual({ type: 'ChooseTarget', playerId: 0, spaceIndex: 2 });
     expect(chooseAction(edit(s, (st) => (st.phase = { kind: 'target', playerId: 0, card: 'swap', options: [2] })), 0)).toEqual(pass(0));

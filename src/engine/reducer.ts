@@ -39,6 +39,7 @@ import {
   round10,
   sellBuildingValue,
   sellPropertyValue,
+  setVictory,
   takeoverPrice,
   tollOf,
   totalAssets,
@@ -1026,12 +1027,21 @@ function comebackCardId(ctx: Ctx): CardId {
   return COMEBACK_CARD_IDS[ctx.rng.int(COMEBACK_CARD_IDS.length)]!;
 }
 
-/** Swap card targets: opponents' cities below a landmark, when `pid` has a non-landmark city to give. */
+/**
+ * Swap card targets: opponents' cities below a landmark, when `pid` has a non-landmark city to give.
+ * A swap never decides the game: a trade that would complete a winning set (독점) for either side is
+ * not offered (sim: it made 26 % of 2-player games end on a line won by a card).
+ */
 export function swapOptions(s: GameState, pid: PlayerId): number[] {
-  if (swapGive(s, pid) === null) return [];
+  const gave = swapGive(s, pid);
+  if (gave === null) return [];
   return getBoardInfo(s.settings.spacesPerSide ?? 7).cityIndices.filter((i) => {
     const pr = propertyAt(s, i);
-    return pr.owner !== null && pr.owner !== pid && pr.level < ECONOMY.maxLevel;
+    if (pr.owner === null || pr.owner === pid || pr.level >= ECONOMY.maxLevel) return false;
+    const after: GameState = { ...s, properties: s.properties.map((q) => (q ? { ...q } : q)) };
+    after.properties[i]!.owner = pid;
+    after.properties[gave]!.owner = pr.owner;
+    return !setVictory(after, pid) && !setVictory(after, pr.owner);
   });
 }
 
