@@ -10,6 +10,8 @@
   기본값(15/15) 그대로면 한 번만 30/30으로 옮기고(`prefs.ts migrateDefaults`, `defaultsRev` 2), 직접 고른 값은 둔다.
   주사위: 미는 속도만큼 멀리, 화면 가장자리에서 튕김(손 떼는 속도 → 출발 속도·시간 1.1–1.9초, 벽 = 화면 가장자리, 보드·패널 위
   임시 레이어로 날아갔다 제자리로; CPU는 턴마다 중간 세기; 차례가 오면 꿈틀마다 달그락 소리 + 안내 글자 깜박임. DESIGN §2.4).
+  이벤트 연출 +1초: 동작 +0.5초, 마지막 장면 +0.5초(상수 하나 `EVENT_EXTEND`, `src/ui/fx/time.ts`; 컷인 4.1 s 이상,
+  `docs/MONEY-EVENTS.md` §12.4, `docs/VFX.md` §16).
 - 브랜치 `feat/dealer-rules-sound` (원격과 동일, 커밋되지 않은 변경 없음). PR은 아직 없다. PR 대상 브랜치는 `ccr-d6694140-gxcpml`.
 - 마지막 전체 검증(로컬 `npm run release:check`): 단위 422개, e2e 63개 통과, APK에 최신 번들 포함 확인.
 - **CPU 손(2026-10-05, `main`).** CPU가 결정할 때마다 흰 장갑 손(소매는 CPU 색, 아이콘 `cpu-hand`)이 그 자리
