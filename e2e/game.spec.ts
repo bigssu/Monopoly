@@ -184,9 +184,8 @@ test.describe('game screen', () => {
     await page.screenshot({ path: `${SHOTS}/game-anim-1600x1000.png` });
     // Tap to fast-forward, then let it keep playing.
     await page.mouse.click(800, 500);
-    await page.waitForTimeout(6000);
-    const s = await page.evaluate(() => window.__lotAndRoll!.getState()?.turn ?? 0);
-    expect(s).toBeGreaterThan(2);
+    // The game keeps going (a CPU's thrown roll takes 1.2-1.6 s, the old tumble 1 s: poll, not a fixed wait).
+    await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()?.turn ?? 0), { timeout: 20_000 }).toBeGreaterThan(2);
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });
