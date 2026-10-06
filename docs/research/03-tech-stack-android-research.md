@@ -454,11 +454,11 @@ GET https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Ju
 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36
 ```
 
-Result: HTTP 200, 295 KB of CSS, **423 `@font-face` blocks** (Noto Sans KR 124 at weight 400 plus 124 at 700, Jua 87, Black Han Sans 88), every `src` is `format('woff2')`, and Korean is split by `unicode-range` into numbered subsets. The full, unmodified response is saved next to this report: `docs/research/03-fonts-google-css2-raw.css`. The `fonts.gstatic.com` files download with HTTP 200 (verified for Jua latin: 16,620 bytes and Noto Sans KR latin: 26,004 bytes).
+Result: HTTP 200, 295 KB of CSS, **423 `@font-face` blocks** (Noto Sans KR 124 at weight 400 plus 124 at 700, Jua 87, Black Han Sans 88), every `src` is `format('woff2')`, and Korean is split by `unicode-range` into numbered subsets. The `fonts.gstatic.com` files download with HTTP 200 (verified for Jua latin: 16,620 bytes and Noto Sans KR latin: 26,004 bytes).
 
 Key facts:
 
-- **Noto Sans KR is variable**. With `wght@400;700` the API returns the *same* woff2 URL for both weights (124 URLs shared), i.e., one variable file per subset. Requesting `wght@100..900` returns `font-weight: 100 900;` with the same URL family (`v39/PbykFmXiEBPT4ITbgNA5Cgm20xz64px_1hVWr0wuPNGmlQNMEfD4.{0..119}.woff2`). Raw response saved as `docs/research/03-fonts-noto-sans-kr-variable-raw.css`.
+- **Noto Sans KR is variable**. With `wght@400;700` the API returns the *same* woff2 URL for both weights (124 URLs shared), i.e., one variable file per subset. Requesting `wght@100..900` returns `font-weight: 100 900;` with the same URL family (`v39/PbykFmXiEBPT4ITbgNA5Cgm20xz64px_1hVWr0wuPNGmlQNMEfD4.{0..119}.woff2`).
 - Korean subset URL pattern: `<base>.{N}.woff2` with N = 0..119 (Noto), 2..119 (Jua, 86 files plus 1 latin), 2..119 (Black Han Sans, 87 files plus 1 latin). Subset **119** of Jua and Black Han Sans is the "most common Hangul syllables" file (range starts `U+20-22, U+27-2a ... U+ac00, U+ace0, U+ae30, U+b2e4 ...`).
 - Total size if every subset is bundled: Noto Sans KR about **3.4 MB** (124 variable files), Jua about **853 KB**, Black Han Sans about **574 KB**.
 - Base URLs (append `.{N}.woff2`):
