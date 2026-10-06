@@ -460,10 +460,6 @@ export function setFrameRate(hz: FrameRate): void {
   requantizeAll();
 }
 
-export function frameRate(): FrameRate {
-  return fps;
-}
-
 /** A JS-driven animation step; return `false` to unregister. */
 export type FrameTick = (now: number) => boolean | void;
 const ticks = new Set<FrameTick>();

@@ -78,7 +78,6 @@ export function currentDevice(): DeviceInfo {
 }
 
 export const lowerTier = (t: MoneyTier): MoneyTier => (t === 'high' ? 'mid' : 'low');
-export const raiseTier = (t: MoneyTier): MoneyTier => (t === 'low' ? 'mid' : 'high');
 const rank = (t: MoneyTier): number => MONEY_TIERS.indexOf(t);
 
 /** Settings → 연출 해상도 / 3D 연출. */

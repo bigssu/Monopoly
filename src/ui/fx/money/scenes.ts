@@ -1443,5 +1443,4 @@ export function bankruptcy(st: MoneyStage, a: BankruptcyArgs): MoneyPlay {
 
 /** Every scene, by name (demo / wiring tables). */
 export const SCENES = { transfer, purchase, build, toll, tollWaived, takeover, collectFromAll, payAll, receive, pay, sell, bankruptcy } as const;
-export type SceneName = keyof typeof SCENES;
 export type { Metal };

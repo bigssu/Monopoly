@@ -77,6 +77,3 @@ export function orientationFor(players: readonly Who[]): Orientation {
     readers: (seats) => (fixed ? ['S'] : seats.map((s) => map[s])),
   };
 }
-
-/** The table-top model with seats drawn where they sit (demos, tests). */
-export const TABLE_VIEW: Orientation = orientationFor([]);

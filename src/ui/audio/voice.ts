@@ -41,12 +41,6 @@ function load(ctx: AudioContext, id: string): Promise<AudioBuffer | null> {
   return p;
 }
 
-/** Warm the cache (e.g. advice lines for the prompt that is about to open). */
-export function preloadVoice(id: string): void {
-  const out = host?.voiceOut();
-  if (out) void load(out.ctx, id);
-}
-
 /**
  * Play a line; resolves with its duration in ms once it has *started*, or null when it cannot
  * play (sound off, locked context, missing/undecodable file, or superseded while loading).

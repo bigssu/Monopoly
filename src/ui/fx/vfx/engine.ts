@@ -56,8 +56,6 @@ export interface FxOptions extends CoordSource {
   seed?: number;
   /** Register `window.__fx` (dev only). */
   dev?: boolean;
-  /** @deprecated (single-canvas budget); the pooled canvases have fixed sizes (present.ts). Ignored. */
-  maxBackingPixels?: number;
   /** Most FX canvases shown at once (each one is a GPU layer while shown). Default 3. */
   maxCanvases?: number;
   /** Canvas pool (size-class indexes, present.ts SLOT_CLASSES); default SLOT_POOL. */

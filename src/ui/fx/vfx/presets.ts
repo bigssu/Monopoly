@@ -48,7 +48,6 @@ export const GIFT = '#9BE7B4';
 export const SKY = '#6EC6F0';
 export const RED = '#E8564F';
 export const GREY = '#8E97A6';
-export const AMBER = '#F5A25D';
 export const DUST = '#E8DCC6';
 export const SMOKE = '#DDE2EA';
 export const CONFETTI = ['#E8564F', '#4A6CF7', '#3DBB6E', '#F2B633', '#9B6BF2', '#F5844A', '#2EC4B6', '#F272A8'] as const;

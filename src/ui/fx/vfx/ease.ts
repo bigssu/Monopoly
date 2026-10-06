@@ -6,13 +6,11 @@
  */
 export type EaseFn = (t: number) => number;
 
-export const linear: EaseFn = (t) => t;
 export const inQuad: EaseFn = (t) => t * t;
 export const outQuad: EaseFn = (t) => 1 - (1 - t) * (1 - t);
 export const inOutQuad: EaseFn = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 export const inCubic: EaseFn = (t) => t * t * t;
 export const outCubic: EaseFn = (t) => 1 - (1 - t) ** 3;
-export const inOutCubic: EaseFn = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 export const outSine: EaseFn = (t) => Math.sin((t * Math.PI) / 2);
 
 /** easeOutBack with overshoot constant c1 (1.70158 = the classic 10 % overshoot). */

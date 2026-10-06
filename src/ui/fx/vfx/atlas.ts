@@ -321,10 +321,4 @@ export function loadAtlas(baseUrl = base()): Promise<FxAtlas | null> {
   return loading;
 }
 
-/** Test helper: forget the cached load. */
-export function resetAtlasLoad(): void {
-  loading = null;
-  loadingJson = null;
-}
-
 export { fxFrameKey };

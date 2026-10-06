@@ -190,10 +190,6 @@ export function money(n: number): string {
   return t('g.money', { n: fmtMoney(n) });
 }
 
-export function signedMoney(n: number): string {
-  return (n > 0 ? '+' : n < 0 ? '−' : '') + t('g.money', { n: fmtMoney(Math.abs(n)) });
-}
-
 export function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }

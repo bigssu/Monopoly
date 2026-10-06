@@ -504,5 +504,3 @@ const en: Record<string, string> = {
 };
 
 registerStrings({ ko, en });
-
-export const GAME_STRING_KEYS = Object.keys(ko);
