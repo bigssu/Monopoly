@@ -274,3 +274,74 @@ export function buildingGeom(index: number, level: BuildingLevel, size: SpacesPe
   levels[index] = level;
   return buildingLayout(levels, size, uprightTop, minSize)[index] ?? null;
 }
+
+// ---------------------------------------------------------------------------------------------
+// The card face under a standing building (Board.sideSpaceMarkup). Local card frame: lw × DEPTH,
+// y = 0 at the inner edge (the edge the building stands on), y = DEPTH at the outer edge. A
+// standing building covers y = 0 to onCard; the group pill, the price and the city art move down
+// below it, measured from the same `onCard` buildingLayout gives the building (one source).
+// ---------------------------------------------------------------------------------------------
+
+/** Card inset of the face's background (local units). */
+export const CARD_INSET = 7;
+/** Price font size: up to 4 characters, and 5 or more. */
+export const PRICE_SIZE = { short: 70, long: 54 } as const;
+/**
+ * The number font's line box (Noto Sans KR, `--font-num`: hhea ascent 1160 / descent 288 per 1000
+ * em). The price's rendered box is this tall, not just its digits, so the clearance uses it.
+ */
+export const NUM_ASCENT = 1.16;
+export const NUM_DESCENT = 0.288;
+/** Gap between a building's on-card part and the content moved below it (local units). */
+export const BLD_CLEAR = 6;
+/** Content offset of a card with no building standing on it (the bare look, base raster). */
+const REST_DY = 6;
+/** The city art never reaches past this (the name sits below it). */
+const ART_BOTTOM = 278;
+
+export interface CardRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface CardFace {
+  /** How far the content moved down from its rest place. */
+  dy: number;
+  /** Group pill. */
+  pill: CardRect;
+  /** Price text: baseline, font size and its line box (null on a space without a price). */
+  price: { baseline: number; size: number; box: CardRect } | null;
+  /** City art (square); on an owned card its light plate reaches 10 above and below it. */
+  art: CardRect;
+}
+
+/**
+ * Layout of a side card's face (local units) for a building standing `onCard` deep on it (0 = none).
+ * `priceChars`: the price string's length (0 = no price: not a city / hub).
+ */
+export function cardFace(lw: number, onCard: number, priceChars: number): CardFace {
+  const m = CARD_INSET;
+  const isProp = priceChars > 0;
+  const priceSize = priceChars >= 5 ? PRICE_SIZE.long : PRICE_SIZE.short;
+  // Tops at dy = 0 of what must clear the building: pill, price line box (tallest size), art plate.
+  const pillTop = m + 16;
+  const priceBase = m + 67;
+  const priceTop = priceBase - NUM_ASCENT * PRICE_SIZE.short;
+  const artTop = (isProp ? 99 : 66) - 10;
+  const top = Math.min(pillTop, isProp ? priceTop : pillTop, artTop);
+  const dy = onCard > 0 ? Math.max(REST_DY, Math.ceil(onCard + BLD_CLEAR - top)) : REST_DY;
+  const iconY = (isProp ? 99 : 66) + dy;
+  const room = 266 - iconY;
+  const iconSize = Math.max(Math.min(80, ART_BOTTOM - iconY), Math.min(isProp ? 152 : 176, room));
+  const baseline = priceBase + dy;
+  return {
+    dy,
+    pill: { x: m + 16, y: pillTop + dy, w: 74, h: 52 },
+    price: isProp
+      ? { baseline, size: priceSize, box: { x: m, y: baseline - NUM_ASCENT * priceSize, w: lw - 2 * m, h: (NUM_ASCENT + NUM_DESCENT) * priceSize } }
+      : null,
+    art: { x: (lw - iconSize) / 2, y: iconY, w: iconSize, h: iconSize },
+  };
+}

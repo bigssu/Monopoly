@@ -327,7 +327,11 @@ they do not establish legal clearance for a store release.
   fixed view (§2.1) the top row is printed upright for S, so its buildings hang below the card (0 %
   on the card, so the name stays clear) and are capped to the same reach. Box size is a share of the
   space width: villa 55 %, building 65 %, hotel 75 %, landmark 95 %, with a minimum of about 22 px.
-  The price, badge and city art move down below the part that stands on the card.
+  The price, badge and city art move down below the part that stands on the card, with a 6-unit gap
+  measured to the price's full line box (Noto Sans KR ascent 1.16 em, not just the digits). The
+  offset comes from the same `onCard` the building uses (`cardFace`, `src/ui/board/geometry.ts`),
+  tested for every level, side, 7/8/9 per side, both views and the four tested viewports' minimum
+  building sizes.
 * **Corners.** When both spaces next to an inner corner are built, the one that sticks out further
   slides away from the corner along its edge until it clears the other's reach. Ties go to the
   space after the corner; in the fixed view the top row slides. Both shrink by the same factor if

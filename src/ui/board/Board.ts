@@ -11,7 +11,7 @@ import { anim, animSpeed, D, gridTimeout, isSkipping, noMotion, onFrame } from '
 import { esc } from '@/ui/shell/dom';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
-import { BLD_OUT_MAX, DEPTH, INNER, VB, buildingGeom, buildingLayout, getBoardGeometry, tokenSpot, type BuildingGeom, type BuildingLevel, type SpaceGeom } from './geometry';
+import { BLD_OUT_MAX, CARD_INSET, DEPTH, INNER, VB, buildingGeom, buildingLayout, cardFace, getBoardGeometry, tokenSpot, type BuildingGeom, type BuildingLevel, type SpaceGeom } from './geometry';
 import { EASE } from '@/ui/fx/motion';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -150,7 +150,7 @@ interface SpaceView {
 function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: readonly Player[]): string {
   const w = g.lw;
   const hgt = g.lh;
-  const m = 7;
+  const m = CARD_INSET;
   const bar = sp.kind === 'city' || sp.kind === 'hub' ? groupColor(sp)! : (SPECIAL_BAR[sp.kind] ?? '#CBD2DE');
   const isProp = sp.kind === 'city' || sp.kind === 'hub';
   const owner = v.owner !== null ? players[v.owner] : undefined;
@@ -165,21 +165,19 @@ function sideSpaceMarkup(sp: SpaceDef, g: SpaceGeom, v: SpaceView, players: read
   // A compact category badge makes adjacent destinations read as separate cards (and keeps the
   // color group readable on an owner-filled card: white ring).
   // A standing pop-out building covers the top `bldOn` of the card (geometry.ts buildingLayout):
-  // badge and price move down below it, the city art shrinks into what is left above the name.
-  const dy = Math.max(0, Math.round(v.bldOn + 22 - 16));
+  // badge, price and city art move down below it (geometry.ts cardFace, from the same numbers).
+  const price = isProp ? fmtMoney(sp.price ?? 0) : '';
+  const face = cardFace(w, v.bldOn, price.length);
+  const dy = face.dy;
   parts.push(
-    `<rect class="sp-group-badge${oc ? ' on-owner' : ''}" x="${m + 16}" y="${m + 16 + dy}" width="74" height="52" rx="26" fill="${bar}"/>`,
+    `<rect class="sp-group-badge${oc ? ' on-owner' : ''}" x="${face.pill.x}" y="${face.pill.y}" width="${face.pill.w}" height="${face.pill.h}" rx="26" fill="${bar}"/>`,
   );
   const txt = oc ? ' on-owner' : '';
-  if (isProp) {
-    const price = fmtMoney(sp.price ?? 0);
-    parts.push(textEl(`sp-price${txt}`, w / 2, m + 67 + dy, price.length >= 5 ? 54 : 70, price));
-  }
+  if (face.price) parts.push(textEl(`sp-price${txt}`, w / 2, face.price.baseline, face.price.size, price));
   // Landmark icon (on an owner-filled card: on a light plate so the city art keeps its colors).
-  const iconY = (isProp ? 99 : 66) + dy;
-  const iconSize = Math.max(80, Math.min(isProp ? 152 : 176, 266 - iconY));
+  const { y: iconY, w: iconSize } = face.art;
   if (oc) parts.push(`<rect class="sp-plate" x="${(w - iconSize) / 2 - 14}" y="${iconY - 10}" width="${iconSize + 28}" height="${iconSize + 20}" rx="44"/>`);
-  parts.push(iconAt(spaceIcon(sp), (w - iconSize) / 2, iconY, iconSize));
+  parts.push(iconAt(spaceIcon(sp), face.art.x, iconY, iconSize));
   // Name.
   const name = loc(sp.short);
   const fit = fitLabel(name, w - 40, 92);

@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { BLD_ON_CARD, BLD_OUT_MAX, BLD_SCALE, DEPTH, INNER, VB, buildingGeom, buildingLayout, getBoardGeometry, tokenSpot, type BuildingGeom } from './geometry';
+import {
+  BLD_CLEAR,
+  BLD_ON_CARD,
+  BLD_OUT_MAX,
+  BLD_SCALE,
+  DEPTH,
+  INNER,
+  VB,
+  buildingGeom,
+  buildingLayout,
+  cardFace,
+  getBoardGeometry,
+  tokenSpot,
+  type BuildingGeom,
+  type CardRect,
+  type SpaceGeom,
+} from './geometry';
 
 describe('board geometry profiles', () => {
   for (const size of [7, 8, 9] as const) {
@@ -152,5 +168,107 @@ describe('pop-out buildings', () => {
     expect(a.size).toBe(b.size);
     expect(VB - DEPTH - (a.x + a.size)).toBeGreaterThanOrEqual((1 - BLD_ON_CARD) * b.size - 1e-6);
     expect(overlaps(a, b)).toBe(false);
+  });
+});
+
+/**
+ * A card-local rect (lw × DEPTH frame, y = 0 at the inner edge) in board units, axis-aligned:
+ * Board.spaceTransform for a side space, translate(cx cy) rotate(rot) translate(-lw/2 -lh/2).
+ */
+function toBoard(g: SpaceGeom, r: CardRect): CardRect {
+  const a = (g.rot * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const pts = [
+    [r.x, r.y],
+    [r.x + r.w, r.y],
+    [r.x, r.y + r.h],
+    [r.x + r.w, r.y + r.h],
+  ].map(([lx, ly]) => {
+    const x = lx! - g.lw / 2;
+    const y = ly! - g.lh / 2;
+    return [g.cx + x * c - y * s, g.cy + x * s + y * c] as const;
+  });
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+}
+
+/** How deep two rects overlap (≤ 0: apart by at least that much). */
+function overlapDepth(a: CardRect, b: CardRect): number {
+  return Math.min(a.x + a.w - b.x, b.x + b.w - a.x, a.y + a.h - b.y, b.y + b.h - a.y);
+}
+
+describe('card face under a building', () => {
+  // Board px at the four tested viewports (800×450, 1024×768, 1600×1000, 2560×1600; the same in
+  // the table and the fixed view) → Board.minBuilding (about 22 px), plus no minimum.
+  const MIN_SIZES = [0, ...[438, 653, 972, 1560].map((px) => (22 * VB) / px)];
+
+  for (const size of [7, 8, 9] as const) {
+    for (const upright of [false, true]) {
+      it(`${size} per side${upright ? ', fixed view' : ''}: no building's on-card part covers the pill, price or art`, () => {
+        const geom = getBoardGeometry(size, upright);
+        const n = geom.length;
+        // Every level alone on every side space, and every level pair on both neighbours of every
+        // corner (the slide rule shrinks both).
+        const layouts: number[][] = [];
+        for (let i = 0; i < n; i++) {
+          if (geom[i]!.corner) continue;
+          for (const lv of [1, 2, 3, 4]) layouts.push(geom.map((_, j) => (j === i ? lv : 0)));
+        }
+        for (let a = 1; a <= 4; a++) {
+          for (let b = 1; b <= 4; b++) {
+            layouts.push(geom.map((_, j) => ((j + 1) % (size + 1) === 0 ? a : j % (size + 1) === 1 ? b : 0)));
+          }
+        }
+        let checked = 0;
+        for (const levels of layouts) {
+          for (const minSize of MIN_SIZES) {
+            buildingLayout(levels, size, upright, minSize).forEach((b, i) => {
+              if (!b) return;
+              const g = geom[i]!;
+              // The building's on-card part: its box clipped to its own space.
+              const x0 = Math.max(b.x, g.x);
+              const y0 = Math.max(b.y, g.y);
+              const x1 = Math.min(b.x + b.size, g.x + g.w);
+              const y1 = Math.min(b.y + b.size, g.y + g.h);
+              const on: CardRect = { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+              if (b.hanging) expect(on.w * on.h, `${i} hangs`).toBeCloseTo(0, 6);
+              for (const chars of [0, 3, 4, 5, 6]) {
+                const face = cardFace(g.lw, b.onCard, chars);
+                const items: Array<[string, CardRect]> = [
+                  ['pill', face.pill],
+                  // The art's light plate (owned cards) reaches 10 above and below it.
+                  ['art', { x: face.art.x, y: face.art.y - 10, w: face.art.w, h: face.art.h + 20 }],
+                ];
+                if (face.price) items.push(['price', face.price.box]);
+                for (const [what, r] of items) {
+                  const tag = `${size}${upright ? 'u' : ''} space ${i} lv ${levels[i]} min ${minSize.toFixed(0)} ${what} (${chars})`;
+                  // Above the name (the art floor keeps it there however far the content moves).
+                  expect(r.y + r.h, tag).toBeLessThanOrEqual(300);
+                  if (on.w * on.h > 0) expect(overlapDepth(toBoard(g, r), on), tag).toBeLessThanOrEqual(-BLD_CLEAR + 1e-6);
+                }
+              }
+              checked++;
+            });
+          }
+        }
+        expect(checked).toBeGreaterThan(100);
+      });
+    }
+  }
+
+  it('a card without a building keeps its rest layout; a deeper building moves the content further', () => {
+    const W = getBoardGeometry(7)[1]!.lw;
+    const rest = cardFace(W, 0, 3);
+    expect(rest.dy).toBe(6);
+    expect(rest.price!.baseline).toBe(80);
+    expect(rest.art).toEqual({ x: (W - 152) / 2, y: 105, w: 152, h: 152 });
+    let last = rest.dy;
+    for (const lv of [1, 2, 3, 4] as const) {
+      const f = cardFace(W, buildingGeom(2, lv, 7)!.onCard, 3);
+      expect(f.dy).toBeGreaterThan(last);
+      last = f.dy;
+    }
   });
 });
