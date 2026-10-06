@@ -1,6 +1,4 @@
 /** VFX engine public API (docs/VFX.md §3, §13–14). */
-export { createFx, backingScale, type FxHandle, type FxOptions, type FxPlay, type FxQuality, type FxStats } from './engine';
-export { createCoords, SEAT_ANGLE, SEAT_DIR, seatLocal, type CoordSource, type Coords, type RectLike } from './coords';
-export { PRESETS, buildPreset, type PresetName, type PresetParams, type Anchor } from './presets';
-export { TIER_CAP, t, timeline, type FxDom, type HighlightTarget, type Timeline, type Tier } from './timeline';
-export { loadAtlas, type FxAtlas } from './atlas';
+export { createFx, type FxHandle, type FxPlay, type FxStats } from './engine';
+export type { PresetName, PresetParams } from './presets';
+export type { HighlightTarget } from './timeline';
