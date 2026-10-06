@@ -12,28 +12,11 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import type { HandRecord } from '../src/ui/stage/CpuHand';
+import { boot, checkPress, watchConsole } from './helpers';
 import { OWNED_SAMPLE, checkOwnedBoard, craftOwned } from './owned-board';
 
 const SHOTS = 'e2e/__screenshots__';
 const ANGLE: Record<string, number> = { S: 0, E: -90, N: 180, W: 90 };
-
-function watchConsole(page: Page): string[] {
-  const out: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error' && m.type() !== 'warning') return;
-    if (/favicon|Failed to load resource|preloaded using link preload/.test(`${m.text()} ${m.location().url ?? ''}`)) return;
-    out.push(`${m.type()}: ${m.text()}`);
-  });
-  page.on('pageerror', (e) => out.push(`pageerror: ${String(e)}`));
-  return out;
-}
-
-async function boot(page: Page, w: number, h: number): Promise<void> {
-  await page.setViewportSize({ width: w, height: h });
-  await page.goto('/?dev=1');
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
-  await page.evaluate(() => document.fonts.ready);
-}
 
 /**
  * A seeded 4-player game: `humans` are the human seats (the rest are CPUs). Prompt timer off.
@@ -189,16 +172,6 @@ async function handLog(page: Page): Promise<HandRecord[]> {
   return page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.cpuHand().log)) as HandRecord[]);
 }
 
-function checkPress(r: HandRecord, ctx: string): void {
-  const where = `${ctx} ${r.seat} ${r.phase}:${r.action} pressed=${r.pressed} tip=${JSON.stringify(r.tip)} at=${JSON.stringify(r.at)}`;
-  expect(r.found, `control on screen: ${where}`).toBe(true);
-  expect(r.tipInside, `fingertip on the control: ${where}`).toBe(true);
-  expect(r.pending, `pressed before the dispatch: ${where}`).toBe(true);
-  const a = JSON.parse(r.act) as { type: string; spaceIndex?: number };
-  if (r.target === 'space') expect(r.pressed, where).toBe(`space:${a.spaceIndex}`);
-  else expect(r.pressed, where).toBe(`${a.type}${a.spaceIndex !== undefined ? `:${a.spaceIndex}` : ''}`);
-}
-
 /** Every panel sits inside the viewport and its card inside the panel (no clipped content). */
 async function expectPanelsFit(page: Page): Promise<void> {
   const out = await page.evaluate(() => {
@@ -245,8 +218,8 @@ test.describe('fixed view: one human vs CPUs', () => {
   ]) {
     test(`human seated ${run.human}: 20+ turns never turn the screen (${run.vp.w}x${run.vp.h})`, async ({ page }) => {
       test.setTimeout(420_000);
-      const logs = watchConsole(page);
-      await boot(page, run.vp.w, run.vp.h);
+      const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource|preloaded using link preload/ });
+      await boot(page, { w: run.vp.w, h: run.vp.h });
       await start(page, { humans: [run.human], seed: run.seed, speed: 4, roundLimit: 10 });
       await expect(page.locator('.game')).toHaveAttribute('data-view', 'fixed');
       // The human is drawn at S; the others keep their order around the table.
@@ -291,9 +264,9 @@ test.describe('fixed view: one human vs CPUs', () => {
   ]) {
     test(`${vp.w}x${vp.h}: screenshots — mid-game, the hand from N, a collect-from-all total (human seated N)`, async ({ page }) => {
       test.setTimeout(240_000);
-      const logs = watchConsole(page);
+      const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource|preloaded using link preload/ });
       const size = `${vp.w}x${vp.h}`;
-      await boot(page, vp.w, vp.h);
+      await boot(page, { w: vp.w, h: vp.h });
       // Mid-game: 24 turns at speed 0, then a human prompt at normal speed.
       await start(page, { humans: ['N'], seed: 31, speed: 0 });
       await playUntilTurn(page, 24);
@@ -416,8 +389,8 @@ test.describe('fixed view: one human vs CPUs', () => {
 
   test('two humans: the table model still turns the Stage toward each acting seat', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page, 1600, 1000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource|preloaded using link preload/ });
+    await boot(page, { w: 1600, h: 1000 });
     await start(page, { humans: ['S', 'N'], seed: 77, speed: 0 });
     await expect(page.locator('.game')).toHaveAttribute('data-view', 'table');
     const seen = await page.evaluate(async (src) => {
@@ -454,8 +427,8 @@ test.describe('fixed view: owned spaces', () => {
     { w: 800, h: 450 },
   ]) {
     test(`${vp.w}x${vp.h}: owner-color cards, buildings upright for S (the top row's hang under it)`, async ({ page }) => {
-      const logs = watchConsole(page);
-      await boot(page, vp.w, vp.h);
+      const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource|preloaded using link preload/ });
+      await boot(page, { w: vp.w, h: vp.h });
       await start(page, { humans: ['S'], seed: 31, speed: 0 });
       await page.evaluate(() => window.__lotAndRoll!.whenIdle());
       await craftOwned(page, OWNED_SAMPLE);

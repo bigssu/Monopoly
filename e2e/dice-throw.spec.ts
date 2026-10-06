@@ -17,6 +17,7 @@
  * screen box.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { boot, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
 
 interface Rec {
@@ -46,24 +47,6 @@ interface Box {
 }
 
 const VIEW = { w: 1600, h: 1000 };
-
-function watchConsole(page: Page): string[] {
-  const out: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error' && m.type() !== 'warning') return;
-    if (/favicon|Failed to load resource/.test(`${m.text()} ${m.location().url ?? ''}`)) return;
-    out.push(`${m.type()}: ${m.text()}`);
-  });
-  page.on('pageerror', (e) => out.push(`pageerror: ${String(e)}`));
-  return out;
-}
-
-async function boot(page: Page, query = ''): Promise<void> {
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.goto(`/?dev=1${query}`);
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
-  await page.evaluate(() => document.fonts.ready);
-}
 
 /**
  * Player `current` (a human) about to roll `dice` from the start: of 2 humans (S, N) by default, or
@@ -247,8 +230,8 @@ const centreOf = (r: { x: number; y: number; w: number; h: number }): { x: numbe
 test.describe('dice throw', () => {
   test('a flick in four directions throws the dice that way; the result is the engine\'s', async ({ page }) => {
     test.setTimeout(180_000);
-    const logs = watchConsole(page);
-    await boot(page, '&dice=dom');
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW, query: '&dice=dom' });
     const DIRS: { name: string; dx: number; dy: number; dice: [number, number] }[] = [
       { name: 'up', dx: 0, dy: -150, dice: [1, 3] },
       { name: 'right', dx: 150, dy: 0, dice: [2, 5] },
@@ -312,8 +295,8 @@ test.describe('dice throw', () => {
 
   test('a release without a swipe tosses the dice forward; the keyboard rolls; a cancel only stops the shake', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page, '&dice=dom');
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW, query: '&dice=dom' });
     await craft(page, [2, 6]);
     const home = await page.evaluate(() => [...document.querySelectorAll('.st-dice .die')].map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
     await startSampling(page);
@@ -356,8 +339,8 @@ test.describe('dice throw', () => {
 
   test('canvas path (web default): one canvas over the throw\'s box, gone after', async ({ page }) => {
     test.setTimeout(90_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW });
     await craft(page, [4, 4]);
     const c = await pairCentre(page);
     const seen = page.evaluate(
@@ -396,8 +379,8 @@ test.describe('dice throw', () => {
 
   test('Settings "show roll button" brings the button back, and it rolls', async ({ page }) => {
     test.setTimeout(90_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW });
     await craft(page, [1, 3]);
     await expect(page.locator('.roll-btn')).toHaveCount(0);
     await expect(page.locator('.pc-roll .roll-hint.is-strip')).toHaveText('주사위를 꾹 누르고 밀어 던지세요');
@@ -418,9 +401,9 @@ test.describe('dice throw', () => {
 
   test('reduced motion: the dice roll in place (no trajectory)', async ({ page }) => {
     test.setTimeout(90_000);
-    const logs = watchConsole(page);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await reduceMotion(page);
-    await boot(page, '&dice=dom');
+    await boot(page, { ...VIEW, query: '&dice=dom' });
     await craft(page, [6, 2]);
     // No wobble without motion.
     await page.waitForTimeout(300);
@@ -440,8 +423,8 @@ test.describe('dice throw', () => {
 
   test('"throw me": the dice wobble for a human\'s roll, once more after 5 s, then rest; not for a CPU', async ({ page }) => {
     test.setTimeout(90_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW });
     // Recorded in the page every frame (a loaded machine may answer a round trip from here only
     // after the ~1.2 s wobble has ended): wobbling = the pair's transform is being stepped
     // (Dice.invite, on the 30 Hz clock); blinking = a running Web Animation on the hint strip;
@@ -561,8 +544,8 @@ test.describe('dice throw', () => {
   for (const path of ['dom', 'canvas'] as const) {
     test(`a fast flick flies faster, farther and longer than a slow one, off the screen's edge (${path} path)`, async ({ page }) => {
       test.setTimeout(120_000);
-      const logs = watchConsole(page);
-      await boot(page, `&dice=${path}`);
+      const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+      await boot(page, { ...VIEW, query: `&dice=${path}` });
       const runs: { name: string; rec: Rec; reach: number; far: number; ms: number }[] = [];
       // Slow: 450 px/s (a gentle push); fast: 6000 px/s (beyond the strongest, clamped to it).
       for (const [name, speed, dice] of [
@@ -624,8 +607,8 @@ test.describe('dice throw', () => {
 
   test('table view: a turned seat\'s flick toward a screen edge goes to that physical edge', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page, '&dice=dom');
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW, query: '&dice=dom' });
     // 4 humans (S E N W): the Stage turns toward whoever rolls.
     for (const [seat, current, dx, dy] of [
       ['E', 1, 440, 0],

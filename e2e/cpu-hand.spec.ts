@@ -12,26 +12,14 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import type { HandRecord } from '../src/ui/stage/CpuHand';
+import { boot, checkPress, watchConsole } from './helpers';
 
 const SHOTS = 'e2e/__screenshots__';
 const SEED = 20261005;
 
-function watchConsole(page: Page): string[] {
-  const out: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error' && m.type() !== 'warning') return;
-    if (/favicon|Failed to load resource/.test(`${m.text()} ${m.location().url ?? ''}`)) return;
-    out.push(`${m.type()}: ${m.text()}`);
-  });
-  page.on('pageerror', (e) => out.push(`pageerror: ${String(e)}`));
-  return out;
-}
-
-async function boot(page: Page, w: number, h: number): Promise<void> {
-  await page.setViewportSize({ width: w, height: h });
-  await page.goto('/?dev=1');
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
-  await page.evaluate(() => document.fonts.ready);
+/** Boot at w×h, then a seeded four-CPU game. */
+async function bootGame(page: Page, w: number, h: number): Promise<void> {
+  await boot(page, { w, h });
   // Default prefs: game pace 2 (normal), real animation speed. Four CPUs, seeded.
   await page.evaluate((seed) => {
     const h = window.__lotAndRoll!;
@@ -80,17 +68,6 @@ async function craft(page: Page, pid: number, patch: string): Promise<void> {
   await page.waitForSelector('.game .board');
 }
 
-function checkPress(r: HandRecord, ctx: string): void {
-  const where = `${ctx} ${r.seat} ${r.phase}:${r.action} pressed=${r.pressed} tip=${JSON.stringify(r.tip)} at=${JSON.stringify(r.at)}`;
-  expect(r.target, where).not.toBe('none');
-  expect(r.found, `control on screen: ${where}`).toBe(true);
-  expect(r.tipInside, `fingertip on the control: ${where}`).toBe(true);
-  expect(r.pending, `pressed before the dispatch: ${where}`).toBe(true);
-  const a = JSON.parse(r.act) as { type: string; spaceIndex?: number };
-  if (r.target === 'space') expect(r.pressed, where).toBe(`space:${a.spaceIndex}`);
-  else expect(r.pressed, where).toBe(`${a.type}${a.spaceIndex !== undefined ? `:${a.spaceIndex}` : ''}`);
-}
-
 /** The hand held at its press, for a screenshot; then let it go. */
 async function shotAtPress(page: Page, name: string, pid: number, patch: string, want: RegExp): Promise<HandRecord> {
   await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(true));
@@ -128,8 +105,8 @@ const TAKEOVER = `me.position = 12; me.cash = 5000; s.properties[17] = { owner: 
 test.describe('CPU hand', () => {
   test('1600x1000: a seeded 4-CPU game shows the hand on every decision', async ({ page }) => {
     test.setTimeout(300_000);
-    const logs = watchConsole(page);
-    await boot(page, 1600, 1000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await bootGame(page, 1600, 1000);
     const seen = new Set<string>();
     const record = (r: HandRecord, ctx: string): void => {
       checkPress(r, ctx);
@@ -185,8 +162,8 @@ test.describe('CPU hand', () => {
 
   test('pause freezes the hand where it is; resume presses and dispatches', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page, 1280, 800);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await bootGame(page, 1280, 800);
     await craft(page, S, BUY);
     await page.waitForSelector('.cpu-hand', { timeout: 30_000 });
     await page.locator('.pause-btn').click();
@@ -212,8 +189,8 @@ test.describe('CPU hand', () => {
 
   test('pause during the roll hold silences the dice; resume rattles them again until the release', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page, 1280, 800);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await bootGame(page, 1280, 800);
     // The hand is held at its press (still in the roll hold) by the dev freeze.
     await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(true));
     await craft(page, S, '');
@@ -241,8 +218,8 @@ test.describe('CPU hand', () => {
   ]) {
     test(`${vp.w}x${vp.h}: the hand on the control, seats S and N (screenshots)`, async ({ page }) => {
       test.setTimeout(240_000);
-      const logs = watchConsole(page);
-      await boot(page, vp.w, vp.h);
+      const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+      await bootGame(page, vp.w, vp.h);
       const size = `${vp.w}x${vp.h}`;
       checkPress(await shotAtPress(page, `cpu-hand-roll-S-${size}.png`, S, '', /^preRoll:Roll$/), 'roll S');
       checkPress(await shotAtPress(page, `cpu-hand-roll-N-${size}.png`, N, '', /^preRoll:Roll$/), 'roll N');

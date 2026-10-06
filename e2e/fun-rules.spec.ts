@@ -7,27 +7,13 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import type { GameState } from '../src/engine/types';
+import { boot, watchConsole } from './helpers';
 
 const SHOTS = 'e2e/__screenshots__';
 
-function watchConsole(page: Page): string[] {
-  const out: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error' && m.type() !== 'warning') return;
-    const url = m.location().url ?? '';
-    if (/favicon/.test(url)) return;
-    if (/Failed to load resource/.test(m.text()) && !url) return;
-    out.push(`${m.type()}: ${m.text()} @ ${url}`);
-  });
-  page.on('pageerror', (e) => out.push(`pageerror: ${String(e)}`));
-  return out;
-}
-
-async function boot(page: Page): Promise<void> {
-  await page.setViewportSize({ width: 1600, height: 1000 });
-  await page.goto('/?dev=1');
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
-  await page.evaluate(() => document.fonts.ready);
+/** Boot at 1600×1000, animations ×2, no prompt timer. */
+async function bootFast(page: Page): Promise<void> {
+  await boot(page, { w: 1600, h: 1000 });
   await page.evaluate(() => {
     window.__lotAndRoll!.setAnimSpeed(2);
     window.__lotAndRoll!.setPromptTimer(0);
@@ -75,8 +61,8 @@ test.describe('fun rules (rules version 2)', () => {
 
   test('all or nothing: the tax prompt, a winning roll and a sure payment', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await bootFast(page);
     // 18 → 23 (tax office) with 2 000 cash; the gamble's die is the first die of the next queued roll.
     await loadCrafted(page, {}, `const me = s.players[s.current]; me.position = 18; me.cash = 2000; s.testHooks = { diceQueue: [[2, 3], [5, 1]] };`);
     await roll(page);
@@ -103,8 +89,8 @@ test.describe('fun rules (rules version 2)', () => {
 
   test('doubles bonus card: after the landing, a card to pick, then the extra roll', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await bootFast(page);
     await loadCrafted(page, {}, `s.players[s.current].position = 0; s.testHooks = { diceQueue: [[2, 2]], cardQueue: ['bank-dividend', 'fine'] };`);
     await roll(page);
     expect((await getState(page)).phase.kind).toBe('buy');
@@ -123,8 +109,8 @@ test.describe('fun rules (rules version 2)', () => {
 
   test('comeback cards: the last player is offered one; land swap by tapping the city; leader raid', async ({ page }) => {
     test.setTimeout(150_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await bootFast(page);
     // The current player is far behind (owns Manila only); the next player owns Seoul (L2).
     const setup = (card: string) => `const me = s.players[s.current]; me.position = 0; me.cash = 300;
        const rich = s.players[(s.current + 1) % 4]; rich.cash = 6000;
@@ -164,8 +150,8 @@ test.describe('fun rules (rules version 2)', () => {
 
   test('news flash: a headline at the start of round 4, its tag on the round line; a quake', async ({ page }) => {
     test.setTimeout(150_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await bootFast(page);
     // The last seat's turn in round 3; it lands on an unowned city and passes, then round 4 starts.
     const atRound3 = (pick: string, extra = '') => `s.round = 3; s.current = 3; s.phase = { kind: 'preRoll', playerId: 3, rollAgain: false };
        s.players[3].position = 0; ${extra} s.testHooks = { diceQueue: [[1, 3]], pickQueue: [${pick}] };`;
@@ -194,8 +180,8 @@ test.describe('fun rules (rules version 2)', () => {
 
   test('win-back (advanced): the city taken from you comes back for 1× its value', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await bootFast(page);
     await loadCrafted(
       page,
       { rules: 'advanced' },
