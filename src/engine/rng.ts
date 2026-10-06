@@ -50,8 +50,6 @@ export function createRng(state: number): Rng {
   };
 }
 
-export type DicePair = readonly [number, number];
-
 export function rollDice(rng: Rng): [number, number] {
   return [rng.int(6) + 1, rng.int(6) + 1];
 }

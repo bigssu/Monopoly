@@ -19,7 +19,6 @@ import { ruleFlags } from './settings';
 import type {
   GameResult,
   GameState,
-  Level,
   NewsId,
   PlayerId,
   PropertyState,
@@ -36,10 +35,6 @@ export function propertyAt(state: GameState, index: number): PropertyState {
   const p = state.properties[index];
   if (!p) throw new RangeError(`Space ${index} is not a property`);
   return p;
-}
-
-export function ownerOf(state: GameState, index: number): PlayerId | null {
-  return state.properties[index]?.owner ?? null;
 }
 
 /** Cost of building `toLevel` (1..4) on a city with the given price. */
@@ -208,11 +203,6 @@ export function totalAssets(state: GameState, pid: PlayerId): number {
   return p.cash + propertyAssets(state, pid);
 }
 
-/** Sum of building levels (landmark = 4). */
-export function buildingLevels(state: GameState, pid: PlayerId): number {
-  return ownedCities(state, pid).reduce((s, i) => s + propertyAt(state, i).level, 0);
-}
-
 export function solventPlayers(state: GameState): PlayerId[] {
   return state.players.filter((p) => !p.bankrupt).map((p) => p.id);
 }
@@ -320,6 +310,3 @@ export function oneAwayKey(w: OneAwayWarning): string {
   return `${w.playerId}:${w.kind}:${w.id}:${w.missing}`;
 }
 
-export function levelOf(state: GameState, index: number): Level {
-  return propertyAt(state, index).level;
-}

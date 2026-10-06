@@ -76,10 +76,6 @@ export function sideOf(index: number, spacesPerSide: SpacesPerSide = 7): SideId 
   return space(index, spacesPerSide).side;
 }
 
-export const PROPERTY_INDICES: readonly number[] = BOARD.filter(
-  (s) => s.kind === 'city' || s.kind === 'hub',
-).map((s) => s.index);
-
 export const CITY_INDICES: readonly number[] = BOARD.filter((s) => s.kind === 'city').map(
   (s) => s.index,
 );
