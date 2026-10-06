@@ -371,10 +371,11 @@ describe('scenes', () => {
     const frames = await runUntil(() => done);
     expect(done).toBe(true);
     expect(order).toEqual([...CUES]);
-    // Pose to pose (§12): settle after the still hold; the whole cut-in 3–5.5 s on screen.
+    // Pose to pose (§12): settle after the still hold; the whole cut-in 4.1–6.5 s on screen
+    // (3–5.5 s + EVENT_EXTEND's 1 s).
     expect(blocked).toBeGreaterThan(f(90));
-    expect(frames).toBeGreaterThanOrEqual(90);
-    expect(frames).toBeLessThan(165);
+    expect(frames).toBeGreaterThanOrEqual(123);
+    expect(frames).toBeLessThan(195);
     expect(st.wallets.S.el.dataset.v).toBe('3,110');
     expect(st.wallets.N.el.dataset.v).toBe('5,420');
     expect(st.wallets.N.pile).toEqual(pileOf(5420));

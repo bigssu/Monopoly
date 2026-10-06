@@ -2,11 +2,14 @@
  * Beats of every money cut-in (scenes.ts BEATS_F, docs/MONEY-EVENTS.md §12), on the manual clock at
  * the default game pace: on screen ≥ 3 s (also as a repeated event at 0.7×), anticipation before the
  * first coin leaves (≥ 0.5 s), a still hold ≥ 1 s between the result and the hand-back, a quick out.
+ *
+ * EVENT_EXTEND (fx/time.ts, 2026-10-06): every cut-in is on screen motionMs + holdMs longer than
+ * before it (BASE below), its still hold holdMs longer.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { flushAll, setAnimSpeed, setManualClock, setPace, setReducedMotion, stepClock } from '../../time';
+import { EVENT_EXTEND, flushAll, setAnimSpeed, setManualClock, setPace, setReducedMotion, stepClock } from '../../time';
 import { MoneyStage } from '../stage';
-import { BEATS_F, CUES, MIN_SCENE_MS, SCENES, type MoneyPlay } from '../scenes';
+import { BEATS_F, CUES, MIN_SCENE_MS, MOTION_STRETCH, SCENES, type MoneyPlay } from '../scenes';
 import { f } from '../clock';
 import { fakeParent } from './fakeDom';
 
@@ -32,6 +35,25 @@ const SCENARIOS: Array<[string, string, (st: MoneyStage) => MoneyPlay]> = [
   ['leader tax (via centre)', 'transfer', (st) => SCENES.transfer(st, { from: P('E', 3000), to: P('S', 1000), via: 'center', amount: 200 })],
   ['bankruptcy', 'bankruptcy', (st) => SCENES.bankruptcy(st, { debtor: P('S', 120), creditor: P('N', 3000), properties: [1, 2, 4] })],
 ];
+
+/**
+ * Frames on screen before EVENT_EXTEND (main 18aa79c, the shipped timing): [normal, repeated 0.7×].
+ * If a scene's own beats change, update its base here.
+ */
+const BASE: Record<string, [number, number]> = {
+  purchase: [134, 96], 'build L1': [124, 95], 'build L4': [129, 95], 'free upgrade': [101, 95],
+  'toll S': [146, 107], 'toll M': [146, 107], 'festival toll': [161, 118], 'waived toll': [95, 95],
+  takeover: [149, 107], collect: [148, 107], 'pay all': [154, 110], salary: [124, 95], tax: [122, 95],
+  bail: [122, 95], 'sale (bank → me)': [116, 95], 'leader tax (via centre)': [137, 100], bankruptcy: [110, 95],
+};
+/** Frames EVENT_EXTEND adds to a cut-in (motion + hold). */
+const EXT_F = (EVENT_EXTEND.motionMs + EVENT_EXTEND.holdMs) / f(1);
+/**
+ * Tolerance (frames): the stretched beats end on the nearest 30 Hz frame, not on exact multiples of
+ * the old ones, so a cut-in of 6–12 chained beats lands within ±2 frames of base + extension; one
+ * much longer than MOTION_REF_F (the festival toll) moves up to 3 frames more (scenes.ts trueUp).
+ */
+const SLACK_F = 3;
 
 async function run(fn: (st: MoneyStage) => MoneyPlay, turboKind: string | null): Promise<{ frames: number; at: Record<string, number> }> {
   const st = new MoneyStage({ parent: fakeParent(), tileRect: () => ({ x: 100, y: 100, w: 60, h: 80 }) });
@@ -66,18 +88,24 @@ describe('money cut-in beats (≥ 3 s, anticipation, still hold)', () => {
     it(name, async () => {
       const r = await run(fn, null);
       const s = r.frames / 30;
-      // On screen ≥ 3 s, at most 5.5 s.
+      // On screen ≥ MIN_SCENE_MS (4.1 s), at most 6.5 s.
       expect(s, `${name}: ${s.toFixed(2)} s`).toBeGreaterThanOrEqual(MIN_SCENE_MS / 1000 - 0.05);
-      expect(s).toBeLessThanOrEqual(5.5);
+      expect(s).toBeLessThanOrEqual(6.5);
+      // EVENT_EXTEND: exactly motionMs + holdMs longer than before (± the frame rounding).
+      const [base, baseTurbo] = BASE[name]!;
+      expect(Math.abs(r.frames - (base + EXT_F)), `${name}: ${r.frames} frames, base ${base} + ${EXT_F}`).toBeLessThanOrEqual(SLACK_F);
       // Intro / anticipation ≥ 0.5 s before anything leaves (a waived toll: before the stamp).
       expect(r.at.depart!).toBeGreaterThanOrEqual(15);
-      // Result → hand-back: the still hold ≥ 1 s; then a quick out (≤ 0.35 s).
-      expect(r.at.settle! - r.at.result!).toBeGreaterThanOrEqual(BEATS_F.still);
-      expect(r.at.done! - r.at.settle!).toBeLessThanOrEqual(11);
+      // Result → hand-back: the still hold = 1 s + holdMs (more only to reach the floor); then the
+      // out (0.3 s, stretched: ≤ 0.6 s).
+      const still = r.at.settle! - r.at.result!;
+      expect(still).toBeGreaterThanOrEqual(BEATS_F.still + EVENT_EXTEND.holdMs / f(1));
+      if (base > MIN_SCENE_MS / f(1) - EXT_F + 3) expect(still, `${name}: still`).toBeLessThanOrEqual(BEATS_F.still + EVENT_EXTEND.holdMs / f(1) + 1);
+      expect(r.at.done! - r.at.settle!).toBeLessThanOrEqual(2 * BEATS_F.out + 2);
       // A repeated event of the same kind in a turn plays shorter, but never under the floor.
       const t = await run(fn, kind);
-      // (The requirement is 3.0 s; MIN_SCENE_MS = 3.1 s leaves a margin.)
-      expect(t.frames / 30, `${name} ×0.7: ${(t.frames / 30).toFixed(2)} s`).toBeGreaterThanOrEqual(3.0);
+      expect(t.frames / 30, `${name} ×0.7: ${(t.frames / 30).toFixed(2)} s`).toBeGreaterThanOrEqual(MIN_SCENE_MS / 1000 - 0.05);
+      expect(Math.abs(t.frames - Math.max(baseTurbo + EXT_F, MIN_SCENE_MS / f(1))), `${name} ×0.7: ${t.frames} frames, base ${baseTurbo}`).toBeLessThanOrEqual(SLACK_F + 1);
       expect(t.frames).toBeLessThanOrEqual(r.frames);
     });
   }
@@ -87,5 +115,27 @@ describe('money cut-in beats (≥ 3 s, anticipation, still hold)', () => {
     expect(f(BEATS_F.intro)).toBeGreaterThanOrEqual(500);
     expect(f(BEATS_F.result)).toBeGreaterThanOrEqual(500);
     expect(MIN_SCENE_MS).toBeGreaterThanOrEqual(3000);
+  });
+
+  it('EVENT_EXTEND: +0.5 s of motion, +0.5 s of still; the floor grows by both', () => {
+    expect(EVENT_EXTEND).toEqual({ motionMs: 500, holdMs: 500 });
+    expect(MIN_SCENE_MS).toBe(3100 + 1000);
+    // The reference cut-in's motion (MOTION_REF_F) stretches by exactly motionMs.
+    expect(MOTION_STRETCH).toBeCloseTo(1.15, 5);
+  });
+
+  it('the motion is stretched, not paused: coins leave and land later in proportion', async () => {
+    const r = await run(SCENARIOS[0]![2], null);
+    // Purchase before EVENT_EXTEND: first coin at frame 25, last landed (arrive) at 70. Both later
+    // by the stretch (the intro and the coins run 1.15× slower), not by a fixed delay.
+    expect(r.at.depart!).toBeGreaterThanOrEqual(Math.floor(25 * MOTION_STRETCH) - 2);
+    expect(r.at.arrive! - r.at.depart!).toBeGreaterThanOrEqual(Math.floor((70 - 25) * MOTION_STRETCH) - 2);
+  });
+
+  it('the game pace scales the extension with the cut-in (√(pace / 2))', async () => {
+    setPace(1);
+    const slow = await run(SCENARIOS[0]![2], null);
+    // At pace 1 the whole cut-in, extension included, runs √½ as long.
+    expect(Math.abs(slow.frames - (BASE.purchase![0] + EXT_F) * Math.SQRT1_2)).toBeLessThanOrEqual(SLACK_F + 1);
   });
 });
