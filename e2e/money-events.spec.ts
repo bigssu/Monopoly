@@ -421,10 +421,19 @@ const SHOTS = 'e2e/__screenshots__';
 interface Shot {
   img: string;
   label: string;
+  /** What `probe` read in the page at that tick. */
+  data?: unknown;
+}
+
+interface CaptureOpts {
+  /** Read something in the page at every live tick (stored on the shot). */
+  probe?: () => unknown;
+  /** Take screenshots (default true; false = probe only). */
+  shoot?: boolean;
 }
 
 /** Dispatch `action` under the manual clock; a shot every EVERY ticks while the stage is live. */
-async function capture(page: Page, action: string, maxTicks = 900): Promise<Shot[]> {
+async function capture(page: Page, action: string, maxTicks = 900, o: CaptureOpts = {}): Promise<Shot[]> {
   await page.evaluate((a) => {
     const hook = window.__lotAndRoll!;
     hook.manualClock(true);
@@ -447,8 +456,9 @@ async function capture(page: Page, action: string, maxTicks = 900): Promise<Shot
         scenes: (window as unknown as { __moneyLog: unknown[] }).__moneyLog.length,
       };
     });
-    if (st.live) shots.push({ img: (await page.screenshot({ type: 'png' })).toString('base64'), label: `t${tick} c${st.coins} s${st.scenes}` });
-    if (wasLive && !st.live && shots.length) shots.push({ img: (await page.screenshot({ type: 'png' })).toString('base64'), label: `t${tick} parked` });
+    const shoot = async (): Promise<string> => (o.shoot === false ? '' : (await page.screenshot({ type: 'png' })).toString('base64'));
+    if (st.live) shots.push({ img: await shoot(), label: `t${tick} c${st.coins} s${st.scenes}`, ...(o.probe ? { data: await page.evaluate(o.probe) } : {}) });
+    if (wasLive && !st.live && shots.length) shots.push({ img: await shoot(), label: `t${tick} parked` });
     wasLive = st.live;
     if (st.done && !st.live) break;
   }
@@ -568,4 +578,180 @@ test.describe('a cut-in cut short (review round 1)', () => {
       expect(errors, errors.join('\n')).toEqual([]);
     });
   }
+});
+
+// ---------------------------------------------------------------------------------------- selling
+
+/**
+ * In debt (docs/MONEY-EVENTS.md §11.1 "sell"): I sit on 12 with 280, own Cairo (4, building) and
+ * Nairobi (6, villa); 2 + 3 takes me to Madrid (17, the next player's villa): a 360 toll, 80 short.
+ * Two building sales to the bank (45 + 50) pay it.
+ */
+const DEBT = `s.players[me].position = 12; s.players[me].cash = 280; s.properties[4] = { owner: me, level: 2 }; s.properties[6] = { owner: me, level: 1 }; s.properties[17] = { owner: other(1), level: 1 }; s.testHooks = { diceQueue: [[2, 3]] };`;
+
+/** The sad sprite's lower eyelids (fractions of the sprite; scenes.ts SAD_EYES, measured on public/dealer/sad.webp). */
+const EYES = [{ x: 0.405, y: 0.398 }, { x: 0.548, y: 0.374 }];
+
+interface CryProbe {
+  src: string;
+  /** Sprite box on screen (px). */
+  w: number;
+  /** Tear streams: top / bottom centre relative to the sprite box, and grown (> 0 px tall). */
+  streams: Array<{ x: number; y: number; yb: number; h: number }>;
+  /** Visible drops: centre relative to the sprite box. */
+  drops: Array<{ x: number; y: number }>;
+}
+
+/** Where the tears are on the crying dealer (relative to the sprite's box on screen). */
+function cryProbe(): CryProbe | null {
+  const img = document.querySelector<HTMLElement>('.money-stage .mh-crier-img');
+  if (!img) return null;
+  const r = img.getBoundingClientRect();
+  if (!r.width) return null;
+  const rel = (e: Element) => {
+    const b = e.getBoundingClientRect();
+    return { x: (b.left + b.width / 2 - r.left) / r.width, y: (b.top - r.top) / r.height, yb: (b.bottom - r.top) / r.height, cy: (b.top + b.height / 2 - r.top) / r.height, h: b.height, o: Number(getComputedStyle(e).opacity) };
+  };
+  return {
+    src: img.getAttribute('src') ?? '',
+    w: r.width,
+    streams: [...document.querySelectorAll('.money-stage .mh-stream')].map(rel).map((q) => ({ x: q.x, y: q.y, yb: q.yb, h: q.h })),
+    drops: [...document.querySelectorAll('.money-stage .mh-tear')].map(rel).filter((q) => q.o > 0.05).map((q) => ({ x: q.x, y: q.cy })),
+  };
+}
+
+/**
+ * Every grown stream starts on an eye's lower lid; every drop is on the face or falling from it.
+ * `flip`: the hero faces seat N (turned 180° on screen): the sprite's own coordinates are 1 − screen.
+ */
+function expectTearsOnFace(p: CryProbe, where: string, flip = false): void {
+  const grown = p.streams.filter((q) => q.h > 1);
+  expect(grown.length, `${where}: both streams`).toBe(2);
+  grown.forEach((q, i) => {
+    const x = flip ? 1 - q.x : q.x;
+    const y = flip ? 1 - q.yb : q.y;
+    expect(Math.abs(x - EYES[i]!.x), `${where}: stream ${i} x ${x.toFixed(3)}`).toBeLessThanOrEqual(0.03);
+    expect(Math.abs(y - EYES[i]!.y), `${where}: stream ${i} y ${y.toFixed(3)}`).toBeLessThanOrEqual(0.03);
+  });
+  for (const d0 of p.drops) {
+    const d = flip ? { x: 1 - d0.x, y: 1 - d0.y } : d0;
+    expect(d.x, `${where}: drop x`).toBeGreaterThan(0.3);
+    expect(d.x, `${where}: drop x`).toBeLessThan(0.65);
+    expect(d.y, `${where}: drop y`).toBeGreaterThan(0.33);
+    expect(d.y, `${where}: drop y`).toBeLessThan(0.75);
+  }
+}
+
+test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)', () => {
+  test('debt: every sale is a crying-dealer cut-in, wallets = engine cash, the last one chains into the toll', async ({ page }) => {
+    test.setTimeout(240_000);
+    const errors = watchConsole(page);
+    await boot(page, 1600, 1000);
+    await craft(page, 'S', DEBT);
+    await act(page, 'Roll');
+    expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind)).toBe('debt');
+    // Sell the cheapest building first (a real tap on the debt card), then whatever the card suggests.
+    let sold = 0;
+    for (let k = 0; k < 6; k++) {
+      const phase = await page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind);
+      if (phase !== 'debt') break;
+      const action = k === 0 ? 'SellBuilding' : await page.locator('.pc-debt .debt-row.is-best [data-action]').first().getAttribute('data-action');
+      const r = await act(page, action!);
+      expect(r.sawStage, `sale ${k}: stage up`).toBe(true);
+      sold++;
+    }
+    expect(sold).toBeGreaterThan(0);
+    const L = await log(page);
+    const sells = L.filter((e) => e.scene === 'sell');
+    expect(sells.length, L.map((e) => e.scene).join(',')).toBe(sold);
+    sells.forEach((e, k) => {
+      expect(e.play).toBe('sell');
+      expect(Object.keys(e.wallets)).toEqual(['S']);
+      // A repeat of the same kind in a turn plays at 0.7× (§12.1): ≥ 3 s on screen, its still hold 0.7 s.
+      if (k === 0) expectBeats(e);
+      else {
+        expect(e.liveMs, `sell ${k}: ${e.liveMs} ms on screen`).toBeGreaterThanOrEqual(2950);
+        expect(e.stillMs, `sell ${k}: still ${e.stillMs} ms`).toBeGreaterThanOrEqual(650);
+      }
+    });
+    // The first sale's wallet ended on what the engine had then (+ the sale); the toll that the
+    // last sale settles plays in the same cut-in (keep), and the wallets end on the engine's cash.
+    expect(sells[0]!.events).toEqual(['BuildingSold', 'Demolished', 'MoneyChanged']);
+    expect(sells.at(-1)!.keep).toBe(true);
+    expect(L.at(-1)!.scene).toBe('toll');
+    await expectWalletsMatch(page, L.at(-1)!);
+    await expectParked(page);
+    const st = await page.evaluate(() => window.__lotAndRoll!.getState()!);
+    expect(st.phase.kind).not.toBe('debt');
+    console.log(`[money] sell: ${sells.map((e) => `${e.liveMs} ms (still ${e.stillMs})`).join(', ')}`);
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  for (const size of [{ w: 1600, h: 1000 }, { w: 800, h: 450 }]) {
+    test(`filmstrip + crying hero ${size.w}x${size.h}`, async ({ page }) => {
+      test.setTimeout(180_000);
+      const errors = watchConsole(page);
+      await boot(page, size.w, size.h);
+      mkdirSync(STRIPS, { recursive: true });
+      await craft(page, 'S', DEBT, true);
+      await page.evaluate(() => {
+        const hook = window.__lotAndRoll!;
+        return hook.dispatch(hook.legal().find((x) => x.type === 'Roll')!);
+      });
+      await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+      const shots = await capture(page, 'SellBuilding', 900, { probe: cryProbe });
+      expect(shots.length, 'stage seen').toBeGreaterThan(6);
+      const tag = `sell-S-${size.w}x${size.h}`;
+      if (process.env.MONEY_SHOTS_DIR) shots.forEach((x, k) => writeFileSync(`${process.env.MONEY_SHOTS_DIR}/${tag}-${String(k).padStart(3, '0')}.png`, Buffer.from(x.img, 'base64')));
+      writeFileSync(`${STRIPS}/${tag}.jpg`, await compose(page, shots, `sell (crying dealer) @S ${size.w}x${size.h} — every ${EVERY} ticks while the money stage is live`, size.w, size.h));
+      // The hero is the sad dealer, big; tears on the face in every frame they show.
+      const probes = shots.map((x) => x.data as CryProbe | null).filter((p): p is CryProbe => !!p);
+      expect(probes.length).toBeGreaterThan(6);
+      expect(probes.every((p) => p.src.endsWith('dealer/sad.webp'))).toBe(true);
+      expect(Math.max(...probes.map((p) => p.w)), 'the dealer fills about half the short side').toBeGreaterThan(size.h * 0.45);
+      const crying = probes.filter((p) => p.streams.some((q) => q.h > 1));
+      expect(crying.length, 'crying for most of the cut-in').toBeGreaterThan(probes.length * 0.6);
+      expect(crying.some((p) => p.drops.length >= 2), 'drops run down').toBe(true);
+      // Fully grown streams (from a few frames in) sit on the eyes.
+      crying.slice(4).forEach((p, k) => expectTearsOnFace(p, `frame ${k}`));
+      // Key frame: the still hold (plaque up, tears running).
+      const key = shots[Math.min(shots.length - 1, Math.round(shots.length * 0.75))]!;
+      writeFileSync(`${SHOTS}/money-${tag}.png`, Buffer.from(key.img, 'base64'));
+      await expectParked(page);
+      expect(errors, errors.join('\n')).toEqual([]);
+    });
+  }
+
+  test('tears sit on the face at every render tier and seat; reduced motion: still tears, same time', async ({ page }) => {
+    test.setTimeout(300_000);
+    const errors = watchConsole(page);
+    for (const v of ['high', 'mid', 'low', 'N', 'reduced'] as const) {
+      if (v === 'reduced') await reduceMotion(page);
+      await boot(page, 1280, 800, v === 'reduced' || v === 'N' ? '' : `&mres=${v}`);
+      // Seat N: the cut-in turns 180° to face the seller across the table.
+      await craft(page, v === 'N' ? 'N' : 'S', DEBT, true);
+      await page.evaluate(() => {
+        const hook = window.__lotAndRoll!;
+        return hook.dispatch(hook.legal().find((x) => x.type === 'Roll')!);
+      });
+      await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+      const shots = await capture(page, 'SellBuilding', 900, { probe: cryProbe, shoot: false });
+      const probes = shots.map((x) => x.data as CryProbe | null).filter((p): p is CryProbe => !!p);
+      const crying = probes.filter((p) => p.streams.some((q) => q.h > 1));
+      expect(crying.length, `${v}: crying`).toBeGreaterThan(probes.length * 0.6);
+      crying.slice(4).forEach((p, k) => expectTearsOnFace(p, `${v} frame ${k}`, v === 'N'));
+      if (v === 'reduced') {
+        // No movement: the drops stand still on the cheeks for the whole cut-in (one per eye).
+        const at = crying.slice(4).map((p) => JSON.stringify(p.drops.map((d) => [d.x.toFixed(2), d.y.toFixed(2)])));
+        expect(new Set(at).size, `${v}: drops do not move`).toBe(1);
+        expect(crying[4]!.drops.length).toBe(2);
+        // Same time on screen: the frames the stage was live, like a normal cut-in.
+        expect(shots.length * EVERY, `${v}: ticks live`).toBeGreaterThan(90);
+      }
+      const info = await page.evaluate(() => window.__lotAndRoll!.money()!);
+      if (v !== 'reduced' && v !== 'N') expect(info.tier).toBe(v);
+      await expectParked(page);
+    }
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
 });
