@@ -92,6 +92,11 @@ interface Ctx {
   rng: Rng;
 }
 
+/**
+ * Clone of plain JSON-shaped data (game state, settings, events). Kept instead of structuredClone:
+ * for GameState it is about twice as fast (npm run sim, 500 games: 3.0–3.7 s vs 6.9–7.4 s; 2,000
+ * games 12.7 s vs 28.5 s, 2026-10-06), and the reducer and the event sequencer clone every step.
+ */
 export function deepClone<T>(value: T): T {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map((v) => deepClone(v)) as unknown as T;
