@@ -31,6 +31,7 @@ const SCENARIOS: Array<[string, string, (st: MoneyStage) => MoneyPlay]> = [
   ['salary', 'salary', (st) => SCENES.receive(st, { seat: 'S', cash: 3000, playerColor: '#f00', amount: 300, kind: 'salary' })],
   ['tax', 'tax', (st) => SCENES.pay(st, { seat: 'S', cash: 3000, playerColor: '#f00', amount: 300, kind: 'tax' })],
   ['bail', 'bail', (st) => SCENES.pay(st, { seat: 'S', cash: 3000, playerColor: '#f00', amount: 100, kind: 'bail' })],
+  // The plain bank → me transfer (the sale scene before the crying dealer replaced it, 2026-10-06).
   ['sale (bank → me)', 'transfer', (st) => SCENES.transfer(st, { from: 'bank', to: P('S', 100), amount: 60 })],
   ['sell a building (crying dealer)', 'sell', (st) => SCENES.sell(st, { seat: 'S', cash: 100, playerColor: '#f00', items: [{ spaceIndex: 4, building: 2, amount: 60 }] })],
   ['sell land + a hotel', 'sell', (st) => SCENES.sell(st, { seat: 'N', cash: 40, playerColor: '#f00', items: [{ spaceIndex: 4, building: 3, amount: 150 }, { spaceIndex: 6, building: null, amount: 120 }] })],
