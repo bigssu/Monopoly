@@ -1,6 +1,6 @@
 /**
  * Player colors and design-token mirrors shared by engine content and UI.
- * Keep in sync with src/styles/tokens.css.
+ * tokens.css repeats only the ones its stylesheets use (--p-blue); keep that copy in sync.
  */
 export interface PlayerColor {
   id: string;

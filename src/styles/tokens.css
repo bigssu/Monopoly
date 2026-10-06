@@ -1,17 +1,14 @@
 /* Lot & Roll design tokens. Single source of truth for color / type / radius / motion. */
 :root {
   /* Surfaces */
-  --bg-table: #1E2A3A;          /* felt-like table background around the board */
-  --bg-table-2: #16202D;
+  --bg-table-2: #16202D;        /* felt-like table background around the board */
   --bg-board: #F6F1E7;          /* warm paper board face */
-  --bg-board-2: #EDE6D8;
   --bg-stage: #FBF8F2;
   --bg-panel: #FFFFFF;
   --bg-panel-dim: #F1F3F7;
   --ink: #1B2430;
   --ink-2: #4B5563;
   --ink-3: #8A94A6;
-  --line: #E2E6EE;
   --line-2: #CBD2DE;
 
   /* Brand */
@@ -20,7 +17,6 @@
   --accent: #4A6CF7;
   --success: #3DBB6E;
   --danger: #E8564F;
-  --warning: #F5A25D;
 
   /* Tones: chip / badge / highlight fills. Each ink keeps >= 4.5:1 on its bg (tokens.test.ts). */
   --tone-neutral-bg: #EEF1F6; --tone-neutral-ink: #4B5563;
@@ -29,19 +25,11 @@
   --tone-bad-bg: #FDE8E7;     --tone-bad-ink: #B33A34;
   --tone-info-bg: #D6EEF8;    --tone-info-ink: #1F6E91;
 
-  /* Property groups (DESIGN §3) */
-  --g-brown: #A0715B;
+  /* The property-group and player colors the stylesheets use (the full sets: content/board.ts,
+     content/palette.ts). */
   --g-sky: #6EC1E4;
-  --g-pink: #F28AB2;
   --g-orange: #F5A25D;
-  --g-red: #E8564F;
-  --g-yellow: #F2C94C;
-  --g-blue: #4A6CF7;
-  --g-hub: #7B8AA3;
-
-  /* Player colors (content/palette.ts) */
-  --p-red: #E8564F; --p-blue: #4A6CF7; --p-green: #3DBB6E; --p-yellow: #F2B633;
-  --p-purple: #9B6BF2; --p-orange: #F5844A; --p-teal: #2EC4B6; --p-pink: #F272A8;
+  --p-blue: #4A6CF7;
 
   /* Type */
   /* App faces first (one preloaded subset each); the '… Fallback' Google slices only load for
@@ -55,11 +43,10 @@
   --u: calc(var(--board) / 32);
 
   /* Radii / shadows */
-  --r-xs: 6px; --r-sm: 10px; --r-md: 16px; --r-lg: 24px; --r-pill: 999px;
+  --r-sm: 10px; --r-md: 16px; --r-lg: 24px; --r-pill: 999px;
   --sh-1: 0 1px 2px rgba(20, 30, 50, .10), 0 2px 8px rgba(20, 30, 50, .08);
   --sh-2: 0 4px 12px rgba(20, 30, 50, .14), 0 12px 32px rgba(20, 30, 50, .12);
   --sh-3: 0 10px 30px rgba(20, 30, 50, .28), 0 30px 80px rgba(20, 30, 50, .22);
-  --sh-inset: inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 0 rgba(20,30,50,.10);
 
   /* Motion — one vocabulary for the whole app (the 12 principles; mirrored in ui/fx/motion.ts).
      settle = slow out to rest · spring = overshoot & back (squash/stretch, follow-through)
@@ -69,8 +56,8 @@
   --ease-in-out: cubic-bezier(.65, 0, .35, 1);
   --ease-anticipate: cubic-bezier(.36, 0, .66, -0.56);
   --ease-breathe: cubic-bezier(.45, 0, .55, 1);
-  --t-fast: 140ms; --t-med: 260ms; --t-slow: 420ms; --t-stage: 420ms;
-  --t-press: 90ms; --t-release: 260ms; --t-enter: 380ms; --t-exit: 220ms; --t-breathe: 2s; --stagger: 60ms;
+  --t-fast: 140ms; --t-med: 260ms; --t-slow: 420ms;
+  --t-press: 90ms; --t-release: 260ms; --t-enter: 380ms; --t-exit: 220ms; --t-breathe: 2s;
 
   /* Safe areas (Android WebView + Capacitor) */
   --safe-t: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
@@ -79,4 +66,4 @@
   --safe-l: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
 }
 
-:root[data-motion="reduced"] { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-stage: 0ms; --t-press: 0ms; --t-release: 0ms; --t-enter: 0ms; --t-exit: 0ms; }
+:root[data-motion="reduced"] { --t-fast: 0ms; --t-med: 0ms; --t-slow: 0ms; --t-press: 0ms; --t-release: 0ms; --t-enter: 0ms; --t-exit: 0ms; }
