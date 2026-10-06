@@ -4,7 +4,8 @@
 import { icon, LOGO_SVG } from '@/content/icons';
 import { onLangChange, t } from '@/i18n';
 import { registerScreen } from '@/ui/router';
-import { button, h, ico, onTap } from '@/ui/shell/dom';
+import { button, h, onTap } from '@/ui/shell/dom';
+import { iconEl } from '@/ui/game/util';
 import { confirmDialog, toast } from '@/ui/shell/dialog';
 import { go, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, loadSavedGame, savedGameSummary } from '@/ui/shell/persist';
@@ -82,7 +83,7 @@ function render(root: HTMLElement): void {
       ? t('title.continueInfoLimit', { round: summary.round, limit: summary.roundLimit, count: summary.players.length })
       : t('title.continueInfo', { round: summary.round, count: summary.players.length });
     cont.append(
-      ico('play', 'title-continue-ico'),
+      iconEl('play', 'ico title-continue-ico'),
       h(
         'span',
         { class: 'title-continue-text' },
@@ -106,7 +107,7 @@ function render(root: HTMLElement): void {
       'aria-label': t('title.discard'),
       title: t('title.discard'),
     });
-    discard.append(ico('close'));
+    discard.append(iconEl('close'));
     onTap(discard, () => {
       void confirmDialog({
         title: t('title.discardTitle'),
@@ -133,7 +134,7 @@ function render(root: HTMLElement): void {
       button(t('title.settings'), () => go('settings', { back: 'title' }), { cls: 'btn-ghost', icon: 'settings', attrs: { 'data-action': 'settings' } }),
     ),
   );
-  menu.append(h('p', { class: 'title-players' }, ico('human'), t('title.players')));
+  menu.append(h('p', { class: 'title-players' }, iconEl('human'), t('title.players')));
 
   screen.append(
     bg,

@@ -11,7 +11,8 @@ import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { registerScreen } from '@/ui/router';
 import { getBoardGeometry, VB } from '@/ui/board/geometry';
-import { h, ico, iconButton, onTap } from '@/ui/shell/dom';
+import { h, iconButton, onTap } from '@/ui/shell/dom';
+import { iconEl } from '@/ui/game/util';
 import { openDialog, promptText, toast } from '@/ui/shell/dialog';
 import { go, setBackTarget } from '@/ui/shell/nav';
 import { prefs } from '@/ui/shell/prefs';
@@ -177,7 +178,7 @@ registerScreen('setup', (root) => {
       const join = h(
         'button',
         { type: 'button', class: 'seat-card seat-join', 'aria-label': `${t('setup.join')} · ${t('setup.seatOf', { seat: t(`setup.seat.${seat}`) })}`, 'data-focus-key': `seat-${seat}` },
-        h('span', { class: 'seat-join-plus' }, ico('plus')),
+        h('span', { class: 'seat-join-plus' }, iconEl('plus')),
         h('span', { class: 'seat-join-text' }, h('span', { class: 'seat-join-title display' }, t('setup.join')), h('span', { class: 'seat-join-sub' }, t('setup.seatOf', { seat: t(`setup.seat.${seat}`) }))),
       );
       onTap(join, () => {
@@ -206,15 +207,15 @@ registerScreen('setup', (root) => {
         h(
           'span',
           { class: 'seat-sub' },
-          h('span', { class: `seat-ctrl ${s.controller === 'human' ? '' : 'is-cpu'}` }, ico(s.controller === 'human' ? 'human' : 'cpu'), controllerLabel(s.controller)),
+          h('span', { class: `seat-ctrl ${s.controller === 'human' ? '' : 'is-cpu'}` }, iconEl(s.controller === 'human' ? 'human' : 'cpu'), controllerLabel(s.controller)),
         ),
       ),
-      h('span', { class: 'seat-edit' }, ico('settings')),
+      h('span', { class: 'seat-edit' }, iconEl('settings')),
     );
     onTap(card, () => openEditor(seat));
     anchor.append(card);
     if (seat !== 'S' && activeSeats(draft).length > 2) {
-      const leave = h('button', { type: 'button', class: 'seat-leave', 'aria-label': t('setup.leave') }, ico('close'));
+      const leave = h('button', { type: 'button', class: 'seat-leave', 'aria-label': t('setup.leave') }, iconEl('close'));
       onTap(leave, () => {
         toggleSeat(draft, seat);
         save();
@@ -259,7 +260,7 @@ registerScreen('setup', (root) => {
         renderAll();
         panel.querySelector<HTMLElement>('[data-focus-key="name"]')?.focus();
       });
-      const done = h('button', { type: 'button', class: 'btn btn-primary se-done' }, ico('check'), t('shell.done'));
+      const done = h('button', { type: 'button', class: 'btn btn-primary se-done' }, iconEl('check'), t('shell.done'));
       onTap(done, () => closeEditor?.());
 
       // tokens
@@ -301,7 +302,7 @@ registerScreen('setup', (root) => {
           tabindex: s.colorId === c.id ? '0' : '-1',
           ...colorVars(c.id),
         });
-        if (s.colorId === c.id) b.append(ico('check', 'se-color-check'));
+        if (s.colorId === c.id) b.append(iconEl('check', 'ico se-color-check'));
         else if (holder) {
           const mini = h('span', { class: 'se-color-holder' });
           mini.innerHTML = icon(draft.seats[holder].tokenId);
@@ -375,11 +376,11 @@ registerScreen('setup', (root) => {
       { class: 'setup-head' },
       back,
       h('h1', { class: 'setup-title' }, t('setup.title')),
-      h('span', { class: 'setup-count num' }, ico('human'), t('setup.count', { n: activeSeats(draft).length })),
+      h('span', { class: 'setup-count num' }, iconEl('human'), t('setup.count', { n: activeSeats(draft).length })),
     );
 
     const row = (label: string, iconId: string, control: HTMLElement) =>
-      h('div', { class: 'opt-row' }, h('span', { class: 'opt-label' }, ico(iconId), h('span', null, label)), control);
+      h('div', { class: 'opt-row' }, h('span', { class: 'opt-label' }, iconEl(iconId), h('span', null, label)), control);
 
     const unit = t('shell.moneyUnit');
     const opts = h(
@@ -484,7 +485,7 @@ registerScreen('setup', (root) => {
         disabled: !freeSeat,
         'aria-disabled': String(!freeSeat),
       },
-      ico('cpu'),
+      iconEl('cpu'),
       h('span', null, t('setup.addAi')),
     );
     onTap(addAi, () => {
@@ -498,7 +499,7 @@ registerScreen('setup', (root) => {
     const start = h(
       'button',
       { type: 'button', class: 'btn btn-primary btn-xl setup-start', 'data-action': 'start', disabled: !!problem, 'aria-describedby': 'setup-start-note' },
-      ico('play'),
+      iconEl('play'),
       h('span', null, t('setup.start')),
     );
     start.addEventListener('click', () => {
@@ -519,12 +520,12 @@ registerScreen('setup', (root) => {
     const order = h(
       'div',
       { class: 'setup-order' },
-      h('div', { class: 'setup-order-title' }, ico('rotate'), t('setup.order')),
+      h('div', { class: 'setup-order-title' }, iconEl('rotate'), t('setup.order')),
       h(
         'div',
         { class: 'setup-order-list' },
         activeSeats(draft).flatMap((seat, i) => [
-          i > 0 ? ico('chevron-right', 'order-arrow') : null,
+          i > 0 ? iconEl('chevron-right', 'ico order-arrow') : null,
           h('span', { class: 'chip is-player', ...colorVars(draft.seats[seat].colorId) }, tokenAvatar(draft.seats[seat].tokenId, draft.seats[seat].colorId), seatName(draft, seat)),
         ]),
       ),
@@ -536,7 +537,7 @@ registerScreen('setup', (root) => {
       head,
       opts,
       order,
-      h('div', { class: 'setup-foot' }, h('p', { class: 'setup-note', id: 'setup-start-note', role: 'status' }, ico('rotate'), problem ? t(problem) : t('setup.randomStart')), addAi, start),
+      h('div', { class: 'setup-foot' }, h('p', { class: 'setup-note', id: 'setup-start-note', role: 'status' }, iconEl('rotate'), problem ? t(problem) : t('setup.randomStart')), addAi, start),
     );
   }
 

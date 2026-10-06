@@ -1,15 +1,19 @@
 /**
- * Tiny DOM helpers for the shell screens (no framework).
+ * Tiny DOM helpers (no framework), shared by the shell and the game screen.
  *
- *   h('button', { class: 'btn', onclick: go }, ico('play'), t('title.new'))
+ *   h('button', { class: 'btn', onclick: go }, iconEl('play'), t('title.new'))
  */
-import { icon } from '@/content/icons';
 import { sfx, type SfxName } from '@/ui/audio/sfx';
 import { haptic, type HapticKind } from '@/ui/audio/haptics';
+import { iconEl } from '@/ui/game/util';
 
 type Child = Node | string | number | null | undefined | false;
 type Attrs = Record<string, unknown>;
 
+/**
+ * Element factory: `class`, `text` (textContent), `html`, `style` (object or string), `on*`
+ * listeners, `--custom` properties; other keys are attributes (true = present, null / false skipped).
+ */
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs?: Attrs | null,
@@ -20,6 +24,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
     for (const [k, v] of Object.entries(attrs)) {
       if (v === undefined || v === null || v === false) continue;
       if (k === 'class') el.className = String(v);
+      else if (k === 'text') el.textContent = String(v);
       else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
       else if (k === 'html') el.innerHTML = String(v);
       else if (k.startsWith('on') && typeof v === 'function') {
@@ -38,13 +43,6 @@ export function append(el: Element, children: (Child | Child[])[]): void {
     if (c === null || c === undefined || c === false) continue;
     el.append(typeof c === 'number' ? String(c) : c);
   }
-}
-
-/** Inline SVG icon wrapped in a `.ico` span (sized by CSS). */
-export function ico(id: string, cls = ''): HTMLSpanElement {
-  const span = h('span', { class: `ico ${cls}`.trim(), 'aria-hidden': 'true' });
-  span.innerHTML = icon(id);
-  return span;
 }
 
 export interface TapOptions {
@@ -74,7 +72,7 @@ export function button(
   opts: { cls?: string; icon?: string; attrs?: Attrs; sound?: SfxName | null } = {},
 ): HTMLButtonElement {
   const b = h('button', { type: 'button', class: `btn ${opts.cls ?? ''}`.trim(), ...(opts.attrs ?? {}) });
-  if (opts.icon) b.append(ico(opts.icon));
+  if (opts.icon) b.append(iconEl(opts.icon));
   if (label) b.append(h('span', { class: 'btn-label' }, label));
   onTap(b, fn, { sound: opts.sound });
   return b;
@@ -87,7 +85,7 @@ export function iconButton(
   cls = 'btn-ghost',
 ): HTMLButtonElement {
   const b = h('button', { type: 'button', class: `btn btn-icon ${cls}`, 'aria-label': label, title: label });
-  b.append(ico(iconId));
+  b.append(iconEl(iconId));
   onTap(b, fn);
   return b;
 }

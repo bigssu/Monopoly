@@ -7,7 +7,8 @@ import { LOGO_SVG } from '@/content/icons';
 import { getLang, onLangChange, t, type Lang } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { registerScreen } from '@/ui/router';
-import { button, h, ico, iconButton } from '@/ui/shell/dom';
+import { button, h, iconButton } from '@/ui/shell/dom';
+import { iconEl } from '@/ui/game/util';
 import { confirmDialog, openDialog, toast } from '@/ui/shell/dialog';
 import { markdownToHtml } from '@/ui/shell/markdown';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
@@ -27,7 +28,7 @@ function row(iconId: string | HTMLElement, label: string, control: HTMLElement, 
   return h(
     'div',
     { class: 'set-row' },
-    h('div', { class: 'set-label' }, typeof iconId === 'string' ? h('span', { class: 'set-ico' }, iconId.startsWith('<') ? h('span', { class: 'ico', html: iconId }) : ico(iconId)) : iconId, h('span', { class: 'set-label-text' }, h('span', null, label), hint ? h('small', null, hint) : null)),
+    h('div', { class: 'set-label' }, typeof iconId === 'string' ? h('span', { class: 'set-ico' }, iconId.startsWith('<') ? h('span', { class: 'ico', html: iconId }) : iconEl(iconId)) : iconId, h('span', { class: 'set-label-text' }, h('span', null, label), hint ? h('small', null, hint) : null)),
     h('div', { class: 'set-control' }, control),
   );
 }
@@ -94,12 +95,12 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
     volume.addEventListener('change', () => sfx.play('cash-in'));
     volume.disabled = !p.sound;
 
-    const soundIco = h('span', { class: 'set-ico' }, ico(p.sound ? 'sound-on' : 'sound-off'));
+    const soundIco = h('span', { class: 'set-ico' }, iconEl(p.sound ? 'sound-on' : 'sound-off'));
     const soundSwitch = switcher(p.sound, (v) => {
       prefs.set({ sound: v });
       volume.disabled = !v;
       soundIco.innerHTML = '';
-      soundIco.append(ico(v ? 'sound-on' : 'sound-off'));
+      soundIco.append(iconEl(v ? 'sound-on' : 'sound-off'));
       if (v) sfx.play('turn');
     }, t('settings.sound'));
 
@@ -207,7 +208,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       'section',
       { class: 'set-card set-card-data' },
       h('h2', { class: 'set-card-title' }, t('settings.data')),
-      h('div', { class: 'set-save' }, h('span', { class: 'set-ico' }, ico('save')), h('p', { class: 'set-save-text' }, summary ? t('settings.hasSave', { round: summary.round, count: summary.players.length }) : t('settings.noSave'))),
+      h('div', { class: 'set-save' }, h('span', { class: 'set-ico' }, iconEl('save')), h('p', { class: 'set-save-text' }, summary ? t('settings.hasSave', { round: summary.round, count: summary.players.length }) : t('settings.noSave'))),
       del,
     );
 
@@ -222,12 +223,12 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
         h('div', null, h('div', { class: 'about-name display' }, t('title.name')), h('div', { class: 'about-ver num' }, t('shell.version', { v: version }))),
       ),
       h('p', { class: 'about-text' }, t('settings.aboutBody')),
-      h('ul', { class: 'about-list' }, h('li', null, ico('check'), t('settings.original')), h('li', null, ico('check'), t('settings.fonts'))),
+      h('ul', { class: 'about-list' }, h('li', null, iconEl('check'), t('settings.original')), h('li', null, iconEl('check'), t('settings.fonts'))),
       button(t('settings.licenses'), openLicenses, { cls: 'btn-ghost about-lic', icon: 'help', attrs: { 'data-action': 'licenses' } }),
     );
 
     wrap.append(
-      h('header', { class: 'settings-head' }, iconButton('chevron-left', t('shell.back'), onClose), h('h1', { class: 'settings-title' }, ico('settings'), t('settings.title'))),
+      h('header', { class: 'settings-head' }, iconButton('chevron-left', t('shell.back'), onClose), h('h1', { class: 'settings-title' }, iconEl('settings'), t('settings.title'))),
       h('div', { class: 'settings-body' }, h('div', { class: 'settings-col' }, general), h('div', { class: 'settings-col' }, data, about)),
     );
     if (active) wrap.querySelector<HTMLElement>(`[data-focus-key="${active}"] [aria-checked="true"]`)?.focus();

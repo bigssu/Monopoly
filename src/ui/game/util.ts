@@ -8,6 +8,7 @@ import { getCard, type CardId } from '@/content/cards';
 import { GROUP_COLORS, HUB_COLOR } from '@/content/board';
 import { fmtMoney, t } from '@/i18n';
 import type { Player, Seat, SpaceDef } from '@/engine';
+import { h } from '@/ui/shell/dom';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -73,33 +74,7 @@ export function spaceIcon(sp: SpaceDef): string {
 // DOM
 // ---------------------------------------------------------------------------
 
-type Attrs = Record<string, string | number | boolean | null | undefined> & {
-  class?: string;
-  html?: string;
-  text?: string;
-  style?: string;
-};
-
-/** Tiny element factory: h('div', { class: 'x', text: 'hi' }, child…). */
-export function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attrs: Attrs = {},
-  ...children: Array<Node | string | null | undefined | false>
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === null || v === undefined || v === false) continue;
-    if (k === 'html') el.innerHTML = String(v);
-    else if (k === 'text') el.textContent = String(v);
-    else if (k === 'class') el.className = String(v);
-    else el.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const c of children) {
-    if (c === null || c === undefined || c === false) continue;
-    el.append(typeof c === 'string' ? document.createTextNode(c) : c);
-  }
-  return el;
-}
+export { h };
 
 /** Parsed icon markup (an `<svg><use/></svg>` into the sprite), cloned per use: parsing markup for
  *  every icon of every prompt card was a visible part of building a card on a slow CPU

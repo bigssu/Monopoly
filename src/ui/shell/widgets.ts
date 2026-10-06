@@ -3,7 +3,8 @@
  */
 import { icon } from '@/content/icons';
 import { playerColor } from '@/content/palette';
-import { h, ico, onTap } from './dom';
+import { h, onTap } from './dom';
+import { iconEl } from '@/ui/game/util';
 
 export interface SegOption<T> {
   value: T;
@@ -83,8 +84,8 @@ export function toggleChip(label: string, on: boolean, onChange: (v: boolean) =>
   const b = h(
     'button',
     { type: 'button', class: 'chip is-toggle', 'aria-pressed': String(on) },
-    h('span', { class: 'chip-check' }, ico('check')),
-    iconId ? ico(iconId) : null,
+    h('span', { class: 'chip-check' }, iconEl('check')),
+    iconId ? iconEl(iconId) : null,
     h('span', {}, label),
   );
   onTap(b, () => {

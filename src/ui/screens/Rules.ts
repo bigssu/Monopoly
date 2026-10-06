@@ -7,7 +7,8 @@ import { icon, LOGO_SVG } from '@/content/icons';
 import { onLangChange, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { registerScreen } from '@/ui/router';
-import { h, ico, iconButton, onTap } from '@/ui/shell/dom';
+import { h, iconButton, onTap } from '@/ui/shell/dom';
+import { iconEl } from '@/ui/game/util';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { openDialog } from '@/ui/shell/dialog';
 import { tokenAvatar } from '@/ui/shell/widgets';
@@ -20,7 +21,7 @@ function points(items: [string, string][]): HTMLElement {
   return h(
     'ul',
     { class: 'rp-points' },
-    items.map(([iconId, text]) => h('li', null, h('span', { class: 'rp-point-ico' }, iconId.startsWith('ui:') ? ico(iconId.slice(3)) : svgIcon(iconId, '')), h('span', null, text))),
+    items.map(([iconId, text]) => h('li', null, h('span', { class: 'rp-point-ico' }, iconId.startsWith('ui:') ? iconEl(iconId.slice(3)) : svgIcon(iconId, '')), h('span', null, text))),
   );
 }
 
@@ -240,7 +241,7 @@ const PAGES: Page[] = [
         [chips([GROUP_COLORS.red, GROUP_COLORS.red, GROUP_COLORS.red, GROUP_COLORS.red], 'line'), 'line'],
         [hubs, 'hubs'],
         [svgIcon('pot', 'win-ico'), 'bankrupt'],
-        [h('span', { class: 'win-trophy' }, ico('trophy')), 'rounds'],
+        [h('span', { class: 'win-trophy' }, iconEl('trophy')), 'rounds'],
       ];
       return h(
         'div',
@@ -286,14 +287,14 @@ export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0
       'header',
       { class: 'rules-head' },
       iconButton('chevron-left', t('shell.back'), onClose),
-      h('h1', { class: 'rules-title' }, ico('help'), t('rules.title')),
+      h('h1', { class: 'rules-title' }, iconEl('help'), t('rules.title')),
       counter,
     );
     const track = h('div', { class: 'rules-track' });
     PAGES.forEach((p, i) => track.append(h('section', { class: 'rp', role: 'tabpanel', id: `rules-panel-${p.id}`, 'aria-labelledby': `rules-tab-${p.id}`, 'data-page': p.id, 'aria-hidden': 'true', inert: true, '--p': String(i) }, p.build())));
     const viewport = h('div', { class: 'rules-viewport' }, track);
 
-    const prev = h('button', { type: 'button', class: 'btn btn-ghost rules-prev', 'data-action': 'prev' }, ico('chevron-left'), h('span', null, t('rules.prev')));
+    const prev = h('button', { type: 'button', class: 'btn btn-ghost rules-prev', 'data-action': 'prev' }, iconEl('chevron-left'), h('span', null, t('rules.prev')));
     const next = h('button', { type: 'button', class: 'btn btn-primary rules-next', 'data-action': 'next' });
     const dots = h('div', { class: 'rules-dots', role: 'tablist' });
     PAGES.forEach((p, i) => {
@@ -331,7 +332,7 @@ export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0
       prev.disabled = page === 0;
       const last = page === PAGES.length - 1;
       next.innerHTML = '';
-      next.append(h('span', null, last ? t('rules.done') : t('rules.next')), ico(last ? 'check' : 'chevron-right'));
+      next.append(h('span', null, last ? t('rules.done') : t('rules.next')), iconEl(last ? 'check' : 'chevron-right'));
       next.dataset.last = String(last);
     };
     onTap(prev, () => setPage(page - 1));
