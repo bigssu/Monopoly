@@ -39,11 +39,12 @@ test('Rules tabs hide inactive slides and support roving keyboard navigation', a
   const first = tabs.nth(0);
   await first.focus();
   await page.keyboard.press('End');
-  await expect(tabs.nth(6)).toBeFocused();
-  await expect(tabs.nth(6)).toHaveAttribute('aria-selected', 'true');
+  // End jumps to the last page, however many the rules have (8 since the fun rules).
+  await expect(tabs.last()).toBeFocused();
+  await expect(tabs.last()).toHaveAttribute('aria-selected', 'true');
   await expect(tabs.nth(0)).toHaveAttribute('tabindex', '-1');
   await expect(page.locator('.rp').nth(0)).toHaveAttribute('inert', '');
-  await expect(page.locator('.rp').nth(6)).not.toHaveAttribute('inert', '');
+  await expect(page.locator('.rp').last()).not.toHaveAttribute('inert', '');
 });
 
 test('language radio retains keyboard focus after localized rerender', async ({ page }) => {
