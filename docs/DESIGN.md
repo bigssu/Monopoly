@@ -491,7 +491,8 @@ src/
     stage/    Stage.ts (rotating center), Dice.ts, prompts/*.ts (Buy, Build, Toll, Takeover,
               Card, Island, Festival, Tour, Sell, Auction, TurnBanner)
     panels/   PlayerPanel.ts
-    fx/       animate.ts (event → promise-based animation sequencer), particles.ts, floats.ts
+    fx/       animate.ts (event → promise-based animation sequencer), floats.ts, vfx/ (canvas
+              effects engine), money/ (money cut-ins)
     audio/    sfx.ts (WebAudio synth), haptics.ts
     settings/ settings.ts (localStorage)
   styles/    tokens.css base.css board.css stage.css panels.css screens.css

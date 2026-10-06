@@ -591,7 +591,7 @@ Android `preferredRefreshRate`·절전 모드 토글, `b29a2d4` 30 Hz 계단식 
   옆면은 법선에 따라 살짝 어둡게. 굴림 중 회전은 공용 30 Hz 클럭(`onFrame`)으로 갱신, 튀어오름은 기존 WAAPI.
   대기 화면 레이어 31 → 12(장식 애니메이션 정지 후 6), 레이어 메모리 103 → 99 MB(정지 후 49 MB).
 - **4단계** — 파티클(색종이/동전 비/동전 호)을 DOM 노드 + WAAPI(파티클마다 GPU 레이어, 동전 호 1회에 +8,
-  색종이 +76)에서 **효과당 임시 `<canvas>` 1개**로 교체(`src/ui/fx/particles.ts`). 30 Hz 클럭에서 그리며,
+  색종이 +76)에서 **효과당 임시 `<canvas>` 1개**로 교체(당시 `src/ui/fx/particles.ts`; 지금은 VFX 엔진 `src/ui/fx/vfx/`, docs/VFX.md §14.1). 30 Hz 클럭에서 그리며,
   캔버스는 효과의 경계 상자 크기(전체 화면 색종이는 1× 해상도), 마지막 파티클이 끝나면 제거. 캔버스 갱신은 문서 Paint를 만들지 않음.
 - **5단계** — 레이어/프레임 정리:
   - `html/body/#app/.game/.result/.fx-layer`의 `position: fixed` 제거(→ 100% 높이 + absolute). 겹친 전체화면 fixed 상자가

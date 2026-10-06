@@ -24,6 +24,9 @@ seamlessly.
 
 ## Runtime
 
+(As built, there is no separate `audio/samples.ts` / `SampleSfx`: `SynthSfx` in `audio/synth.ts`
+loads and plays the samples and falls back to its synthesizer per name.)
+
 - `audio/samples.ts` — `SampleSfx` implements the existing `Sfx` interface: decodes the shipped
   samples lazily (preloads the frequent ones at unlock), picks a random take, honours
   `pitch` (playbackRate) / `gain` / the per-name throttle, plays into the existing SFX bus (so the

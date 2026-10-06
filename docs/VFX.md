@@ -41,7 +41,7 @@
 
 - 번들: Pixi(트리셰이킹) **109 KB gz** vs 현재 앱 JS 95 KB gz, 자체 엔진 추정 6–9 KB gz.
 - 실측(SwiftShader, 4× 스로틀): 면적×백킹이 비용 지배, 파티클 100→300은 영향 미미. 800² 1× 백킹에서 Canvas2D 27–28 fps, Pixi 29.5 fps → 둘 다 게이트 근처, **면적 예산이 핵심**.
-- WebGL 신규 위험(컨텍스트 로스트, 저사양 GPU, 셰이더 컴파일) 회피, 기존 `particles.ts` 패턴 계승.
+- WebGL 신규 위험(컨텍스트 로스트, 저사양 GPU, 셰이더 컴파일) 회피, 기존 `particles.ts`(구 `src/ui/fx/particles.ts`, §14.1에서 삭제) 패턴 계승.
 - **Pixi 에스컬레이션 조건**(리서치 §2.7): 실기기에서 FX 중 프레임당 JS >6 ms 상시 / 표시 fps <26 반복 / 파티클 상한 600+ 필요.
 - 소프트웨어 캔버스(`willReadFrequently:true`)를 기본으로 유지(PERFORMANCE.md 9단계·§7 발견). 런타임 스위치 `fxConfig.softwareCanvas`로 실기기 A/B.
 
@@ -108,7 +108,7 @@ idle ──play()──▶ arm ──(다음 격자 프레임)──▶ running 
 
 ### 3.5 클록·속도·스킵
 
-- 엔진 시간 `fxNow` 은 `onFrame(now)`의 `now` 차이를 누적: `elapsed += (now - last) × animSpeed() × (isSkipping() ? 5 : 1)` (`particles.ts`와 동일 패턴). 파티클은 **고정 스텝 dt=1/30 s** 적분(스킵 시 스텝 크기만 ×5, 서브스텝 없음).
+- 엔진 시간 `fxNow` 은 `onFrame(now)`의 `now` 차이를 누적: `elapsed += (now - last) × animSpeed() × (isSkipping() ? 5 : 1)` (구 `src/ui/fx/particles.ts`와 동일 패턴). 파티클은 **고정 스텝 dt=1/30 s** 적분(스킵 시 스텝 크기만 ×5, 서브스텝 없음).
 - `instant()`(=`animSpeed==0` 또는 reduced-motion): `play()`는 즉시 반환. reduced-motion이면 **정적 표식**(§8.3).
 - 히트스톱: `fx.freeze(ms)` = FX 시간 정지(라이브 파티클 정지) — DOM/WAAPI는 정지하지 않으므로 시퀀서는 같은 시간만큼 `await sleep(ms)`로 후속 이벤트를 지연한다. (v2: `time.ts`의 `running` 애니메이션 `playbackRate=0` 일시 정지로 전 화면 프리즈.)
 
@@ -133,12 +133,13 @@ src/ui/fx/vfx/
   index.ts        FxHost: init/play/freeze/clear/liveCount/stats, dev 훅 등록
   engine.ts       리전·캔버스 라이프사이클, onFrame 스텝, 파티클 풀, 예산기, 플래시 예산기
   renderer2d.ts   FxRenderer(Canvas2D) — begin/sprite/end, 틴트 캐시  (Pixi 교체 지점)
-  atlas.ts        fx-atlas.json 로드, createImageBitmap, 프레임 조회
+  atlas.ts        atlas.json 로드, createImageBitmap, 프레임 조회
   presets.ts      프리셋(이미터 타임라인) 정의: toll, buy, build, landmark, takeover, ...
   map.ts          GameEvent → 프리셋 매핑(§7), 등급·금액 티어 함수, 콤보 병합
   rng.ts          mulberry32 시드 PRNG (엔진 rng와 독립)
-public/fx/        fx-color.webp  fx-mask.webp  fx-atlas.json   (빌드 산출물, 커밋)
-scripts/fx/       sprites.mjs  bake-atlas.mjs  contact-sheet.mjs
+public/fx/        atlas-color.webp  atlas-mask.webp  atlas.json   (빌드 산출물, 커밋)
+src/content/fx/   sprites.ts (스프라이트 정의)
+scripts/fx/       bake.mjs  contact-sheet.mjs
 ```
 
 핵심 타입(스케치):
@@ -174,7 +175,7 @@ export interface FxHost {
 ### 3.9 `animate.ts` 연동 방식
 
 - `GameView`가 `fx: FxHost`를 갖고(`view.vfx`), 각 `case`에서 `void view.vfx.play(...)`(꼬리는 비블록) 또는 `await handle.block`(블록 구간만 대기).
-- 기존 `particles.ts`의 `coinShower/coinArc/confetti`는 프리셋 `coinShower/coinArc/confetti`로 이관(같은 호출 시그니처의 어댑터 유지 → 단계적 교체).
+- 구 `src/ui/fx/particles.ts`의 `coinShower/coinArc/confetti`는 프리셋으로 이관했고 그 모듈은 지웠다(§14.1: 통과 샤워 → `passStart`, 통행료 호 → `tollPay`, 승리 색종이 → `victory`, 결과 화면 → `confettiRain`).
 - 파생 이벤트 `GroupCompleted`(엔진 이벤트가 아님): `PropertyBought`/`TakenOver`/`PropertyTransferred` 직후 뷰 상태 `vs`로 `completedGroup(vs, playerId, spaceIndex)`를 계산(엔진 `groupOf` 재사용, 엔진 변경 불필요).
 - 프롬프트 순간(확정 탭 등)은 `Stage`/프롬프트 버튼 핸들러가 `vfx.play('tap', {x,y})` 호출(입력→피드백 지연 ≤100 ms 유지; 이벤트 시퀀서를 거치지 않음).
 
@@ -236,9 +237,9 @@ export interface FxHost {
 ## 5. 에셋 파이프라인 (빌드 타임)
 
 ```
-scripts/fx/sprites.mjs        스프라이트 정의: { name, cls:'color'|'mask', w, h, frames, k?, svg(i, n) → SVG 문자열 }
-scripts/fx/bake-atlas.mjs     Playwright(Chromium) → 래스터 → 알파 트림 → MaxRects → WebP/PNG → JSON
-npm run fx:atlas              위 스크립트 실행 (node scripts/fx/bake-atlas.mjs), 산출물을 public/fx/ 에 기록
+src/content/fx/sprites.ts     스프라이트 정의: { name, cls:'color'|'mask', w, h, frames, k?, svg(i, n) → SVG 문자열 }
+scripts/fx/bake.mjs           Playwright(Chromium) → 래스터 → 알파 트림 → MaxRects → WebP/PNG → JSON
+npm run fx:atlas              위 스크립트 실행 (node scripts/fx/bake.mjs), 산출물을 public/fx/ 에 기록
 scripts/fx/contact-sheet.mjs  아틀라스 + 프레임 재생 컨택트 시트 PNG (docs/assets/fx-contact-sheet.png) — 시각 검토용
 ```
 
@@ -247,7 +248,7 @@ scripts/fx/contact-sheet.mjs  아틀라스 + 프레임 재생 컨택트 시트 P
   1. 각 프레임: SVG → `data:` URL → `Image.decode()` → `OffscreenCanvas(ceil(w×1.5×k), ceil(h×1.5×k))`에 그리기 → `getImageData`로 알파>6 바운딩 박스 → 트림.
   2. 클래스(색/마스크)별로 `new MaxRectsPacker(1024, 1024, 2, { smart:true, pot:true, allowRotation:false })` (색은 256×512로 충분; 프레임이 늘면 자동 탐색).
   3. 아틀라스 캔버스에 배치 후 `convertToBlob({type:'image/webp', quality:0.9})` 및 PNG.
-  4. `fx-atlas.json`: `{ v:1, scale:1.5, ref:30, color:{w,h,file}, mask:{...}, frames:{ "sparkle4/0":[ax,ay,tw,th,x0,y0,W,H,k], ... }, anims:{ "sparkle4":{n:6,fps:20} } }`. 그릴 때 앵커 복원: `dx = (x0 - W/2)/scale`, `dy = (y0 - H/2)/scale`.
+  4. `atlas.json`: `{ v:1, scale:1.5, ref:30, color:{w,h,file}, mask:{...}, frames:{ "sparkle4/0":[ax,ay,tw,th,x0,y0,W,H,k], ... }, anims:{ "sparkle4":{n:6,fps:20} } }`. 그릴 때 앵커 복원: `dx = (x0 - W/2)/scale`, `dy = (y0 - H/2)/scale`.
 - 검증 스크립트(`bake` 마지막 단계 + vitest): 아틀라스 ≤1024², 프레임 사각형 겹침 없음, 패딩 ≥2 px, 총 바이트(WebP) ≤ 500 KB, 모든 프리셋이 참조하는 스프라이트 이름이 존재.
 - 산출물은 **저장소에 커밋**(빌드가 Playwright를 요구하지 않음). 재생성 시 Chromium 버전 차이로 바이트가 달라질 수 있으니 CI는 "크기·무결성·참조 검사"만 강제.
 - 아트 규칙: (1) 스프라이트에 문자·숫자·통화 기호 금지(회전/i18n/통화 오해), (2) 상표·고유 도안 금지(DESIGN C1), (3) 마스크는 순백+알파(틴트 품질), (4) 색 스프라이트는 팔레트 토큰(`#F2B633` 금, `#B9781A` 금 그림자 등) 재사용, (5) 외곽선 2–2.5 px 짙은 색으로 보드 SVG 아이콘 스타일과 통일.
@@ -671,7 +672,7 @@ FX **51f(1.7 s)** + 정지 3f, 블록 **FX f21**(≈ 800 ms, 정지 포함), 스
 | `tap` | `sparkle4`×4 + `ring_shock` 0.4× | 100 ms |
 | `hopDust` | `dust_puff` 0.5× | 5f |
 | `coinArc(from,to,n)` | `coin_spin` n개, 2차 베지어, 스태거 40 ms, 720 ms, 스쿼시 0.7–1.2, 트레일 `glow` 6 샘플, 도착 시 `sparkle4` | n ≤14 |
-| `coinShower(at,n)` | 위로 발사 후 중력, `coin_spin`, 스태거 25 ms | n ≤24 |
+| `coinShower(at,n)` | (계획만 하고 만들지 않음: 출발 통과 연출은 `passStart`) | — |
 | `billRain(at,n)` | `bill_flutter` 낙하 | n ≤10 |
 | `sparkleField(at,r,n)` | `sparkle4` 랜덤 위상·스태거 25 ms | n ≤14 |
 | `starBurst(at)` | `star_burst` 8f + `ring_shock` 6f | |
@@ -757,8 +758,8 @@ FX **51f(1.7 s)** + 정지 3f, 블록 **FX f21**(≈ 800 ms, 정지 포함), 스
 3. 매핑 완전성: `Object.keys(eventFx)`가 `GameEventType` 전체를 덮음(컴파일 타임 `satisfies` + 런타임 검사).
 4. 프리셋 요청량 ≤ 등급 상한; 타임라인 길이 ≤ 등급 총 길이(피날레 ≤4 s).
 5. 콤보 병합: 400 ms 창 내 동일 계열 합산·상한, 피치 래더(0..7, 1.5 s 리셋).
-6. 아틀라스 무결성(`public/fx/fx-atlas.json`): 크기 ≤1024², 사각형 겹침 없음, 패딩, WebP+JSON 합계 ≤500 KB, 프리셋 참조 스프라이트 존재.
-7. 스프라이트 SVG에 `<text>`가 없음(문자 금지 규칙) — `scripts/fx/sprites.mjs` 산출 SVG 정적 검사.
+6. 아틀라스 무결성(`public/fx/atlas.json`): 크기 ≤1024², 사각형 겹침 없음, 패딩, WebP+JSON 합계 ≤500 KB, 프리셋 참조 스프라이트 존재.
+7. 스프라이트 SVG에 `<text>`가 없음(문자 금지 규칙) — `src/content/fx/sprites.ts` 산출 SVG 정적 검사.
 
 ### 10.2 e2e — Playwright 스크린샷·프레임 검증
 - dev 훅 확장 제안(`isDevHook()` 한정, `window.__lotAndRoll.fx`): `play(preset, anchor, ctx)`, `step(frames)`(고정 스텝 전진), `pause()/resume()`, `liveCount()`, `canvasState()`(hidden/크기), `activeTicks()`(=`activeFrameTicks()`).
@@ -867,7 +868,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 | `atlas.json` | — | 16,449 B |
 | **합계** | | **262,529 B** (예산 ≤500 KiB) |
 
-보급형 모바일 기준으로 이전 1156² 마스크를 1024²로 축소했다. 표시 크기·앵커·애니메이션 프레임 수는 유지하며 컬러 아트는 투명 테두리만 추가했다. 프레임 추가 시에도 1K/POT 한도를 지켜야 한다. §5의 파일명(`bake-atlas.mjs`, `fx-color.webp`, `fx-atlas.json`)은 위 실제 이름(`bake.mjs`, `atlas-color.webp`, `atlas.json`)으로 대체됐다.
+보급형 모바일 기준으로 이전 1156² 마스크를 1024²로 축소했다. 표시 크기·앵커·애니메이션 프레임 수는 유지하며 컬러 아트는 투명 테두리만 추가했다. 프레임 추가 시에도 1K/POT 한도를 지켜야 한다.
 
 ---
 
