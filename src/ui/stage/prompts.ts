@@ -32,7 +32,7 @@ import {
 } from '@/engine';
 import { getCard } from '@/content/cards';
 import { playerColor } from '@/content/palette';
-import { loc, t } from '@/i18n';
+import { fmtMoney, loc, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { onFrame } from '@/ui/fx/time';
@@ -156,7 +156,7 @@ function tollLadder(state: GameState, i: number, owner: PlayerId, current: numbe
       'div',
       { class: `ld${l === current ? ' is-cur' : ''}${l === next ? ' is-next' : ''}` },
       levelIcon(l, groupColor(sp)),
-      h('b', { text: tollAtLevel(state, i, l, owner).toLocaleString() }),
+      h('b', { text: fmtMoney(tollAtLevel(state, i, l, owner)) }),
     );
     row.append(cell);
   }
@@ -761,7 +761,7 @@ function debtPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'debt' }>): Promp
       iconEl(spaceIcon(sp), 'ico pick-ico'),
       h('span', { class: 'pick-name', text: loc(sp.short) }),
       h('span', { class: 'pick-detail', text: what }),
-      button(t('g.debt.sell'), ctx, o.action, { sub: `+${o.amount.toLocaleString()}`, primary: isBest }),
+      button(t('g.debt.sell'), ctx, o.action, { sub: `+${fmtMoney(o.amount)}`, primary: isBest }),
     );
     list.append(row);
   }
@@ -895,7 +895,7 @@ export function spaceInfo(state: GameState, i: number): HTMLElement {
     if (state.festival === i) el.append(tag(t('g.toll.festival'), 'gold', 'festival-marker'));
   } else {
     const key = sp.kind === 'tax' && ruleFlags(state.settings).allOrNothing ? 'g.info.tax.gamble' : `g.info.${sp.kind}`;
-    el.append(h('div', { class: 'pc-note', text: t(key, { pot: state.pot.toLocaleString() }) }));
+    el.append(h('div', { class: 'pc-note', text: t(key, { pot: fmtMoney(state.pot) }) }));
   }
   el.append(h('button', { class: 'info-close', type: 'button', 'data-action': 'close-info', text: t('shell.close') }));
   return el;

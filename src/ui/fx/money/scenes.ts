@@ -29,6 +29,7 @@ import { rotate, type Wallet } from './wallet';
 import './strings';
 import { SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
 import { outBack } from '../vfx/ease';
+import { esc } from '@/ui/shell/dom';
 
 export interface Party {
   seat: Seat;
@@ -330,13 +331,12 @@ function icon(id: string): string {
   }
 }
 
-const escapeHtml = (v: string): string => v.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** A city card (landmark art on a paper card with the group band and an owner frame). */
 function cityCard(a: SpaceArt, frame: string | null): string {
   return (
     `<div class="mh-card${frame ? ' is-owned' : ''}" style="--band:${a.color ?? '#B8AE9C'};--frame:${frame ?? 'transparent'}">` +
-    `<i class="mh-band">${escapeHtml(a.name)}</i><div class="mh-art">${icon(a.icon)}</div></div>`
+    `<i class="mh-band">${esc(a.name)}</i><div class="mh-art">${icon(a.icon)}</div></div>`
   );
 }
 

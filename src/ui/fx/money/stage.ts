@@ -35,6 +35,7 @@ import { Wallet, walletGeom, type TweenHost, type UprightSlide } from './wallet'
 import type { MoneyAnimName as FxAnimName } from '@/content/fx/money-manifest';
 import '@/styles/money.css';
 import { SEAT_ANGLE, SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
+import { clamp } from '@/ui/game/util';
 
 export interface Rect {
   x: number;
@@ -618,7 +619,6 @@ export class MoneyStage implements TweenHost {
     const m = Math.max(4, S * 0.012);
     const g = walletGeom(coin, 20 * this.scale);
     const l = this.local(r);
-    const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
     const x = clamp(l.x + l.w / 2, m + g.w / 2, Math.max(m + g.w / 2, W - m - g.w / 2));
     const y = clamp(l.y + l.h / 2 + g.h / 2, Math.min(H - m, m + g.h), H - m);
     const left = x < c.x;
