@@ -83,7 +83,6 @@ android/      Capacitor Android 프로젝트 (npx cap add android 로 생성)
 - [DESIGN.md](DESIGN.md): 현재 UI/UX·접근성·반응형 디자인 기준과 출시 전 확인 사항
 - [docs/DESIGN.md](docs/DESIGN.md): 게임 규칙·보드 콘텐츠·아키텍처 사양
 - [docs/BALANCE.md](docs/BALANCE.md): 밸런스 조정 기록과 시뮬레이션 결과
-- [docs/UI-CONTRACT.md](docs/UI-CONTRACT.md): UI 계약
 - [docs/research/](docs/research/): 규칙, IP/라이선스, 기술 스택/Android 조사
 - [docs/RELEASE.md](docs/RELEASE.md): 릴리스와 Play Console 가이드
 - [docs/PLAY_LISTING.md](docs/PLAY_LISTING.md): 스토어 문구와 그래픽 에셋
