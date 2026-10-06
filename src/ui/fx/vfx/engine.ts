@@ -19,7 +19,7 @@ import type { HapticKind } from '@/ui/audio/haptics';
 import type { SfxName } from '@/ui/audio/sfx';
 import { atlasUrls, createAtlasMeta, loadAtlas, loadAtlasJson, type FxAtlas, type FxAtlasMeta } from './atlas';
 import { paintFrame, R_A, R_ALPHA, R_ANIM, R_AX, R_AY, R_FRAME, R_SLOT, R_TINT, REC, SlotPainter, SREC, type FromWorker, type ToWorker, type WorkerFrame } from './paint';
-import { gameClock, type FxClock } from './clock';
+import { animSpeed, isManualClock, isSkipping, onFrame, reducedMotion } from '../time';
 import { createCoords, type CoordSource } from './coords';
 import { FRAME_MS, newSample, sampleParticle } from './particles';
 import { PF } from './pool';
@@ -43,7 +43,6 @@ export interface FxOptions extends CoordSource {
   layer: HTMLElement;
   /** Player colour (hex). Default: PLAYER_COLORS by id. */
   getPlayerColor?(id: PlayerId): string;
-  clock?: FxClock;
   sfx?(name: SfxName, o: { pitch?: number; gain?: number }): void;
   haptic?(kind: HapticKind): void;
   /** Screen shake of the table AND the fx layer (VFX.md §3.1). */
@@ -197,7 +196,6 @@ const noopPlay = (name = '', tier: Tier = 0): FxPlay => {
 };
 
 export function createFx(o: FxOptions): FxHandle {
-  const clock = o.clock ?? gameClock;
   const colorOf = o.getPlayerColor ?? ((id: PlayerId) => PLAYER_COLORS[id % PLAYER_COLORS.length]!.hex);
   const runner = new Runner(
     {
@@ -309,7 +307,7 @@ export function createFx(o: FxOptions): FxHandle {
     return (
       o.worker !== false &&
       !o.loadAtlas &&
-      !clock.manual?.() &&
+      !isManualClock() &&
       workerState !== 'failed' &&
       typeof Worker !== 'undefined' &&
       typeof OffscreenCanvas !== 'undefined' &&
@@ -644,12 +642,12 @@ export function createFx(o: FxOptions): FxHandle {
 
   function step(now: number): boolean {
     const t0 = performance.now();
-    const skipping = localSkip || clock.skipping();
+    const skipping = localSkip || isSkipping();
     if (skipping && !runner.skipping) runner.skip();
     let frames: number;
     if (last < 0) frames = 1;
     else {
-      acc += (now - last) * Math.max(0, clock.speed()) * (skipping ? SKIP_RATE : 1);
+      acc += (now - last) * Math.max(0, animSpeed()) * (skipping ? SKIP_RATE : 1);
       frames = Math.floor((acc + FRAME_MS * 0.25) / FRAME_MS);
       acc -= frames * FRAME_MS;
       frames = Math.min(frames, skipping ? 20 : 8);
@@ -682,7 +680,7 @@ export function createFx(o: FxOptions): FxHandle {
     ring[tick.n % ring.length] = dt;
     tick.n++;
     // Adaptive quality samples: real-time ticks with effects on screen (not skipping, not hand-stepped).
-    if (quality === 'auto' && lastNow >= 0 && !skipping && !clock.manual?.() && pool.liveCount > 0) {
+    if (quality === 'auto' && lastNow >= 0 && !skipping && !isManualClock() && pool.liveCount > 0) {
       const from = aq.tier;
       noteTransition(from, aq.sample(dt, now - lastNow, now));
     }
@@ -708,13 +706,13 @@ export function createFx(o: FxOptions): FxHandle {
     if (!stopTick) {
       last = -1;
       acc = 0;
-      stopTick = clock.onFrame(step);
+      stopTick = onFrame(step);
     }
   }
 
   /** The reduced path plays (no canvas): OS / app reduced motion, setting 'off', or the adaptive 'minimal' tier. */
   function reducedNow(): boolean {
-    if (clock.reducedMotion() || quality === 'off') return true;
+    if (reducedMotion() || quality === 'off') return true;
     if (quality === 'auto' && aq.tier === 'minimal') {
       noteTransition('minimal', aq.onPlay(performance.now()));
       return aq.tier === 'minimal';
@@ -789,7 +787,7 @@ export function createFx(o: FxOptions): FxHandle {
   const handle: FxHandle = {
     play(name, params, opt) {
       if (disposed) return noopPlay(name);
-      if (clock.instant()) return noopPlay(name);
+      if (animSpeed() === 0) return noopPlay(name);
       const tl = buildPreset(name, params, env());
       if (reducedNow()) {
         runReduced(tl, reducedHooks());
@@ -804,7 +802,7 @@ export function createFx(o: FxOptions): FxHandle {
     },
     run(tl, opt) {
       if (disposed) return noopPlay(tl.name, tl.tier);
-      if (clock.instant()) return noopPlay();
+      if (animSpeed() === 0) return noopPlay();
       if (reducedNow()) {
         runReduced(tl, reducedHooks());
         return noopPlay(tl.name, tl.tier);
@@ -834,7 +832,7 @@ export function createFx(o: FxOptions): FxHandle {
       if (q === 'off') handle.stopAll();
     },
     async preload() {
-      if (disposed || clock.reducedMotion() || quality === 'off') return false;
+      if (disposed || reducedMotion() || quality === 'off') return false;
       return ensureReady();
     },
     stats() {
@@ -863,7 +861,7 @@ export function createFx(o: FxOptions): FxHandle {
         frame: runner.frame,
         tick: { last: tick.last, max: tick.max, avg: tick.n ? tick.sum / tick.n : 0, p95: p95(), n: tick.n, maxAt: tick.maxAt, maxFrames: tick.maxFrames },
         tintCacheBytes: atlas?.cacheBytes() ?? 0,
-        quality: { setting: quality, tier: clock.reducedMotion() ? 'off' : tierNow(), transitions: transitions.slice() },
+        quality: { setting: quality, tier: reducedMotion() ? 'off' : tierNow(), transitions: transitions.slice() },
         backend: !pres ? 'none' : pres === workerPres ? 'worker' : 'main',
       };
     },

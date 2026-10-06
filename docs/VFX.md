@@ -890,7 +890,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 | `coords.ts` | 주입 콜백(`getLayerRect/getBoardRect/getSpaceRect/getPanelRect/getSeat/getStageRect`) → 레이어 px, `u = 보드/32`, 패널 앵커 = 보드 쪽 가장자리(R3), `SEAT_ANGLE`(= `ui/game/util` 값, 테스트로 고정)·`SEAT_DIR`·`seatLocal()` |
 | `timeline.ts` | DSL `t(frame, action)` — `spawn/burst/shake/flash/hitStop/sfx/haptic/cue/dom/block`. `Runner`: 30 fps FX 프레임 실행, 히트스톱 = FX 시간 정지(타임라인·파티클 모두), 등급 상한(I0 8 · I1 40 · I2 100 · I3 200 · I4 300) 강제, 플래시 예산(1 s 창 ≤3프레임, α ≤0.25, 큰 소프트 `glow` — 전면 사각형 없음), 스킵(대기 cue 즉시 발화·히트스톱 제거·스킵 중 시작한 효과는 파티클 ×0.5·쉐이크/정지 없음), `runReduced()`(첫 sfx·첫 햅틱 + `rm` 표시 op + 정적 하이라이트 1회) |
 | `presets.ts` | §7.5/§7.2b 프리셋 21종 + 범용 4종(`ringPulse/puff/cometJump/billRain`) — 13.2 |
-| `clock.ts` | `FxClock` 어댑터: `gameClock`(= `time.ts`의 `onFrame/animSpeed/isSkipping`, reduced-motion은 media query — 연동 시 `time.ts` 내보내기로 교체), `ManualClock`(테스트·필름스트립) |
+| `clock.ts` | (2026-10-06 삭제) `FxClock` 어댑터 `gameClock`/`ManualClock`이 있었다. 지금 엔진은 `time.ts`(`onFrame/animSpeed/isSkipping/reducedMotion/isManualClock`)를 직접 부르고, 테스트는 `setManualClock`/`stepClock`을 쓴다 |
 | `engine.ts` | `createFx()` → `FxHandle.play(name, params)`(thenable: 블록 프레임에 resolve, `.cue(name)`, `.done`, `.cancel()`), `run(timeline)`, `skip()`, `stopAll()`, `setQuality('high'|'low'|'off')`, `preload()`, `stats()`, `resetStats()`, `dispose()`, dev `window.__fx`. 캔버스 수명 §3.2, 리전·백킹 §3.3, 더티 영역 클리어, 레이어(0–3)×블렌드 순 그리기, `visibilitychange:hidden` → `stopAll()` |
 
 **클럭**: 엔진은 `onFrame` 스텝 1개만 등록한다(효과가 있을 때만). 틱마다 `경과 × animSpeed × (스킵 ? 5 : 1)`을 누적해 FX 프레임을
@@ -1004,7 +1004,7 @@ dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·
 | 영역 | 파일 | 내용 |
 |---|---|---|
 | CSS | `src/styles/index.css` | `@import './vfx.css'` (구 `.pt-canvas` 삭제) |
-| 클록 | `src/ui/fx/time.ts`, `vfx/clock.ts` | `reducedMotion()`/`setReducedMotion()` 분리(엔진이 사용), `instant()` = 속도 0 ∨ reduced. **dev 전용 수동 클록** `setManualClock/stepClock`: rAF 없이 `onFrame`·`sleep`·`gridTimeout`·`anim()`(WAAPI를 멈춰 `currentTime`으로 전진)을 한 프레임씩 — 실제 게임의 결정적 필름스트립 |
+| 클록 | `src/ui/fx/time.ts` | `reducedMotion()`/`setReducedMotion()` 분리(엔진이 사용), `instant()` = 속도 0 ∨ reduced. **dev 전용 수동 클록** `setManualClock/stepClock`: rAF 없이 `onFrame`·`sleep`·`gridTimeout`·`anim()`(WAAPI를 멈춰 `currentTime`으로 전진)을 한 프레임씩 — 실제 게임의 결정적 필름스트립 |
 | 보드 | `src/ui/board/Board.ts` | `spaceRect`, `popIcon`/`zoomPunch`(**SVG `transform` 속성 트윈**, 30 Hz — 14.3-4), `dimIcon`(칸 그룹 클래스), `highlight`(reduced-motion 정적 테두리 마크), 레벨 아이콘을 `g.sp-lvl`로 묶음, `hop(…, onLand)` |
 | 패널 | `PlayerPanel.ts` | `clientRect`, `floatText`, `highlight` |
 | 스테이지 | `Stage.ts`, `Dice.ts` | `.fx-closeup`(행위자 좌석으로 회전, 스테이지 중심 4.2u 위 — 스탬프와 겹치지 않게), `spotlight` = 스테이지 안 정적 베일(카드 둘레만 투명), `cardClientCenter`, `dropCloseUp`, `Dice.clientCenters` |

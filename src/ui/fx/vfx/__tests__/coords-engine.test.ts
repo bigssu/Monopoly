@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Seat } from '@/engine';
-import { ManualClock } from '../clock';
+import { activeFrameTicks, flushAll, setAnimSpeed, setManualClock, setReducedMotion } from '../../time';
 import { createCoords, rotateVec, SEAT_ANGLE, SEAT_DIR, seatLocal } from '../coords';
 import { backingScale, createFx } from '../engine';
 import { buildPreset } from '../presets';
@@ -54,6 +54,17 @@ describe('coords + seat rotation (VFX.md §3.4)', () => {
 });
 
 describe('engine (no DOM)', () => {
+  beforeEach(() => {
+    setManualClock(true);
+    setAnimSpeed(1);
+    setReducedMotion(false);
+  });
+  afterEach(() => {
+    flushAll();
+    setManualClock(false);
+    setAnimSpeed(1);
+    setReducedMotion(false);
+  });
   const deferred = <T,>() => {
     let resolve!: (value: T) => void;
     const promise = new Promise<T>((go) => {
@@ -79,19 +90,18 @@ describe('engine (no DOM)', () => {
   const layer = (): HTMLElement & { append: ReturnType<typeof vi.fn> } => ({ append: vi.fn() }) as unknown as HTMLElement & { append: ReturnType<typeof vi.fn> };
 
   it('reduced motion: no canvas, no clock, sound + haptic + static highlight, cues resolve', async () => {
-    const clock = new ManualClock();
-    clock.reduced = true;
+    setReducedMotion(true);
     const L = layer();
     const sfx = vi.fn();
     const haptic = vi.fn();
     const highlight = vi.fn();
     const loadAtlas = vi.fn(async () => null);
-    const fx = createFx({ ...fakeSource(), layer: L, clock, sfx, haptic, highlight, loadAtlas });
+    const fx = createFx({ ...fakeSource(), layer: L, sfx, haptic, highlight, loadAtlas });
     const h = fx.play('buildSeq', { space: 6, player: 0, level: 4 });
     await h.cue('swap');
     await h;
     expect(L.append).not.toHaveBeenCalled();
-    expect(clock.active).toBe(0);
+    expect(activeFrameTicks()).toBe(0);
     expect(loadAtlas).not.toHaveBeenCalled();
     expect(sfx).toHaveBeenCalledTimes(1);
     expect(sfx.mock.calls[0]![0]).toBe('landmark');
@@ -100,26 +110,24 @@ describe('engine (no DOM)', () => {
   });
 
   it('instant (speed 0): nothing at all', async () => {
-    const clock = new ManualClock();
-    clock.spd = 0;
+    setAnimSpeed(0);
     const sfx = vi.fn();
-    const fx = createFx({ ...fakeSource(), layer: layer(), clock, sfx });
+    const fx = createFx({ ...fakeSource(), layer: layer(), sfx });
     await fx.play('tollPay', { payer: 0, receiver: 1, amount: 900 });
     expect(sfx).not.toHaveBeenCalled();
-    expect(clock.active).toBe(0);
+    expect(activeFrameTicks()).toBe(0);
   });
 
   it('atlas failure disables the canvas gracefully (reduced path, no throw)', async () => {
-    const clock = new ManualClock();
     const L = layer();
     const sfx = vi.fn();
-    const fx = createFx({ ...fakeSource(), layer: L, clock, sfx, loadAtlas: async () => null });
+    const fx = createFx({ ...fakeSource(), layer: L, sfx, loadAtlas: async () => null });
     const h = fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
     await h.cue('frame');
     await h;
     await h.done;
     expect(L.append).not.toHaveBeenCalled();
-    expect(clock.active).toBe(0);
+    expect(activeFrameTicks()).toBe(0);
     expect(sfx).toHaveBeenCalledWith('warning', {});
     expect(fx.stats().atlas).toBe('failed');
     expect(fx.stats().enabled).toBe(false);
@@ -130,9 +138,8 @@ describe('engine (no DOM)', () => {
     const sfx = vi.fn();
     const haptic = vi.fn();
     const highlight = vi.fn();
-    const firstClock = new ManualClock();
     const firstLayer = layer();
-    const fx = createFx({ ...fakeSource(), layer: firstLayer, clock: firstClock, sfx, haptic, highlight, loadAtlas: () => first.promise });
+    const fx = createFx({ ...fakeSource(), layer: firstLayer, sfx, haptic, highlight, loadAtlas: () => first.promise });
     const firstPlay = fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
     fx.stopAll();
     first.resolve(null);
@@ -143,7 +150,7 @@ describe('engine (no DOM)', () => {
     expect(haptic).not.toHaveBeenCalled();
     expect(highlight).not.toHaveBeenCalled();
     expect(firstLayer.append).not.toHaveBeenCalled();
-    expect(firstClock.active).toBe(0);
+    expect(activeFrameTicks()).toBe(0);
     expect(fx.running()).toEqual([]);
     await fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
     expect(sfx).toHaveBeenCalledWith('warning', {});
@@ -153,9 +160,8 @@ describe('engine (no DOM)', () => {
     const disposedSfx = vi.fn();
     const disposedHaptic = vi.fn();
     const disposedHighlight = vi.fn();
-    const disposedClock = new ManualClock();
     const disposedLayer = layer();
-    const disposed = createFx({ ...fakeSource(), layer: disposedLayer, clock: disposedClock, sfx: disposedSfx, haptic: disposedHaptic, highlight: disposedHighlight, loadAtlas: disposedLoad });
+    const disposed = createFx({ ...fakeSource(), layer: disposedLayer, sfx: disposedSfx, haptic: disposedHaptic, highlight: disposedHighlight, loadAtlas: disposedLoad });
     const disposedPlay = disposed.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
     disposed.dispose();
     await expect(disposed.preload()).resolves.toBe(false);
@@ -168,11 +174,11 @@ describe('engine (no DOM)', () => {
     expect(disposedHaptic).not.toHaveBeenCalled();
     expect(disposedHighlight).not.toHaveBeenCalled();
     expect(disposedLayer.append).not.toHaveBeenCalled();
-    expect(disposedClock.active).toBe(0);
+    expect(activeFrameTicks()).toBe(0);
     expect(disposed.running()).toEqual([]);
 
     const unloaded = vi.fn(async () => null);
-    const neverLoaded = createFx({ ...fakeSource(), layer: layer(), clock: new ManualClock(), loadAtlas: unloaded });
+    const neverLoaded = createFx({ ...fakeSource(), layer: layer(), loadAtlas: unloaded });
     neverLoaded.dispose();
     await expect(neverLoaded.preload()).resolves.toBe(false);
     expect(unloaded).not.toHaveBeenCalled();
@@ -182,9 +188,8 @@ describe('engine (no DOM)', () => {
     const sfx = vi.fn();
     const haptic = vi.fn();
     const highlight = vi.fn();
-    const clock = new ManualClock();
-    clock.reduced = true;
-    const fx = createFx({ ...fakeSource(), layer: layer(), clock, sfx, haptic, highlight });
+    setReducedMotion(true);
+    const fx = createFx({ ...fakeSource(), layer: layer(), sfx, haptic, highlight });
     fx.dispose();
     const play = fx.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
     const run = fx.run(buildPreset('takeoverStamp', { space: 22, buyer: 0, seller: 2 }, fakeEnv()));
@@ -194,7 +199,7 @@ describe('engine (no DOM)', () => {
     await run.done;
 
     const offSfx = vi.fn();
-    const off = createFx({ ...fakeSource(), layer: layer(), clock: new ManualClock(), sfx: offSfx });
+    const off = createFx({ ...fakeSource(), layer: layer(), sfx: offSfx });
     off.setQuality('off');
     off.dispose();
     const offPlay = off.play('takeoverStamp', { space: 22, buyer: 0, seller: 2 });
@@ -204,21 +209,20 @@ describe('engine (no DOM)', () => {
     expect(sfx).not.toHaveBeenCalled();
     expect(haptic).not.toHaveBeenCalled();
     expect(highlight).not.toHaveBeenCalled();
-    expect(clock.active).toBe(0);
+    expect(activeFrameTicks()).toBe(0);
     expect(offSfx).not.toHaveBeenCalled();
   });
 
   it('skips preload while effects are off or reduced, then loads when enabled', async () => {
     const loadAtlas = vi.fn(async () => null);
-    const clock = new ManualClock();
-    const fx = createFx({ ...fakeSource(), layer: layer(), clock, loadAtlas });
+    const fx = createFx({ ...fakeSource(), layer: layer(), loadAtlas });
     fx.setQuality('off');
     await expect(fx.preload()).resolves.toBe(false);
-    clock.reduced = true;
+    setReducedMotion(true);
     fx.setQuality('high');
     await expect(fx.preload()).resolves.toBe(false);
     expect(loadAtlas).not.toHaveBeenCalled();
-    clock.reduced = false;
+    setReducedMotion(false);
     await expect(fx.preload()).resolves.toBe(false);
     expect(loadAtlas).toHaveBeenCalledTimes(1);
   });
