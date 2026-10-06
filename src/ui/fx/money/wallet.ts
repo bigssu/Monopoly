@@ -17,6 +17,7 @@ import { atlasReady, frameBox, sliceUrl, topAnim } from './atlas';
 import type { Pt } from './coins';
 import { f } from './clock';
 import { columnOverflows, countMs, easeOutCubic, METALS, pileOf, pileValue, planMerge, visibleCoins, type Break, type Flight, type Merge, type Metal, type Pile } from './denom';
+import { SEAT_ANGLE } from '@/ui/orientation';
 
 /**
  * Coin slice / top-face proportions (sprites-money.ts SLICE / COIN_TOP: 40 × 6, 40 × 14). The slice
@@ -28,7 +29,6 @@ const CAP_FALLBACK: Record<Metal, string> = { gold: '#FFC94A', silver: '#DCE3EE'
 /** Tallest visible column, in coins. */
 const MAX_VIS = 15;
 
-export const SEAT_ROT: Record<Seat, number> = { S: 0, E: -90, N: 180, W: 90 };
 
 const DOWN: Pt = { x: 0, y: 1 };
 
@@ -126,7 +126,7 @@ export class Wallet {
     this.seat = o.seat;
     this.color = o.color;
     this.anchor = o.anchor;
-    this.rot = o.upright ? 0 : SEAT_ROT[o.seat];
+    this.rot = o.upright ? 0 : SEAT_ANGLE[o.seat];
     this.out = o.upright?.out ?? DOWN;
     this.hideBy = o.upright?.hide ?? 0;
     this.g = walletGeom(o.coin, o.minLabel);

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Seat } from '@/engine';
 import { activeFrameTicks, flushAll, setAnimSpeed, setManualClock, setReducedMotion } from '../../time';
-import { createCoords, rotateVec, SEAT_ANGLE, SEAT_DIR, seatLocal } from '../coords';
+import { createCoords, rotateVec, SEAT_ANGLE, seatLocal } from '../coords';
+import { SEAT_UP } from '@/ui/orientation';
 import { backingScale, createFx } from '../engine';
 import { buildPreset } from '../presets';
 import { fakeEnv, fakeSource } from './helpers';
@@ -11,8 +12,8 @@ describe('coords + seat rotation (VFX.md §3.4)', () => {
     expect(SEAT_ANGLE).toEqual({ S: 0, E: -90, N: 180, W: 90 });
     for (const seat of ['S', 'E', 'N', 'W'] as Seat[]) {
       const up = seatLocal(seat, 0, -1);
-      expect(up.x).toBeCloseTo(SEAT_DIR[seat][0], 9);
-      expect(up.y).toBeCloseTo(SEAT_DIR[seat][1], 9);
+      expect(up.x).toBeCloseTo(SEAT_UP[seat].x, 9);
+      expect(up.y).toBeCloseTo(SEAT_UP[seat].y, 9);
     }
     const near = (a: { x: number; y: number }, x: number, y: number): void => {
       expect(a.x).toBeCloseTo(x, 9);
@@ -45,7 +46,7 @@ describe('coords + seat rotation (VFX.md §3.4)', () => {
       const toBoard = Math.hypot(mid.x - p.x, mid.y - p.y);
       const fromCentre = Math.hypot(mid.x - p.cx, mid.y - p.cy);
       expect(toBoard).toBeLessThan(fromCentre);
-      expect(p.dir).toEqual(SEAT_DIR[p.seat]);
+      expect(p.dir).toEqual(SEAT_UP[p.seat]);
     }
     expect(c.panel(0).seat).toBe('S');
     expect(c.panel(1).seat).toBe('E');

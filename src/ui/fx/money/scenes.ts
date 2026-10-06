@@ -24,9 +24,10 @@ import {
   TIER, flightsForAmount, maxTier, planDrain, planFlights, tierFor,
   type Flight, type FlightRange, type Metal, type Tier,
 } from './denom';
-import { SEAT_UP, SEATS, type MoneyStage, type SpaceArt } from './stage';
+import { type MoneyStage, type SpaceArt } from './stage';
 import { rotate, type Wallet } from './wallet';
 import './strings';
+import { SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
 
 export interface Party {
   seat: Seat;
@@ -451,7 +452,7 @@ async function finish(x: Ctx, o: FinishOpts): Promise<void> {
   await c.until(r0 + f(BEATS_F.result));
   await o.plaque?.();
   // The numbers are final before the still hold.
-  for (const s of SEATS) if (x.st.wallets[s].visible) x.st.wallets[s].settleCount();
+  for (const s of SEAT_CYCLE) if (x.st.wallets[s].visible) x.st.wallets[s].settleCount();
   x.cues.fire('result');
   // The out takes exactly what is left of the motion extension.
   const outStretch = trueUp(c, out);
@@ -485,7 +486,7 @@ async function finish(x: Ctx, o: FinishOpts): Promise<void> {
   } else jobs.push(x.st.poseTo({ s: x.st.heroPose.s * 0.8, o: 0 }, out, smooth));
   for (const p of x.st.plaques) jobs.push(x.st.tween(f(6), (u) => (p.el.style.opacity = String(Math.min(Number(p.el.style.opacity || 0), 1 - u)))));
   if (x.st.stamp.style.opacity && x.st.stamp.style.opacity !== '0') jobs.push(x.st.tween(f(6), (u) => (x.st.stamp.style.opacity = String(1 - u))));
-  for (const w of o.wallets ?? SEATS.map((s) => x.st.wallets[s]).filter((w) => w.visible)) jobs.push(w.exit(x.st, out));
+  for (const w of o.wallets ?? SEAT_CYCLE.map((s) => x.st.wallets[s]).filter((w) => w.visible)) jobs.push(w.exit(x.st, out));
   await x.st.close(x.tier, false, out, jobs);
 }
 
@@ -970,7 +971,7 @@ export function collectFromAll(st: MoneyStage, a: CollectArgs): MoneyPlay {
     // The total pops for every seat (four plaques around the vault; the fixed view: one, facing
     // S), the vault trembles …
     x.st.sound.cue('toll');
-    const spots = (x.st.upright ? (['S'] as const) : SEATS).map((s, i) => ({ s, i, at: frontOf(x, s, 0.56) }));
+    const spots = (x.st.upright ? (['S'] as const) : SEAT_CYCLE).map((s, i) => ({ s, i, at: frontOf(x, s, 0.56) }));
     const mine = x.st.face(a.receiver.seat);
     await Promise.all(
       spots.map((sp) =>

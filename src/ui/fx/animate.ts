@@ -46,6 +46,7 @@ import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
 import { applyMoneyState, planMoney, type MoneyGroup, type MoneyScene } from './moneymap';
 import * as M from './money';
+import { SEAT_CYCLE } from '@/ui/orientation';
 import { festivalMultiplier } from '@/engine';
 import { CARD_STRETCH } from '@/ui/stage/Stage';
 
@@ -662,7 +663,7 @@ async function playMoney(view: GameView, vs: GameState, events: readonly GameEve
     await play;
     if (MONEY_LOG) {
       const wallets: Record<string, string> = {};
-      for (const s of M.SEATS) if (view.money.wallets[s].visible) wallets[s] = view.money.wallets[s].el.dataset.v ?? '';
+      for (const s of SEAT_CYCLE) if (view.money.wallets[s].visible) wallets[s] = view.money.wallets[s].el.dataset.v ?? '';
       const entry: MoneyLogEntry = { scene: g.scene.kind, play: play.kind, tier: play.tier, keep: g.keep, events: evs.map((e) => e.type), wallets, t: Math.round(performance.now()), stillMs: Math.round(performance.now() - tResult), liveMs: 0 };
       MONEY_LOG.push(entry);
       // On screen from stage-in to park (or to the hand-over when kept up for the next scene).

@@ -31,9 +31,10 @@ import { CoinPool, type Pt } from './coins';
 import type { Tier } from './denom';
 import { easeOutCubic } from './denom';
 import { CoinSound } from './sound';
-import { SEAT_ROT, Wallet, walletGeom, type TweenHost, type UprightSlide } from './wallet';
+import { Wallet, walletGeom, type TweenHost, type UprightSlide } from './wallet';
 import type { MoneyAnimName as FxAnimName } from '@/content/fx/money-manifest';
 import '@/styles/money.css';
+import { SEAT_ANGLE, SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
 
 export interface Rect {
   x: number;
@@ -93,8 +94,6 @@ export interface StageGeom {
 }
 
 /** Unit vector from a seat's edge toward the centre ("up" for that seat). */
-export const SEAT_UP: Record<Seat, Pt> = { S: { x: 0, y: -1 }, N: { x: 0, y: 1 }, E: { x: -1, y: 0 }, W: { x: 1, y: 0 } };
-export const SEATS: readonly Seat[] = ['S', 'E', 'N', 'W'];
 
 /** A hero transform (written as one `transform`). */
 export interface HeroPose {
@@ -252,7 +251,7 @@ export class MoneyStage implements TweenHost {
     this.dim = el('ms-dim');
     const walletLayer = el('ms-wallets');
     this.wallets = {} as Record<Seat, Wallet>;
-    for (const s of SEATS) {
+    for (const s of SEAT_CYCLE) {
       const w = new Wallet(doc);
       w.el.dataset.seat = s;
       walletLayer.append(w.el);
@@ -442,7 +441,7 @@ export class MoneyStage implements TweenHost {
 
   /** Rotation of content that faces `seat` (0 in the fixed view). */
   rot(seat: Seat): number {
-    return SEAT_ROT[this.face(seat)];
+    return SEAT_ANGLE[this.face(seat)];
   }
 
   /** Where a seat's wallet stands (its bottom-centre): on the screen edge, on the board's axis. */
@@ -530,7 +529,7 @@ export class MoneyStage implements TweenHost {
       if (!this.live || !this.kept) return;
       this.kept = false;
       const jobs: Promise<void>[] = [];
-      for (const s of SEATS) if (this.wallets[s].visible) jobs.push(this.wallets[s].exit(this, f(5)));
+      for (const s of SEAT_CYCLE) if (this.wallets[s].visible) jobs.push(this.wallets[s].exit(this, f(5)));
       for (const p of this.plaques) jobs.push(this.tween(f(5), (u) => (p.el.style.opacity = String(Math.min(Number(p.el.style.opacity || 1), 1 - u)))));
       jobs.push(this.poseTo({ o: 0 }, f(5)));
       await Promise.all(jobs);
@@ -566,7 +565,7 @@ export class MoneyStage implements TweenHost {
     c.dispose();
     // … then whatever is left (coins launched meanwhile land at once: no clock).
     this.coins.flush();
-    for (const s of SEATS) this.wallets[s].settleCount();
+    for (const s of SEAT_CYCLE) this.wallets[s].settleCount();
     for (const p of this.plaques) p.stopCounting();
     for (const n of this.fxNodes) this.resetFx(n);
     this.fxFree = [...this.fxNodes];
@@ -576,7 +575,7 @@ export class MoneyStage implements TweenHost {
   park(): void {
     this.releaseClock();
     this.coins.clear();
-    for (const s of SEATS) this.wallets[s].hide();
+    for (const s of SEAT_CYCLE) this.wallets[s].hide();
     for (const p of this.plaques) p.hide();
     this.heroIn.textContent = '';
     this.hero.style.opacity = '0';

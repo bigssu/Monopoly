@@ -5,7 +5,7 @@
  * unit `u` (= board px / 32, the layout's --u) and handles seat rotation for the multi-seat table.
  */
 import type { PlayerId, Seat } from '@/engine';
-import { SEAT_ANGLE } from '@/ui/orientation';
+import { SEAT_ANGLE, SEAT_UP } from '@/ui/orientation';
 
 export interface RectLike {
   x: number;
@@ -20,8 +20,6 @@ export interface Pt {
 }
 
 export { SEAT_ANGLE };
-/** "Up" for a seat = from its panel towards the board centre. */
-export const SEAT_DIR: Record<Seat, readonly [number, number]> = { S: [0, -1], N: [0, 1], E: [-1, 0], W: [1, 0] };
 
 /** Rotate (x, y) by `deg` (clockwise on screen, y down — CSS rotate()). */
 export function rotateVec(x: number, y: number, deg: number): Pt {
@@ -71,8 +69,8 @@ export interface PanelAnchor extends Pt {
   cy: number;
   /** The seat the effects face (see `CoordSource.getFaceSeat`). */
   seat: Seat;
-  /** Unit vector from the panel towards the board centre. */
-  dir: readonly [number, number];
+  /** Unit vector from the panel towards the board centre (orientation.ts SEAT_UP). */
+  dir: { readonly x: number; readonly y: number };
   angle: number;
   w: number;
   h: number;
@@ -130,7 +128,7 @@ export function createCoords(src: CoordSource): Coords {
     panel(id) {
       let a = panels.get(id);
       if (!a) {
-        const dir = SEAT_DIR[src.getSeat(id)];
+        const dir = SEAT_UP[src.getSeat(id)];
         const seat = face(id);
         const r = src.getPanelRect(id);
         const c = center();
@@ -146,14 +144,14 @@ export function createCoords(src: CoordSource): Coords {
           h = r.height;
         } else {
           // No panel: the board edge on that seat's side.
-          cx = c.x - dir[0] * B.width * 0.55;
-          cy = c.y - dir[1] * B.height * 0.55;
+          cx = c.x - dir.x * B.width * 0.55;
+          cy = c.y - dir.y * B.height * 0.55;
           w = h = u * 6;
         }
         // Board-facing edge, pulled in by 20 % of the depth so sprites start over the panel.
-        const depth = dir[0] !== 0 ? w : h;
+        const depth = dir.x !== 0 ? w : h;
         const k = depth * 0.3;
-        a = { x: cx + dir[0] * k, y: cy + dir[1] * k, cx, cy, seat, dir, angle: SEAT_ANGLE[seat], w, h };
+        a = { x: cx + dir.x * k, y: cy + dir.y * k, cx, cy, seat, dir, angle: SEAT_ANGLE[seat], w, h };
         panels.set(id, a);
       }
       return a;

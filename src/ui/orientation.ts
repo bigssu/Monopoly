@@ -31,6 +31,14 @@ export const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];
 /** Rotation (deg, CSS rotate) that makes content upright for a player at a seat (DESIGN §2.1). */
 export const SEAT_ANGLE: Readonly<Record<Seat, number>> = { S: 0, E: -90, N: 180, W: 90 };
 
+/** "Up" for a seat: the unit vector from its edge of the table towards the centre (y down). */
+export const SEAT_UP: Readonly<Record<Seat, { readonly x: number; readonly y: number }>> = {
+  S: { x: 0, y: -1 },
+  N: { x: 0, y: 1 },
+  E: { x: -1, y: 0 },
+  W: { x: 1, y: 0 },
+};
+
 type Who = Pick<Player, 'isCpu' | 'seat'>;
 
 /** 'fixed' when exactly one player is human and at least one is a CPU; else 'table'. */
