@@ -6,7 +6,7 @@
  *     policy's choice for whoever must act — e2e tests click the matching on-screen control)
  *   + setLang('ko' | 'en')
  *   + cpuHand() (the CPU hand's press log; freeze(true) holds every hand at its press until release())
- *   + dice() (every roll's record: in place / thrown, path, plan, bounces, clacks, timing)
+ *   + dice() (every roll's record: in place / thrown, path, plan, bounces, clacks, timing; the "throw me" rattles)
  */
 import { chooseAction, defaultPlayers, defaultSettings, deepClone, legalActions, type Action, type GameState, type Settings } from '@/engine';
 import { setLang, type Lang } from '@/i18n';
@@ -58,7 +58,7 @@ export interface LotAndRollHook {
   /** The CPU hand: presses so far, and a switch that holds each hand at its press. */
   cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; release(): void; frozen(): boolean };
   /** The dice: every roll so far (how it was shown, and the throw's plan). */
-  dice(): { log: ThrowRecord[]; clear(): void };
+  dice(): { log: ThrowRecord[]; rattles: number[]; clear(): void };
 }
 
 declare global {
@@ -140,8 +140,9 @@ export function installDevHook(): void {
     }),
     dice: () => ({
       log: diceDev?.log ?? [],
+      rattles: diceDev?.rattles ?? [],
       clear: () => {
-        if (diceDev) diceDev.log.length = 0;
+        if (diceDev) diceDev.log.length = diceDev.rattles.length = 0;
       },
     }),
   };

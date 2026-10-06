@@ -11,7 +11,8 @@
  * dice (the throw never decides it), a throw settles within its planned time, nothing runs after
  * it (0 clock callbacks, no flight layer), the keyboard rolls, a cancelled press only stops the
  * shake, the Settings switch brings the roll button back and it works, reduced motion rolls in
- * place, and the "throw me" wobble plays once (and once more after 5 s) for humans only. Positions are sampled on the DOM path (`?dice=dom`, the
+ * place, and the "throw me" wobble plays (with a rattle each lean, the hint blinking) once and
+ * once more after 5 s, for humans only. Positions are sampled on the DOM path (`?dice=dom`, the
  * Android default); the canvas path (the web default) is checked by its canvas and the throw's
  * screen box.
  */
@@ -425,6 +426,10 @@ test.describe('dice throw', () => {
     await page.waitForTimeout(300);
     expect(await page.evaluate(() => (document.querySelector('.st-dice .dice-pair') as HTMLElement).style.transform)).toBe('');
     expect(await page.evaluate(() => document.querySelector('.st-dice .dice')!.classList.contains('is-inviting'))).toBe(false);
+    // The "throw me" rattles still play (sound is not motion); the hint does not blink.
+    await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.dice().rattles.length)).toBe(3);
+    expect(await page.evaluate(() => document.querySelector('.pc-roll .roll-hint')!.getAnimations().length)).toBe(0);
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.pc-roll .roll-hint')!).opacity)).toBe('1');
     await stroke(page, await pairCentre(page), 0, -160);
     await checkResult(page, [6, 2], 'reduced');
     const rec = (await lastRec(page))!;
@@ -437,18 +442,105 @@ test.describe('dice throw', () => {
     test.setTimeout(90_000);
     const logs = watchConsole(page);
     await boot(page);
+    // Recorded in the page every frame (a loaded machine may answer a round trip from here only
+    // after the ~1.2 s wobble has ended): wobbling = the pair's transform is being stepped
+    // (Dice.invite, on the 30 Hz clock); blinking = a running Web Animation on the hint strip;
+    // the rattles = the dev log of each "throw me" dice-shake.
+    type Frame = { t: number; wob: boolean; blink: number; rattles: number };
+    const recorded = page.evaluate(
+      () =>
+        new Promise<Frame[]>((resolve) => {
+          const out: Frame[] = [];
+          const t0 = performance.now();
+          let fourAt = -1;
+          const tick = (): void => {
+            const now = performance.now() - t0;
+            const pair = document.querySelector('.st-dice .dice-pair') as HTMLElement | null;
+            const hint = document.querySelector('.pc-roll .roll-hint');
+            const rattles = window.__lotAndRoll!.dice().rattles.length;
+            out.push({ t: now, wob: !!pair?.style.transform, blink: hint ? hint.getAnimations().filter((x) => x.playState === 'running').length : 0, rattles });
+            if (rattles >= 4 && fourAt < 0) fourAt = now;
+            if ((fourAt >= 0 && now - fourAt > 2000) || now > 20_000) resolve(out);
+            else requestAnimationFrame(tick);
+          };
+          tick();
+        }),
+    );
     await craft(page, [1, 3]);
-    // Wobbling = the pair's transform is being stepped (Dice.invite, on the 30 Hz clock).
-    const pairAnims = (): Promise<number> => page.evaluate(() => ((document.querySelector('.st-dice .dice-pair') as HTMLElement).style.transform ? 1 : 0));
-    // Started with the prompt (the craft wait was 0.5 s of its ~1.2 s).
-    expect(await pairAnims(), 'wobbling').toBe(1);
-    await expect.poll(pairAnims, { timeout: 3000 }).toBe(0);
-    await expect.poll(pairAnims, { timeout: 6000, intervals: [100] }).toBe(1);
-    await expect.poll(pairAnims, { timeout: 3000 }).toBe(0);
-    // Then nothing: no clock callback, no running animation on the dice.
-    await page.waitForTimeout(1500);
-    expect(await page.evaluate(() => window.__lotAndRoll!.activeTicks())).toBe(0);
-    expect(await pairAnims()).toBe(0);
+    const frames = await recorded;
+    // Two wobbles: the first with the prompt, the second about 5 s later; then rest.
+    const runs: { from: number; to: number; blink: boolean }[] = [];
+    for (const f of frames) {
+      const last = runs[runs.length - 1];
+      if (f.wob && (!last || f.t - last.to > 300)) runs.push({ from: f.t, to: f.t, blink: f.blink > 0 });
+      else if (f.wob) {
+        last!.to = f.t;
+        last!.blink ||= f.blink > 0;
+      }
+    }
+    // (A wobble from the game start's own roll prompt, replaced at once by the crafted one, is not counted.)
+    while (runs.length > 2 && runs[1]!.from - runs[0]!.from < 1500) runs.shift();
+    console.log(`[dice-throw] throw me: wobbles ${runs.map((r) => `${Math.round(r.from)}-${Math.round(r.to)} ms`).join(', ')}`);
+    expect(runs.length, 'two wobbles').toBe(2);
+    // (5 s after the invitation; the first frames of a wobble can come late on a loaded machine.)
+    expect(runs[1]!.from - runs[0]!.from, 'the second one about 5 s after the first').toBeGreaterThan(3500);
+    expect(runs[1]!.from - runs[0]!.from, 'the second one about 5 s after the first').toBeLessThan(6500);
+    expect(runs[0]!.blink && runs[1]!.blink, 'the hint blinks with each wobble').toBe(true);
+    // A rattle per lean: three with the first wobble, one with the second.
+    expect(Math.max(...frames.filter((f) => f.t <= runs[0]!.to + 200).map((f) => f.rattles)), 'three rattles').toBe(3);
+    expect(Math.min(...frames.filter((f) => f.t >= runs[1]!.from).map((f) => f.rattles)), 'one more').toBe(4);
+    // Between and after: no blink, no wobble (the blink ~1.2 s, then the hint rests).
+    const quiet = (a: number, b: number): Frame[] => frames.filter((f) => f.t > a && f.t < b);
+    expect(quiet(runs[0]!.from + 1600, runs[1]!.from - 100).every((f) => !f.wob && f.blink === 0), 'rests between').toBe(true);
+    expect(quiet(runs[1]!.from + 1600, Infinity).every((f) => !f.wob && f.blink === 0), 'rests after').toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.pc-roll .roll-hint')!).opacity), 'resting fully visible').toBe('1');
+    // Then nothing: no clock callback.
+    await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.activeTicks()), { timeout: 3000 }).toBe(0);
+
+    // A press stops it all at once, mid-wobble: pressed from inside the page the moment the wobble
+    // is seen (a round trip from here can miss the 1.2 s window on a loaded machine).
+    const c = await pairCentre(page);
+    await page.mouse.move(c.x, c.y);
+    const pressed = page.evaluate(
+      (c) =>
+        new Promise<{ mid: { wob: boolean; blink: number; rattles: number }; held: { wob: boolean; blink: number; rattles: number } }>((resolve) => {
+          const state = (): { wob: boolean; blink: number; rattles: number } => ({
+            wob: !!(document.querySelector('.st-dice .dice-pair') as HTMLElement | null)?.style.transform,
+            blink: document.querySelector('.pc-roll .roll-hint')?.getAnimations().length ?? 0,
+            rattles: window.__lotAndRoll!.dice().rattles.length,
+          });
+          const ev = (type: string): PointerEvent =>
+            new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: c.x, clientY: c.y, buttons: type === 'pointerup' ? 0 : 1 });
+          const wait = (): void => {
+            const mid = state();
+            const pad = document.querySelector('.roll-pad:not(:disabled)');
+            if (!pad || !mid.wob || !mid.blink) {
+              requestAnimationFrame(wait);
+              return;
+            }
+            pad.dispatchEvent(ev('pointerdown'));
+            // Held for ~0.9 s: nothing wobbles, blinks or rattles any more.
+            const t0 = performance.now();
+            const hold = (): void => {
+              if (performance.now() - t0 < 900) {
+                requestAnimationFrame(hold);
+                return;
+              }
+              const held = state();
+              pad.dispatchEvent(ev('pointerup'));
+              resolve({ mid, held });
+            };
+            requestAnimationFrame(hold);
+          };
+          wait();
+        }),
+      c,
+    );
+    await craft(page, [2, 2]);
+    const { mid, held } = await pressed;
+    expect(mid.wob && mid.blink > 0 && mid.rattles >= 1, `mid-wobble ${JSON.stringify(mid)}`).toBe(true);
+    expect(held, 'pressed: no wobble, no blink, no more rattles').toEqual({ wob: false, blink: 0, rattles: mid.rattles });
+    await checkResult(page, [2, 2], 'pressed during the wobble');
     // A CPU's roll: no invitation.
     await page.evaluate(() => {
       const h = window.__lotAndRoll!;

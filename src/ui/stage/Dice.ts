@@ -4,7 +4,7 @@
  * its direction, as fast and as far as the finger pushed, off the screen's edges and back home
  * (`throw.ts`); a press without a swipe is a weak toss forward inside the dice area. Reduced
  * motion: the in-place tumble (~1 s). `shake(on)` jitters them while the player holds the dice;
- * `invite()` wobbles them once at a human's turn ("throw me").
+ * `invite()` wobbles them (with a soft rattle, and blinks the hint) at a human's turn ("throw me").
  *
  * Rendering (docs/DESIGN.md "Dice throw"): a flick flies in a top-level layer (`.dice-fly`, over
  * the board and the panels, created for the throw and removed at the landing; its frame is the
@@ -364,8 +364,11 @@ interface Flight {
   view: Box;
 }
 
-/** Dev only (`?dev=1`): every roll's record; null in production. */
-export const diceDev: { log: ThrowRecord[] } | null = typeof window !== 'undefined' && isDevHook() ? { log: [] } : null;
+/** Dev only (`?dev=1`): every roll's record, and when each "throw me" rattle played; null in production. */
+export const diceDev: { log: ThrowRecord[]; rattles: number[] } | null = typeof window !== 'undefined' && isDevHook() ? { log: [], rattles: [] } : null;
+
+/** The hint's "throw me" blink: three opacity pulses (Dice.invite). */
+const BLINK: Keyframe[] = [1, 0.25, 1, 0.25, 1, 0.25, 1].map((opacity, i) => ({ opacity, offset: i / 6 }));
 
 /**
  * "Throw me" wobble at `x` wobbles in (0..n): a lean, a counter-lean, a small settle per 400 ms
@@ -443,34 +446,55 @@ export class Dice {
   }
 
   /**
-   * A human's turn: the pair wobbles three times (~1.2 s), then holds still; still waiting after
-   * 5 s, once more, then nothing (no idle load). Transform only, on the 30 Hz clock; the pair is
-   * its own layer while invited, so the wobbles never repaint. Skipped without motion.
+   * A human's turn: the pair wobbles three times (~1.2 s), each lean with a soft rattle, and the
+   * hint (`hint`, the roll card's "press, hold and flick" strip) blinks three times with it; then
+   * everything holds still. Still waiting after 5 s: one more wobble and rattle, three more
+   * blinks; then nothing (no idle load). The wobble is transform only, on the 30 Hz clock; the
+   * pair is its own layer while invited, so the wobbles never repaint. The blink is an opacity
+   * Web Animation on the hint's own layer (`.roll-hint.is-blink`): compositor-only. Reduced motion:
+   * no wobble and no blink (the hint stays fully visible), the rattles still play at the same
+   * times. A press stops all of it at once (`stopInvite`).
    */
-  invite(): void {
+  invite(hint: HTMLElement | null = null): void {
     this.stopInvite();
-    if (noMotion()) return;
-    this.el.classList.add('is-inviting');
+    if (headless()) return;
+    const motion = !noMotion();
+    if (motion) this.el.classList.add('is-inviting');
     // Stepped on the shared 30 Hz clock (not a Web Animation): a running transform animation makes
     // Chromium assume it overlaps everything painted above the dice, promoting (and re-rastering)
     // those layers when it starts and ends — the second wobble would break gate B's
     // compositor-only window. A style change on the pair's own layer is compositor-only.
     let stopW: (() => void) | null = null;
+    const unblink = (): void => {
+      for (const a of hint?.getAnimations() ?? []) a.cancel();
+    };
     const wobble = (n: number): void => {
       stopW?.();
       const dur = D(400 * n);
       if (dur <= 0) return;
       let elapsed = 0;
       let last = -1;
+      let rattles = 0;
       stopW = onFrame((now) => {
+        if (last < 0 && motion && hint?.isConnected) {
+          // Three pulses, ~1.2 s, starting with the wobble (the card is up by this first frame).
+          unblink();
+          void anim(hint, BLINK, { duration: 1200, easing: 'linear' });
+        }
         if (last >= 0 && !isHeld()) elapsed += now - last;
         last = now;
+        // A soft rattle at the start of each lean.
+        while (rattles < n && elapsed >= (rattles * dur) / n) {
+          rattles++;
+          sfx.play('dice-shake', { gain: 0.45 });
+          diceDev?.rattles.push(performance.now());
+        }
         if (elapsed >= dur) {
           this.pair.style.transform = '';
           stopW = null;
           return false;
         }
-        this.pair.style.transform = wobbleAt((elapsed / dur) * n);
+        if (motion) this.pair.style.transform = wobbleAt((elapsed / dur) * n);
         return true;
       });
     };
@@ -482,6 +506,7 @@ export class Dice {
       window.clearTimeout(id);
       stopW?.();
       stopW = null;
+      unblink();
       this.pair.style.transform = '';
       this.el.classList.remove('is-inviting');
     };

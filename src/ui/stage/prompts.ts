@@ -283,8 +283,6 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
     };
     bind(pad, true);
     if (rollBtn) bind(rollBtn, false);
-    // "Throw me": the dice wobble when the human's roll comes up.
-    ctx.dice.invite();
   }
   const tags = h('div', { class: 'pc-tags' });
   if (ph.rollAgain) tags.append(tag(t('g.doubles.again'), 'gold', 'dice-face-6'));
@@ -303,9 +301,12 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
   if (gaugeEl) el.append(gaugeEl);
   if (!ctx.cpu) {
     // Where the button was: a hint strip (the button, when shown, keeps its own hint).
-    const hint = rollBtn ? t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') : t('g.roll.flick');
-    el.append(h('div', { class: `roll-hint${rollBtn ? '' : ' is-strip'}`, text: hint }));
+    const text = rollBtn ? t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') : t('g.roll.flick');
+    const hint = h('div', { class: `roll-hint is-blink${rollBtn ? '' : ' is-strip'}`, text });
+    el.append(hint);
     if (!rollBtn && gaugeOn) el.append(h('div', { class: 'roll-hint', text: t('g.gauge.hint') }));
+    // "Throw me": the dice wobble (with a rattle) and the hint blinks when the human's roll comes up.
+    ctx.dice.invite(hint);
   }
   return { el };
 }

@@ -462,6 +462,11 @@ body > .dice-fly { position: fixed; }
   color: #D9EAE8;
   text-align: center;
 }
+/* "Throw me" (Dice.invite): the hint blinks with the dice's wobble (an opacity Web Animation). It
+   is its own layer for as long as the human's roll card is up, so starting and ending a blink is
+   compositor-only (no promotion repaint when the second one starts 5 s later). Reduced motion: no
+   blink, no layer. */
+:root:not([data-motion="reduced"]) .pc-roll .roll-hint.is-blink { will-change: opacity; }
 /* The roll card lets presses through to the pad under it (only its own controls take them). */
 .pc-roll { pointer-events: none; }
 .pc-roll .roll-btn, .pc-roll .timer-ring { pointer-events: auto; }
