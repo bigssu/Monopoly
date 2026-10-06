@@ -29,14 +29,6 @@ const END_OF_TIME = Number.MAX_SAFE_INTEGER / 4;
 /** Float slack (ms): n frames of 33.33… ms must reach f(n). */
 const EPS = 1e-6;
 
-/** Dev/perf: cost of the scene clock's frame steps (scripts/fx/money-perf.mjs via the demo). */
-export const clockPerf = { on: false, n: 0, total: 0, max: 0, samples: [] as number[] };
-export function resetClockPerf(on: boolean): void {
-  clockPerf.on = on;
-  clockPerf.n = clockPerf.total = clockPerf.max = 0;
-  clockPerf.samples = [];
-}
-
 export class MoneyClock {
   /** Scene time (ms at normal speed). */
   t = 0;
@@ -148,22 +140,11 @@ export class MoneyClock {
       // The first step after (re)arming has no previous frame: no gap sample (pause / resume).
       const prev = this.last;
       const t0 = performance.now();
-      const keep = clockPerf.on ? this.stepPerf(now) : this.stepInner(now);
+      const keep = this.stepInner(now);
       if (!Number.isNaN(prev)) this.monitor(performance.now() - t0, now - prev);
       return keep;
     }
-    return clockPerf.on ? this.stepPerf(now) : this.stepInner(now);
-  }
-
-  private stepPerf(now: number): boolean {
-    const t0 = performance.now();
-    const keep = this.stepInner(now);
-    const ms = performance.now() - t0;
-    clockPerf.n++;
-    clockPerf.total += ms;
-    clockPerf.max = Math.max(clockPerf.max, ms);
-    if (clockPerf.samples.length < 2000) clockPerf.samples.push(ms);
-    return keep;
+    return this.stepInner(now);
   }
 
   private stepInner(now: number): boolean {

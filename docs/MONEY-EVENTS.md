@@ -174,8 +174,6 @@
 | `src/ui/fx/money/scenes.ts` | 장면 타임라인(§4) + `MoneyPlay`(큐) |
 | `src/ui/fx/money/strings.ts` | 장면 제목 문자열(`m.*`, 한/영) |
 | `src/styles/money.css` | 무대 스타일(`stage.ts`가 직접 import) |
-| `money-demo.html` · `src/ui/fx/money/demo.ts` | 개발용 데모(빌드 입력 아님): 모의 보드 + 장면·좌석 버튼, `window.__moneyDemo` |
-| `scripts/fx/money-strips.mjs` · `scripts/fx/money-perf.mjs` | 필름스트립 / 성능 측정 |
 | 기존 파일 수정 | `time.ts`에 `isHeld()` 추가, `sfx.ts`/`synth.ts`에 합성 전용 `coin-clink`(음색 4종) · `coin-thud` · `coin-break` |
 
 ### 10.2 에셋과 크기
@@ -251,7 +249,10 @@ stage.newTurn();           // TurnStarted에서: 같은 턴의 같은 종류 반
 7. **건너뛰기**: 기존 skip(×5)이 그대로 적용된다(점프 아님). 일시정지(`setHeld`)도 그대로.
 8. **기존 돈 프리셋**: 연결 후 같은 이벤트의 캔버스 돈 프리셋(tollPay, coinIn 등)과 패널 float을 끈다(이중 표시 방지).
 
-### 10.6 측정 (데모, 1600×1000 DPR 2, CPU 4×, `node scripts/fx/money-perf.mjs`, 각 3회 중앙값)
+### 10.6 측정 (데모, 1600×1000 DPR 2, CPU 4×, 각 3회 중앙값)
+
+> 단독 데모(`money-demo.html`)와 측정 스크립트(`money-perf.mjs`)는 2026-10-06에 지웠다. 아래는 그때의 기록이다.
+> 지금 측정은 실제 게임 화면에서 `npm run perf`(layers·paint 단계)로 한다.
 
 | 장면 | 장면 시계 스텝 avg / p95 / max | 프레임당 스크립트 / 스타일 / 레이아웃 | 비행 코인 피크 / 풀 사용 | 추가 레이어(2D 카메라) | 추가 레이어(3D 카메라) | 레이어 페인트/초 | 끝나고 유휴 |
 |---|---|---|---|---|---|---|---|
@@ -275,7 +276,10 @@ stage.newTurn();           // TurnStarted에서: 같은 턴의 같은 종류 반
 모두에게 걷기 88/101 · 모두에게 주기 84/97 · 월급 48/61 · 팟 보너스 54/67 · 세금 47/60 · 기부·보석금 43/56 ·
 파산 74/85. (같은 턴 반복은 0.7배, 게임 속도 1/3에서는 0.71배/1.22배.)
 
-### 10.7 필름스트립 (`node scripts/fx/money-strips.mjs`, `docs/assets/money-strips/*.png`)
+### 10.7 필름스트립 (`docs/assets/money-strips/*.png`)
+
+> 이 필름스트립을 만든 데모 스크립트(`money-strips.mjs`)는 2026-10-06에 지웠다. 지금 필름스트립은 실제 게임의
+> `e2e/money-events.spec.ts`가 `docs/assets/money-ingame/`에 쓴다.
 
 모든 장면 × S 좌석(1600×1000), 통행료·구매·명소·모두에게 걷기 × E/N/W, 통행료·구매·호텔·걷기·월급·세금 × S/E
 (800×450). 2틱마다 한 장, 라벨 = 장면 프레임과 비행 코인 수. 보고 나서 고친 것:

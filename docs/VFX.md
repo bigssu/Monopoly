@@ -873,8 +873,9 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 
 ## 13. 엔진 코어 구현 결과
 
-> 범위: `src/ui/fx/vfx/**`(엔진·프리셋·데모·테스트), `src/styles/vfx.css`, `vfx-demo.html`(개발용, 빌드 입력 아님),
-> `scripts/fx/vfx-strips.mjs`(필름스트립), `scripts/fx/vfx-perf.mjs`(엔진 비용). **기존 파일은 수정하지 않았다** — 게임 화면 연동은
+> 범위: `src/ui/fx/vfx/**`(엔진·프리셋·테스트), `src/styles/vfx.css`. 이 단계의 단독 데모(`vfx-demo.html`, `vfx/demo.ts`)와
+> 데모용 스크립트(`vfx-strips.mjs`, `vfx-perf.mjs`)는 2026-10-06에 지웠다(아래 13.4–13.5는 그때의 기록). 지금은 실제 게임
+> 화면의 필름스트립(`e2e/vfx.spec.ts`)과 `npm run perf`의 fx 단계가 같은 것을 본다. **기존 파일은 수정하지 않았다** — 게임 화면 연동은
 > `docs/VFX-WIRING.md`의 체크리스트(각 기존 파일의 정확한 변경 + 코드 조각, 모든 `GameEvent` → 프리셋 매핑 표, perf `fx` 페이즈 F1–F10).
 
 ### 13.1 구조
@@ -891,7 +892,6 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 | `presets.ts` | §7.5/§7.2b 프리셋 21종 + 범용 4종(`ringPulse/puff/cometJump/billRain`) — 13.2 |
 | `clock.ts` | `FxClock` 어댑터: `gameClock`(= `time.ts`의 `onFrame/animSpeed/isSkipping`, reduced-motion은 media query — 연동 시 `time.ts` 내보내기로 교체), `ManualClock`(테스트·필름스트립) |
 | `engine.ts` | `createFx()` → `FxHandle.play(name, params)`(thenable: 블록 프레임에 resolve, `.cue(name)`, `.done`, `.cancel()`), `run(timeline)`, `skip()`, `stopAll()`, `setQuality('high'|'low'|'off')`, `preload()`, `stats()`, `resetStats()`, `dispose()`, dev `window.__fx`. 캔버스 수명 §3.2, 리전·백킹 §3.3, 더티 영역 클리어, 레이어(0–3)×블렌드 순 그리기, `visibilitychange:hidden` → `stopAll()` |
-| `demo.ts` + `/vfx-demo.html` | 가짜 보드(GEOM 32칸) + 4좌석 패널 + `.fx-layer` + 시나리오 버튼 51개, DOM 훅(칸 팝/딤/줌펀치, 클로즈업 카드, 스포트라이트, 금액 플로트, 패널 범프, 쉐이크)을 **같은 클럭**으로 구현 → 수동 스텝에서도 캡처됨. `window.__vfxDemo`(`run/manual/step/reduced/skip/stats/rects/reset`) |
 
 **클럭**: 엔진은 `onFrame` 스텝 1개만 등록한다(효과가 있을 때만). 틱마다 `경과 × animSpeed × (스킵 ? 5 : 1)`을 누적해 FX 프레임을
 정수로 진행(최대 8/틱, 스킵 20/틱)하고, 그리기는 틱당 1회. 파티클 적분은 고정 1/30 s 스텝(스킵 시 한 틱에 5스텝 — §3.5의 "서브스텝 없음"
@@ -937,7 +937,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 
 ### 13.4 필름스트립 (`docs/assets/vfx-strips/*.png`)
 
-`node scripts/fx/vfx-strips.mjs [시나리오:틱 …]` — Vite 개발 서버 + 데모 페이지 + 수동 클럭, **2틱(=2 FX 프레임, 67 ms)마다 1장**,
+(삭제된 `vfx-strips.mjs`) Vite 개발 서버 + 데모 페이지 + 수동 클럭, **2틱(=2 FX 프레임, 67 ms)마다 1장**,
 라벨 `t`(틱) `f`(FX 프레임 — 히트스톱 동안 같은 f가 반복) `n`(라이브 파티클). 1600×1000, DPR 2, 캔버스 리전으로 클립.
 
 `build1 · build2 · build3 · build4(명소, 남 좌석) · build4N(명소, 북 좌석 — 회전 확인) · tollM · tollXL · takeover · group(체인+피날레) ·
@@ -959,7 +959,7 @@ groupFinale · plot650 · free3 · passStartLanded · victoryHubs`
 8. **(성능) 첫 틱 스파이크**: 리사이즈 직후 전체 `clearRect` 제거(폭 설정이 이미 비움). 남은 스파이크는 새 백킹 스토어의 **첫 그리기 시
    할당**(0.9 MP에서 4× 10 ms, 1× 2.5 ms — 빈 페이지에서도 동일하게 재현) → `retainBacking` 옵션(13.5).
 
-### 13.5 성능 측정 (`node scripts/fx/vfx-perf.mjs [--retain]`)
+### 13.5 성능 측정 (삭제된 `vfx-perf.mjs`, 기록)
 
 조건: 데모 페이지, 실제 30 Hz 클럭(`time.ts`), Chromium 141 헤드리스(소프트웨어 합성), 1600×1000, DPR 2, **CPU 4× 스로틀**,
 시나리오당 1× 워밍업 1회 + 4× 3회(중앙값; 최대는 3회 중 최대). "틱" = 엔진 스텝 1회의 JS(업데이트 + 캔버스 그리기, 소프트웨어 캔버스라
@@ -1162,7 +1162,7 @@ p99 16.8 → 33.4 ms, 33 ms 초과 7 → 22, Paint 17 → 22/s, F6 380 ms/s로 �
 | 4. 품질 단계 + 적응형(§15.4) (`387ffd5`) | — | 262 (auto = high 유지) | 49 | — | — |
 | 5. 유휴 시 캔버스 **주차**(transform, Paint 0), 유예 8틱, 좌표 사각형 캐시(강제 레이아웃 제거), high는 꼬리도 30 Hz (`4b2a8a2`) | — | F6 ×1.11–1.21 | 36–51 (연동 전 빌드 44–47) | 18.4–19.6 · 19 | — |
 
-데모 페이지 `node scripts/fx/vfx-perf.mjs`(4×, §13.5와 같은 조건): 틱(이제 메인 스레드의 업데이트 + 샘플·클러스터·레코드만 —
+데모 페이지(당시 `vfx-perf.mjs`, 4×, §13.5와 같은 조건): 틱(이제 메인 스레드의 업데이트 + 샘플·클러스터·레코드만 —
 그리기와 백킹 할당·복사는 워커) 통행료 XL 1.02 / 2.6 / **3.2** ms, 명소+독점 1.12 / 2.6 / **3.4**, 승리(허브) 0.85 / 2.0 / **3.8**
 (평균 / p95 / 최대; §13.5는 0.89 / 2.0 / 13.4 · 1.22 / 2.4 / 9.5 · 1.38 / 3.3 / 15.3 — 최대값의 백킹 할당 스파이크가 메인에서 사라짐).
 
