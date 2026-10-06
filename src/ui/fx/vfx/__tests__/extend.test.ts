@@ -67,6 +67,25 @@ describe('EVENT_EXTEND on event presets', () => {
     });
   }
 
+  it('a skip tap drops the stretch: a skipped event effect is gone as fast as before', () => {
+    const tl = buildPreset('victory', { winner: 0, kind: 'line', spaces: [1, 2, 3, 4, 5, 6] }, fakeEnv());
+    const left = (rate: number): number => {
+      const r = new Runner({}, 5000);
+      const e = r.start(tl, { u: 30, seed: 3, rate });
+      r.advance(20);
+      r.skip();
+      expect(e.rate).toBe(1);
+      let n = 0;
+      while (!r.idle && n < 600) {
+        r.advance(1);
+        n++;
+      }
+      return n;
+    };
+    // After 20 frames, the stretched finale is behind the plain one: at most those frames left over.
+    expect(left(extendRate(tl, eventStretch))).toBeLessThanOrEqual(left(1) + 6);
+  });
+
   it('an explicit stretch (the event card glints) plays exactly that much slower', () => {
     const b = run('cardReveal', { tone: 'good' });
     const x = run('cardReveal', { tone: 'good' }, 1 / 1.5);

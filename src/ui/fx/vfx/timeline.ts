@@ -201,8 +201,8 @@ export class Effect {
     readonly quiet: boolean,
     /** Quality 'low': no `glow` sprites (the big soft additive ones), no shake. */
     readonly lite = false,
-    /** Timeline frames per FX frame: < 1 = stretched in proportion (EVENT_EXTEND, `extendRate`). */
-    readonly rate = 1,
+    /** Timeline frames per FX frame: < 1 = stretched in proportion (EVENT_EXTEND, `extendRate`); 1 after a skip. */
+    public rate = 1,
     /** Timeline frame at which `block` resolves (default: the timeline's block frame). */
     readonly blockAt = tl.block,
   ) {
@@ -216,7 +216,7 @@ export class Effect {
       if (lite && p.anim === 'glow') return false;
       const i = pool.alloc(tl.priority, id);
       if (i < 0) return false;
-      writeParticle(pool, i, p, unit, rate);
+      writeParticle(pool, i, p, unit, this.rate);
       this.stats.spawned++;
       return true;
     };
@@ -346,12 +346,21 @@ export class Runner {
     }
   }
 
-  /** Skip tap: fire pending cues now, drop hit-stops; the engine runs 5 frames per tick. */
+  /**
+   * Skip tap: fire pending cues now, drop hit-stops, drop an event's stretch (EVENT_EXTEND: a
+   * skipped effect only has to get out of the way); the engine runs several frames per tick.
+   */
   skip(): void {
     this.skipping = true;
     this.freeze = 0;
-    for (const e of this.effects)
+    for (const e of this.effects) {
+      if (e.rate !== 1) {
+        e.rate = 1;
+        const pool = this.pool;
+        for (let i = 0; i < pool.cap; i++) if (pool.isAlive(i) && pool.effect[i] === e.id) pool.rate[i] = 1;
+      }
       for (const o of e.tl.ops) if (o.a.k === 'cue' && !e.fired.has(o.a.name)) this.exec(e, o);
+    }
   }
 
   /** Cancel everything (screen exit, resize, visibility change). */
