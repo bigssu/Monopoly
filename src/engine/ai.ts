@@ -10,6 +10,10 @@
  *  - sell cheapest first when in debt;
  *  - pay island bail when cash ≥ 800 (use an escape card first).
  * `easy` is more timid and never plans takeovers or travel destinations.
+ * Rules version 2 (docs/research/08-fun-analysis.md): all or nothing — gamble the tax when behind
+ * and able to pay twice, play safe when leading; city swap — the swap that gains the most value
+ * (never one that hands the owner a winning set); comeback cards are valued by what they would do
+ * now; a win-back (1× value) is taken whenever it leaves a reserve.
  */
 import {
   citiesInGroup,
@@ -25,9 +29,11 @@ import {
   START_INDEX,
 } from './board';
 import { ECONOMY } from './economy';
-import { defaultAction, legalActions, saleOptions } from './reducer';
+import { defaultAction, legalActions, raidTarget, saleOptions, swapGive } from './reducer';
 import {
   completedGroups,
+  propertyValue,
+  setVictory,
   nextBuildCost,
   ownedCities,
   propertyAt,
@@ -197,6 +203,51 @@ const CARD_VALUE: Partial<Record<CardId, number>> = {
 
 const CARD_MEAN = Object.values(CARD_VALUE).reduce((a, b) => a + b, 0) / Object.values(CARD_VALUE).length;
 
+/** Value of a card for `pid` right now (the comeback cards depend on the table). */
+export function cardValue(state: GameState, pid: PlayerId, id: CardId): number {
+  if (id === 'raid') {
+    const target = raidTarget(state, pid);
+    return target === null ? -1 : Math.min(9, 3 + Math.round((state.players[target]!.cash * 0.2) / 100));
+  }
+  if (id === 'swap') {
+    const best = bestSwap(state, pid);
+    return best && best.score > 0 ? 8 : -1;
+  }
+  return CARD_VALUE[id] ?? 0;
+}
+
+/** Swap score for taking `took` (and giving our cheapest non-landmark city), or −Infinity if it loses the game. */
+export function swapScore(state: GameState, pid: PlayerId, took: number): number {
+  const gave = swapGive(state, pid);
+  if (gave === null) return -Infinity;
+  const owner = state.properties[took]!.owner!;
+  const after: GameState = { ...state, properties: state.properties.map((pr) => (pr ? { ...pr } : pr)) };
+  after.properties[took]!.owner = pid;
+  after.properties[gave]!.owner = owner;
+  if (setVictory(after, owner)) return -Infinity;
+  if (setVictory(after, pid)) return 100_000;
+  let score = propertyValue(state, took) - propertyValue(state, gave);
+  score += (tollOf(after, took) - tollOf(state, gave)) * 2;
+  if (completesSet(state, pid, took)) score += 300;
+  if (completedGroups(state, pid).length > completedGroups(after, pid).length) score -= 400;
+  if (completedGroups(after, owner).length > completedGroups(state, owner).length) score -= 400;
+  return score;
+}
+
+function bestSwap(state: GameState, pid: PlayerId, options?: readonly number[]): { idx: number; score: number } | null {
+  const size = state.settings.spacesPerSide ?? 7;
+  const opts = options ?? getBoardInfo(size).cityIndices.filter((i) => {
+    const pr = state.properties[i]!;
+    return pr.owner !== null && pr.owner !== pid && pr.level < ECONOMY.maxLevel;
+  });
+  let best: { idx: number; score: number } | null = null;
+  for (const i of opts) {
+    const sc = swapScore(state, pid, i);
+    if (!best || sc > best.score) best = { idx: i, score: sc };
+  }
+  return best;
+}
+
 /** Choose an action for `playerId` in the current phase. Always legal. */
 export function chooseAction(state: GameState, playerId: PlayerId): Action {
   const ph = state.phase;
@@ -255,6 +306,8 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
       if (!can('Takeover') || ph.ownerHasShield) return pass;
       const after = p.cash - ph.price;
       if (winsGame(state, playerId, ph.spaceIndex)) return { type: 'Takeover', playerId };
+      // Win-back: our old city at 1× value.
+      if (ph.winBack && after >= (easy ? 500 : reserveFor(state, playerId) * 0.5)) return { type: 'Takeover', playerId };
       if (easy) {
         return completesSet(state, playerId, ph.spaceIndex) && after >= 500 ? { type: 'Takeover', playerId } : pass;
       }
@@ -295,19 +348,38 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
     }
 
     case 'target': {
+      if (ph.card === 'swap') {
+        const best = bestSwap(state, playerId, ph.options);
+        // Easy: the priciest city, if it is worth more than ours; normal: the best trade.
+        if (easy) {
+          const gave = swapGive(state, playerId);
+          const top = pickBest([...ph.options], (i) => propertyValue(state, i));
+          const ok = top !== undefined && gave !== null && propertyValue(state, top) > propertyValue(state, gave) && swapScore(state, playerId, top) > -Infinity;
+          return ok ? { type: 'ChooseTarget', playerId, spaceIndex: top } : pass;
+        }
+        return best && best.score > 0 ? { type: 'ChooseTarget', playerId, spaceIndex: best.idx } : pass;
+      }
       // Hit the richest opponent's most valuable city.
       const leader = (i: number) => totalAssets(state, state.properties[i]!.owner!);
       const best = pickBest([...ph.options], (i) => leader(i) * 10 + tollOf(state, i));
       return { type: 'ChooseTarget', playerId, spaceIndex: best ?? ph.options[0]! };
     }
 
+    case 'gamble': {
+      // All or nothing: the same expected cost; the trailing player takes the risk, the leader pays.
+      if (easy) return ph.tax <= 100 ? { type: 'Gamble', playerId } : pass;
+      const spare = p.cash - ph.tax * ECONOMY.gambleLoss;
+      const leading = state.players.every((q) => q.id === playerId || q.bankrupt || totalAssets(state, q.id) < totalAssets(state, playerId));
+      return !leading && spare >= tollExposure(state, playerId) ? { type: 'Gamble', playerId } : pass;
+    }
+
     case 'cardChoice': {
       // With a face-down second card the CPU does not peek: the known card vs the deck average.
       if (ruleFlags(state.settings).hiddenCard) {
-        const known = CARD_VALUE[ph.options[0]] ?? 0;
+        const known = cardValue(state, playerId, ph.options[0]);
         return { type: 'ChooseCard', playerId, cardId: known >= CARD_MEAN ? ph.options[0] : ph.options[1] };
       }
-      const best = pickBest([...ph.options], (id) => CARD_VALUE[id] ?? 0);
+      const best = pickBest([...ph.options], (id) => cardValue(state, playerId, id));
       return { type: 'ChooseCard', playerId, cardId: best ?? ph.options[0] };
     }
 
