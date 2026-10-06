@@ -1,5 +1,6 @@
 /**
- * Event cards — the 24 cards from docs/DESIGN.md §4.
+ * Event cards — the 24 cards from docs/DESIGN.md §4, plus the comeback cards of rules version 2
+ * (docs/research/08-fun-analysis.md), which only join the deck when that rule is on (`requires`).
  * Drawn uniformly at random with replacement when a player lands on an EVENT space.
  *
  * Each card carries a typed effect descriptor that the engine interprets
@@ -45,7 +46,11 @@ export type CardEffect =
   /** Receive `amount` × number of hubs you own. */
   | { readonly kind: 'perHub'; readonly amount: number }
   /** The richest player (total assets) pays `amount` to the poorest. No-op on ties. */
-  | { readonly kind: 'leaderTax'; readonly amount: number };
+  | { readonly kind: 'leaderTax'; readonly amount: number }
+  /** Choose an opponent's city (not a landmark): it becomes yours, your cheapest non-landmark city theirs. */
+  | { readonly kind: 'swap' }
+  /** The richest other player pays you `rate` of their cash (no effect if you are the richest). */
+  | { readonly kind: 'raid'; readonly rate: number };
 
 export type CardId =
   | 'to-start'
@@ -71,7 +76,9 @@ export type CardId =
   | 'free-upgrade'
   | 'typhoon'
   | 'festival-invite'
-  | 'hub-bonus';
+  | 'hub-bonus'
+  | 'swap'
+  | 'raid';
 
 export interface CardDef {
   readonly id: CardId;
@@ -82,6 +89,8 @@ export interface CardDef {
   readonly effect: CardEffect;
   /** Icon id hint for the UI (generic card art). */
   readonly iconId: string;
+  /** Only in the deck when this rule flag is on (`RuleFlags` key; engine `deckFor`). */
+  readonly requires?: 'comebackCards';
 }
 
 export const CARDS: readonly CardDef[] = [
@@ -334,7 +343,35 @@ export const CARDS: readonly CardDef[] = [
     effect: { kind: 'perHub', amount: 100 },
     iconId: 'card-coin',
   },
+  // --- Comeback cards (rules version 2; appended so the original deck order never changes) ---
+  {
+    id: 'swap',
+    number: 25,
+    title: { ko: '땅 맞교환', en: 'Land Swap' },
+    description: {
+      ko: '상대 도시 하나를 골라 내 가장 싼 도시와 바꿔요. 건물도 그대로! (명소는 안 돼요)',
+      en: "Pick an opponent's city and trade your cheapest city for it, buildings and all (not landmarks).",
+    },
+    effect: { kind: 'swap' },
+    iconId: 'card-swap',
+    requires: 'comebackCards',
+  },
+  {
+    id: 'raid',
+    number: 26,
+    title: { ko: '선두 습격', en: 'Leader Raid' },
+    description: {
+      ko: '총자산 1위가 현금의 20%를 나에게 줘요. 내가 1위면 효과 없어요.',
+      en: 'The richest player hands you 20% of their cash. No effect if that is you.',
+    },
+    effect: { kind: 'raid', rate: 0.2 },
+    iconId: 'card-raid',
+    requires: 'comebackCards',
+  },
 ];
+
+/** Cards a comeback offer draws from (the last player's first card, rules version 2). */
+export const COMEBACK_CARD_IDS: readonly CardId[] = ['swap', 'raid', 'welfare', 'free-upgrade', 'lottery'];
 
 const CARD_BY_ID: ReadonlyMap<CardId, CardDef> = new Map(CARDS.map((c) => [c.id, c]));
 

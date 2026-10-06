@@ -59,13 +59,37 @@ export interface Settings {
   spacesPerSide?: SpacesPerSide;
   /**
    * Rule level (docs/superpowers/specs/2026-10-04-rule-levels-design.md): `easy` = the original
-   * rules, `normal` adds late toll / card choice / manual keep-cards / olympics, `advanced` adds
+   * rules, `normal` adds late toll / card choice / manual keep-cards / grand festival, `advanced` adds
    * hub growth / double-up / dice gauge. Missing (older saves) = `easy`.
    */
   rules?: RuleLevel;
+  /**
+   * Rule revision the game was started with (`RULES_VERSION` in settings.ts). 2 = the 2026-10 fun
+   * rules (lucky vault, news flash, comeback cards, doubles bonus card, all-or-nothing tax,
+   * win-back takeover: docs/research/08-fun-analysis.md). Missing = 1: saves from before keep the
+   * rules they started with.
+   */
+  rulesVersion?: number;
 }
 
 export type RuleLevel = 'easy' | 'normal' | 'advanced';
+
+/** News flash headlines (rules ≥ normal, version 2): one every few rounds, for that round. */
+export type NewsId = 'tollFever' | 'quake' | 'buildBoom' | 'takeoverSale' | 'shareDay' | 'vaultBoom';
+
+/** The headline in force (`round` = the round it covers). */
+export interface NewsState {
+  id: NewsId;
+  round: number;
+  /** Quake: the colour group it hit. */
+  group?: GroupId;
+}
+
+/** Win-back (rules = advanced): `from` lost the city to `by` in a takeover. */
+export interface TakenFrom {
+  from: PlayerId;
+  by: PlayerId;
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -119,7 +143,9 @@ export type MoneyReason =
   | 'card'
   | 'sale'
   | 'auction'
-  | 'bankruptcy';
+  | 'bankruptcy'
+  /** News flash "share day": the richest gives part of their cash to the poorest. */
+  | 'news';
 
 /** What happens after a debt is settled. */
 export type Continuation =
@@ -183,6 +209,8 @@ export type Phase =
       price: number;
       /** Owner holds a 수호 방패 (the attempt will be blocked). Public info. */
       ownerHasShield: boolean;
+      /** Win-back (rules = advanced): the city was taken from this player; the price is 1× value. */
+      winBack?: boolean;
     }
   /** Festival corner: SetFestival{spaceIndex} or Pass. */
   | { kind: 'festival'; playerId: PlayerId; options: number[] }
@@ -216,8 +244,13 @@ export type Phase =
       /** Set when the debt is a toll (TollPaid is emitted on settlement). */
       toll?: TollInfo;
     }
-  /** Card choice (rules ≥ normal): two different cards drawn, ChooseCard one. */
-  | { kind: 'cardChoice'; playerId: PlayerId; options: [CardId, CardId] }
+  /**
+   * Card choice (rules ≥ normal): two different cards drawn, ChooseCard one. `bonus`: drawn for
+   * rolling doubles (not on an event space). `underdog`: the first card is a comeback card.
+   */
+  | { kind: 'cardChoice'; playerId: PlayerId; options: [CardId, CardId]; bonus?: boolean; underdog?: boolean }
+  /** All or nothing (rules ≥ normal, version 2) at the tax office: Pass = pay `tax`, Gamble = a die (4–6 free, 1–3 twice). */
+  | { kind: 'gamble'; playerId: PlayerId; tax: number }
   /**
    * Manual keep-cards (rules ≥ normal): UseCard or Pass. `toll-pass`: the payer, about to pay the
    * toll at `spaceIndex` (×`multiplier`). `shield`: the OWNER of `spaceIndex`, which `buyerId`
@@ -235,8 +268,11 @@ export type Phase =
   /** Double-up (rules = advanced): `stake` on the line after `wins` right guesses; guess whether the
    * next die beats `shown` (higher / lower; a tie loses); Pass = stop. */
   | { kind: 'doubleUp'; playerId: PlayerId; stake: number; wins: number; shown: number }
-  /** Targeting (rules ≥ normal): choose the opponent city an attack card hits. */
-  | { kind: 'target'; playerId: PlayerId; card: 'typhoon'; options: number[] }
+  /**
+   * Targeting (rules ≥ normal): choose the opponent city an attack card hits. `swap` (city swap
+   * card): the chosen city becomes yours and your cheapest non-landmark city theirs; Pass = keep.
+   */
+  | { kind: 'target'; playerId: PlayerId; card: 'typhoon' | 'swap'; options: number[] }
   | { kind: 'gameOver'; result: GameResult };
 
 export interface TollInfo {
@@ -285,7 +321,7 @@ export interface GameState {
   festival: number | null;
   /** A first bankruptcy (rules ≥ normal): the game ends when this round completes. */
   endsAfterRound?: boolean;
-  /** Olympics (rules ≥ normal): times the festival was held on that city in a row, 1..3. */
+  /** Grand festival (rules ≥ normal): times the festival was held on that city in a row, 1..3. */
   festivalLevel?: number;
   /** Per-player game statistics for the result screen awards (collected in reducer `emit`). */
   stats?: PlayerStats[];
@@ -293,6 +329,14 @@ export interface GameState {
   history?: number[][];
   /** Hub growth (rules = advanced): toll steps earned per hub index, with the owner they belong to. */
   hubVisits?: Record<number, { owner: PlayerId; n: number }>;
+  /** News flash (version 2): the headline of the current or last news round. */
+  news?: NewsState;
+  /** News flash: headlines already run this game (no repeat until all have run). */
+  newsSeen?: NewsId[];
+  /** Win-back (rules = advanced): who lost each city in a takeover, while the taker still owns it. */
+  takenFrom?: Record<number, TakenFrom>;
+  /** Doubles bonus card (version 2): already drawn for the current roll. */
+  bonusCardUsed?: boolean;
   /** Donation pot. */
   pot: number;
   /** 1-based round number. */
@@ -334,6 +378,8 @@ export type Action =
   | { type: 'UseCard'; playerId: PlayerId }
   | { type: 'DoubleUpGuess'; playerId: PlayerId; guess: 'high' | 'low' }
   | { type: 'ChooseTarget'; playerId: PlayerId; spaceIndex: number }
+  /** All or nothing: roll for the tax (Pass pays it). */
+  | { type: 'Gamble'; playerId: PlayerId }
   /** Decline the current prompt (buy/build/takeover/festival/freeUpgrade/travel/auction). */
   | { type: 'Pass'; playerId: PlayerId };
 
@@ -399,7 +445,7 @@ export type GameEvent =
       spaceIndex: number;
       ownerId: PlayerId;
       level: Level;
-      cause: 'typhoon' | 'sale';
+      cause: 'typhoon' | 'sale' | 'quake';
     }
   | {
       type: 'TollPaid';
@@ -415,9 +461,17 @@ export type GameEvent =
       /** 통행료 면제권 consumed: nothing paid. */
       waived: boolean;
     }
-  | { type: 'TakenOver'; buyerId: PlayerId; sellerId: PlayerId; spaceIndex: number; price: number }
+  | { type: 'TakenOver'; buyerId: PlayerId; sellerId: PlayerId; spaceIndex: number; price: number; winBack?: boolean }
   | { type: 'TakeoverBlocked'; buyerId: PlayerId; ownerId: PlayerId; spaceIndex: number }
-  | { type: 'CardsOffered'; playerId: PlayerId; options: [CardId, CardId] }
+  | { type: 'CardsOffered'; playerId: PlayerId; options: [CardId, CardId]; bonus?: boolean; underdog?: boolean }
+  /** Doubles bonus card (version 2): an event card before the extra roll. */
+  | { type: 'BonusCard'; playerId: PlayerId }
+  /** News flash (version 2) at the start of a round. */
+  | { type: 'NewsFlash'; id: NewsId; round: number; group?: GroupId }
+  /** All or nothing: the die (4–6 → paid nothing, 1–3 → paid twice the tax). */
+  | { type: 'Gambled'; playerId: PlayerId; die: number; win: boolean; tax: number; paid: number }
+  /** City swap card: `took` (was `ownerId`'s) is now `playerId`'s, `gave` is now `ownerId`'s. */
+  | { type: 'CitySwapped'; playerId: PlayerId; ownerId: PlayerId; took: number; gave: number }
   | { type: 'DoubleUpOffered'; playerId: PlayerId; stake: number; shown: number }
   | { type: 'DoubleUpRolled'; playerId: PlayerId; shown: number; die: number; guess: 'high' | 'low'; win: boolean; stake: number }
   /** A first bankruptcy with rules ≥ normal: the game ends when this round completes. */

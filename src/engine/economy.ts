@@ -33,8 +33,8 @@ export const ECONOMY = {
   groupLandMultiplier: 2,
   /** Festival marker toll multiplier (one marker on the board, never stacks). */
   festivalMultiplier: 2,
-  /** Olympics: festival multiplier by level 1..3 (rules ≥ normal). */
-  olympicsMultipliers: [2, 3, 5],
+  /** Grand festival (대축제): festival multiplier by level 1..3 (rules ≥ normal). */
+  grandFestivalMultipliers: [2, 3, 5],
   /** Late toll: with a round limit, the last `lateTollRounds` rounds add `lateTollStep` each. */
   lateTollRounds: 5,
   lateTollStep: 0.25,
@@ -90,6 +90,29 @@ export const ECONOMY = {
 
   /** Default round limit (setup options 10/15/20/30/∞). */
   defaultRoundLimit: 15,
+
+  // --- Rules version 2 (docs/research/08-fun-analysis.md, docs/BALANCE.md "Fun rules") ---------
+  /** Lucky vault: the bank adds this to the pot at the start of every round (from round 2). */
+  vaultSeed: 100,
+  /** News flash: a headline every this many rounds (rounds 4, 8, 12, …). */
+  newsEvery: 4,
+  /** News "toll fever": every toll × this for the round. */
+  newsTollMultiplier: 2,
+  /** News "build boom": build costs × this for the round (rounded to 10). */
+  newsBuildRate: 0.5,
+  /** News "takeover sale": takeover price = this × value for the round (instead of 2×). */
+  newsTakeoverMultiplier: 1.5,
+  /** News "share day": the richest gives this fraction of their cash to the poorest (rounded to 10). */
+  newsShareRate: 0.1,
+  /** News "vault boom": the bank matches the pot, at least this much. */
+  newsVaultMin: 200,
+  /** Comeback card offer: the drawer is last and the leader has at least this × their assets. */
+  comebackGap: 1.25,
+  /** All or nothing: a die of at least this pays no tax; below it pays the tax × `gambleLoss`. */
+  gambleWinFrom: 4,
+  gambleLoss: 2,
+  /** Win-back: the player who lost a city in a takeover may take it back for this × value. */
+  winBackMultiplier: 1,
 } as const;
 
 export type Economy = typeof ECONOMY;

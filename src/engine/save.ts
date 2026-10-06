@@ -6,9 +6,9 @@ import { GROUP_IDS, SIDE_IDS } from '../content/board';
 import type { GameState } from './types';
 import { getBoardInfo, priceOf } from './board';
 import { ECONOMY } from './economy';
-import { festivalOptions, travelOptions } from './reducer';
-import { canBeTakenOver, liquidationValue, nextBuildCost, ownedCities, round10, takeoverPrice, tollOf } from './rules';
-import { ruleFlags } from './settings';
+import { NEWS_IDS, festivalOptions, swapOptions, travelOptions } from './reducer';
+import { canBeTakenOver, isWinBack, liquidationValue, nextBuildCost, ownedCities, round10, takeoverPrice, tollOf } from './rules';
+import { RULES_VERSION, ruleFlags } from './settings';
 
 export const SAVE_FORMAT = 'lot-and-roll-save';
 export const SAVE_VERSION = 1;
@@ -46,6 +46,7 @@ function validateSettings(value: unknown): value is JsonObject & { spacesPerSide
     !(value.roundLimit === null || integer(value.roundLimit, 1)) || !boolean(value.takeover) || !boolean(value.auction) ||
     !boolean(value.endOnFirstBankruptcy) || !boolean(value.buildAnywhere) || ![0, 15, 30].includes(value.promptTimer as number) ||
     ![7, 8, 9].includes(value.spacesPerSide as number) || !['easy', 'normal', 'advanced'].includes(value.rules as string) ||
+    !(value.rulesVersion === undefined || (integer(value.rulesVersion, 1) && value.rulesVersion <= RULES_VERSION)) ||
     value.players.length < 2 || value.players.length > 4) return false;
   const seats = new Set<string>();
   return value.players.every((player) => {
@@ -120,7 +121,8 @@ function validatePhase(value: unknown, boardSize: number, propertyIndices: reado
     case 'freeUpgrade': return prompt() && options(value.options, boardSize) && value.options.every(propertyIndex);
     case 'buy': return prompt() && propertyIndex(value.spaceIndex) && integer(value.price, 0);
     case 'build': return prompt() && propertyIndex(value.spaceIndex) && [1, 2, 3, 4].includes(value.toLevel as number) && integer(value.cost, 0);
-    case 'takeover': return prompt() && propertyIndex(value.spaceIndex) && playerId(value.ownerId, playerCount) && integer(value.price, 0) && boolean(value.ownerHasShield);
+    case 'takeover': return prompt() && propertyIndex(value.spaceIndex) && playerId(value.ownerId, playerCount) && integer(value.price, 0) && boolean(value.ownerHasShield) &&
+      (value.winBack === undefined || value.winBack === true);
     case 'auction':
       return prompt() && propertyIndex(value.spaceIndex) && playerId(value.declinedBy, playerCount) && Array.isArray(value.order) &&
         value.order.every((id) => playerId(id, playerCount)) && Array.isArray(value.active) && value.active.every((id) => playerId(id, playerCount)) &&
@@ -129,10 +131,13 @@ function validatePhase(value: unknown, boardSize: number, propertyIndices: reado
     case 'doubleUp':
       return prompt() && integer(value.stake, 1) && integer(value.wins, 0) && value.wins < ECONOMY.doubleUpMaxWins && integer(value.shown, 1) && value.shown <= 6;
     case 'target':
-      return prompt() && value.card === 'typhoon' && options(value.options, boardSize) && value.options.length > 0 && value.options.every((index) => cityIndices.includes(index));
+      return prompt() && (value.card === 'typhoon' || value.card === 'swap') && options(value.options, boardSize) && value.options.length > 0 && value.options.every((index) => cityIndices.includes(index));
     case 'cardChoice':
       return prompt() && Array.isArray(value.options) && value.options.length === 2 && value.options[0] !== value.options[1] &&
-        value.options.every((id) => CARDS.some((c) => c.id === id));
+        value.options.every((id) => CARDS.some((c) => c.id === id)) && (value.bonus === undefined || value.bonus === true) &&
+        (value.underdog === undefined || value.underdog === true);
+    case 'gamble':
+      return prompt() && integer(value.tax, 1);
     case 'useCard':
       return prompt() && propertyIndex(value.spaceIndex) && (value.card === 'toll-pass' ? integer(value.multiplier, 1) :
         value.card === 'shield' && playerId(value.buyerId, playerCount) && integer(value.price, 0));
@@ -194,7 +199,13 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
       const owner = state.players[phase.ownerId]!;
       return currentPrompt && player.position === phase.spaceIndex && state.settings.takeover &&
         property(phase.spaceIndex).owner === phase.ownerId && phase.ownerId !== phase.playerId && canBeTakenOver(state, phase.spaceIndex) &&
-        phase.price === takeoverPrice(state, phase.spaceIndex) && player.cash >= phase.price && phase.ownerHasShield === owner.cards.includes('shield');
+        phase.price === takeoverPrice(state, phase.spaceIndex, phase.playerId) && player.cash >= phase.price && phase.ownerHasShield === owner.cards.includes('shield') &&
+        !!phase.winBack === isWinBack(state, phase.spaceIndex, phase.playerId);
+    }
+    case 'gamble': {
+      const tax = getBoardInfo(size).board.find((sp) => sp.kind === 'tax')!.index;
+      return currentPrompt && ruleFlags(state.settings).allOrNothing && player.position === tax &&
+        phase.tax === Math.min(player.cash, round10(player.cash * ECONOMY.taxRate));
     }
     case 'festival':
       return currentPrompt && player.position === getBoardInfo(size).festivalIndex &&
@@ -203,12 +214,16 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
       return currentPrompt && ruleFlags(state.settings).doubleUp && player.position === getBoardInfo(size).startIndex &&
         phase.stake === ECONOMY.salary * 2 ** phase.wins;
     case 'target':
+      // Swap: exactly the cities the swap card can take now.
+      if (phase.card === 'swap') return currentPrompt && ruleFlags(state.settings).comebackCards && sameNumbers(phase.options, swapOptions(state, phase.playerId));
       // Every option is an opponent's city that a typhoon can still lower.
       return currentPrompt && ruleFlags(state.settings).targeting && phase.options.every((index) => {
         const pr = property(index);
         return pr.owner !== null && pr.owner !== phase.playerId && pr.level >= 1 && pr.level < ECONOMY.maxLevel;
       });
     case 'cardChoice':
+      // A doubles bonus card is drawn wherever the roll landed.
+      if (phase.bonus) return currentPrompt && ruleFlags(state.settings).doublesCard && state.bonusCardUsed === true && state.extraRoll;
       return currentPrompt && ruleFlags(state.settings).cardChoice && getBoardInfo(size).eventIndices.includes(player.position);
     case 'useCard': {
       if (!ruleFlags(state.settings).manualCards) return false;
@@ -218,7 +233,7 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
       }
       // Shield: the owner decides while the turn owner (the buyer) stands on the space.
       return phase.buyerId === state.current && property(phase.spaceIndex).owner === phase.playerId && player.cards.includes('shield') &&
-        state.players[phase.buyerId]!.position === phase.spaceIndex && phase.price === takeoverPrice(state, phase.spaceIndex);
+        state.players[phase.buyerId]!.position === phase.spaceIndex && phase.price === takeoverPrice(state, phase.spaceIndex, phase.buyerId);
     }
     case 'freeUpgrade':
       return currentPrompt && phase.options.length > 0 &&
@@ -263,7 +278,7 @@ function validateTestHooks(value: unknown): boolean {
 
 type JsonObject = Record<string, unknown>;
 
-const MONEY_REASONS = new Set(['salary', 'pot', 'toll', 'purchase', 'build', 'takeover', 'tax', 'donation', 'bail', 'card', 'sale', 'auction', 'bankruptcy']);
+const MONEY_REASONS = new Set(['salary', 'pot', 'toll', 'purchase', 'build', 'takeover', 'tax', 'donation', 'bail', 'card', 'sale', 'auction', 'bankruptcy', 'news']);
 const VICTORIES = new Set(['lastStanding', 'bankruptcy', 'triple', 'line', 'hubs', 'roundLimit']);
 const SEATS = new Set(['S', 'E', 'N', 'W']);
 const CPU_LEVELS = new Set(['easy', 'normal']);
@@ -284,13 +299,20 @@ function playerId(value: unknown, count: number): value is number {
   return integer(value, 0) && value < count;
 }
 
-/** Optional rule-level state (olympics level, hub growth steps). */
+/** Optional rule-level state (grand festival level, hub growth steps). */
 function validateRuleState(state: JsonObject, boardSize: number): boolean {
   if (state.endsAfterRound !== undefined && !boolean(state.endsAfterRound)) return false;
-  if (state.festivalLevel !== undefined && !(integer(state.festivalLevel, 1) && state.festivalLevel <= ECONOMY.olympicsMultipliers.length)) return false;
+  if (state.festivalLevel !== undefined && !(integer(state.festivalLevel, 1) && state.festivalLevel <= ECONOMY.grandFestivalMultipliers.length)) return false;
   // Result-screen statistics: plain non-negative counters / asset rows.
   if (state.stats !== undefined && !(Array.isArray(state.stats) && state.stats.every((p) => object(p) && Object.values(p).every((v) => integer(v, 0))))) return false;
   if (state.history !== undefined && !(Array.isArray(state.history) && state.history.every((row) => Array.isArray(row) && row.every((v) => integer(v, 0))))) return false;
+  // Rules version 2: news flash, win-back, doubles bonus card.
+  if (state.news !== undefined && !(object(state.news) && NEWS_IDS.includes(state.news.id as never) && integer(state.news.round, 1) &&
+    (state.news.group === undefined || GROUP_IDS.includes(state.news.group as never)))) return false;
+  if (state.newsSeen !== undefined && !(Array.isArray(state.newsSeen) && state.newsSeen.every((id) => NEWS_IDS.includes(id as never)))) return false;
+  if (state.bonusCardUsed !== undefined && !boolean(state.bonusCardUsed)) return false;
+  if (state.takenFrom !== undefined && !(object(state.takenFrom) && Object.entries(state.takenFrom).every(([k, v]) =>
+    spaceIndex(Number(k), boardSize) && object(v) && integer(v.from, 0) && integer(v.by, 0)))) return false;
   if (state.hubVisits === undefined) return true;
   if (!object(state.hubVisits)) return false;
   return Object.entries(state.hubVisits).every(([k, v]) => spaceIndex(Number(k), boardSize) && object(v) && integer(v.n, 1) && integer(v.owner, 0));

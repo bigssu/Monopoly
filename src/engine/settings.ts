@@ -44,18 +44,27 @@ export function defaultSettings(overrides: Partial<Settings> = {}): Settings {
     promptTimer: 15,
     spacesPerSide: 7,
     rules: 'normal',
+    rulesVersion: RULES_VERSION,
     ...overrides,
   };
 }
 
 export const RULE_LEVELS: readonly RuleLevel[] = ['easy', 'normal', 'advanced'];
 
+/**
+ * Current rule revision (Settings.rulesVersion). 2 (2026-10-06, docs/research/08-fun-analysis.md):
+ * the fun rules below. A game keeps the revision it started with, so a saved game from before
+ * (no `rulesVersion`) continues with the rules it was played with.
+ */
+export const RULES_VERSION = 2;
+
 /** Which optional rules a level turns on (the engine checks flags, never level names). */
 export interface RuleFlags {
   lateToll: boolean;
   cardChoice: boolean;
   manualCards: boolean;
-  olympics: boolean;
+  /** Grand festival (대축제): holding the festival again in the same city raises it ×2 → ×3 → ×5. */
+  grandFestival: boolean;
   hubGrowth: boolean;
   doubleUp: boolean;
   diceGauge: boolean;
@@ -67,15 +76,31 @@ export interface RuleFlags {
   seatBonus: boolean;
   /** One of the two offered event cards is face down. */
   hiddenCard: boolean;
+  // --- rules version 2 (docs/research/08-fun-analysis.md) ---
+  /** Lucky vault: bail and card fines go into the pot, and the bank adds to it every round. */
+  luckyVault: boolean;
+  /** News flash: every few rounds a headline changes the board for that round. */
+  newsFlash: boolean;
+  /** Comeback cards: the city swap / leader raid cards, and the last player is offered one. */
+  comebackCards: boolean;
+  /** Doubles bonus card: rolling doubles draws an event card before the extra roll. */
+  doublesCard: boolean;
+  /** All or nothing at the tax office: pay, or roll (4–6 free, 1–3 twice). */
+  allOrNothing: boolean;
+  /** Win-back: a city lost in a takeover can be taken back for 1× its value. */
+  winBack: boolean;
 }
 
-export function ruleFlags(settings: Pick<Settings, 'rules'>): RuleFlags {
+export function ruleFlags(settings: Pick<Settings, 'rules' | 'rulesVersion'>): RuleFlags {
   const level = settings.rules ?? 'easy';
   const normal = level !== 'easy';
   const advanced = level === 'advanced';
+  const v2 = (settings.rulesVersion ?? 1) >= 2;
   return {
-    lateToll: normal, cardChoice: normal, manualCards: normal, olympics: normal, targeting: normal, finishRound: normal, seatBonus: normal, hiddenCard: normal,
+    lateToll: normal, cardChoice: normal, manualCards: normal, grandFestival: normal, targeting: normal, finishRound: normal, seatBonus: normal, hiddenCard: normal,
     hubGrowth: advanced, doubleUp: advanced, diceGauge: advanced,
+    luckyVault: v2 && normal, newsFlash: v2 && normal, comebackCards: v2 && normal, doublesCard: v2 && normal, allOrNothing: v2 && normal,
+    winBack: v2 && advanced,
   };
 }
 

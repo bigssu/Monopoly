@@ -107,10 +107,13 @@ describe('board content (DESIGN §3)', () => {
 });
 
 describe('event cards (DESIGN §4)', () => {
-  it('has 24 cards numbered 1..24 with unique ids and ko/en text', () => {
-    expect(CARDS).toHaveLength(24);
-    expect(CARDS.map((c) => c.number)).toEqual(Array.from({ length: 24 }, (_, i) => i + 1));
-    expect(new Set(CARDS.map((c) => c.id)).size).toBe(24);
+  it('has 24 cards numbered 1..24 (+ the 2 comeback cards of rules version 2) with unique ids and ko/en text', () => {
+    expect(CARDS).toHaveLength(26);
+    expect(CARDS.map((c) => c.number)).toEqual(Array.from({ length: 26 }, (_, i) => i + 1));
+    expect(new Set(CARDS.map((c) => c.id)).size).toBe(26);
+    // The original deck comes first and needs no rule; the comeback cards are appended.
+    expect(CARDS.slice(0, 24).every((c) => !c.requires)).toBe(true);
+    expect(CARDS.slice(24).map((c) => [c.id, c.requires])).toEqual([['swap', 'comebackCards'], ['raid', 'comebackCards']]);
     for (const c of CARDS) {
       expect(c.title.ko && c.title.en && c.description.ko && c.description.en).toBeTruthy();
       expect(getCard(c.id)).toBe(c);

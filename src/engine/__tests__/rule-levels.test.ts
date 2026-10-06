@@ -1,5 +1,5 @@
 /**
- * Rule levels (docs/superpowers/specs/2026-10-04-rule-levels-design.md): B1 late toll, B4 olympics,
+ * Rule levels (docs/superpowers/specs/2026-10-04-rule-levels-design.md): B1 late toll, B4 grand festival,
  * B5 hub growth, the level flags and save compatibility.
  */
 import { describe, expect, it } from 'vitest';
@@ -17,8 +17,8 @@ import { act, edit, game, ofType, own, queueCards, roll, setupLanding } from './
 
 describe('rule levels', () => {
   it('turn rules on by level; new games default to normal', () => {
-    expect(ruleFlags({ rules: 'easy' })).toMatchObject({ lateToll: false, olympics: false, hubGrowth: false });
-    expect(ruleFlags({ rules: 'normal' })).toMatchObject({ lateToll: true, cardChoice: true, manualCards: true, olympics: true, hubGrowth: false, doubleUp: false });
+    expect(ruleFlags({ rules: 'easy' })).toMatchObject({ lateToll: false, grandFestival: false, hubGrowth: false });
+    expect(ruleFlags({ rules: 'normal' })).toMatchObject({ lateToll: true, cardChoice: true, manualCards: true, grandFestival: true, hubGrowth: false, doubleUp: false });
     expect(ruleFlags({ rules: 'advanced' })).toMatchObject({ hubGrowth: true, doubleUp: true, diceGauge: true });
     expect(ruleFlags({})).toMatchObject({ lateToll: false }); // older saves
     expect(defaultSettings().rules).toBe('normal');
@@ -57,7 +57,7 @@ describe('B1 late toll', () => {
   });
 });
 
-describe('B4 olympics', () => {
+describe('B4 grand festival', () => {
   it('holding the festival again on the same city raises ×2 → ×3 → ×5; moving resets', () => {
     let s = edit(game({ rules: 'normal' }), (st) => {
       own(st, 1, 0);
@@ -78,7 +78,7 @@ describe('B4 olympics', () => {
       setupLanding(st, 0, 16, 6);
     });
     r = act(act(s, roll(0)).state, { type: 'SetFestival', playerId: 0, spaceIndex: 2 });
-    expect(festivalMultiplier(r.state)).toBe(ECONOMY.olympicsMultipliers[2]);
+    expect(festivalMultiplier(r.state)).toBe(ECONOMY.grandFestivalMultipliers[2]);
     s = edit(r.state, (st) => {
       st.current = 0;
       st.phase = { kind: 'preRoll', playerId: 0, rollAgain: false };
@@ -383,7 +383,8 @@ describe('wave 1: interaction, endings, fairness', () => {
     // Hub growth counts the visit right after pricing; the save check must price it the same way.
     const base = defaultSettings();
     const settings = {
-      ...base, spacesPerSide: 7 as const, rules: 'advanced' as const, roundLimit: null, auction: true, takeover: false, buildAnywhere: false, endOnFirstBankruptcy: true, startCash: 2000,
+      // Rules version 1: the seeded line of play that reaches the debt (version 2 changes it).
+      ...base, rulesVersion: 1, spacesPerSide: 7 as const, rules: 'advanced' as const, roundLimit: null, auction: true, takeover: false, buildAnywhere: false, endOnFirstBankruptcy: true, startCash: 2000,
       players: [{ ...base.players[0]!, isCpu: false }, { ...base.players[1]!, isCpu: true }],
     };
     let s = createGame(settings, 2);

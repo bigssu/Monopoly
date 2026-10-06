@@ -20,7 +20,13 @@ export {
   validateSettings,
   deepClone,
   IllegalActionError,
+  deckFor,
+  NEWS_IDS,
+  swapOptions,
+  swapGive,
+  raidTarget,
+  isComebackDraw,
 } from './reducer';
-export { chooseAction, tollExposure } from './ai';
+export { chooseAction, tollExposure, cardValue } from './ai';
 export { serialize, deserialize, peekSave, SaveError, SAVE_VERSION, SAVE_FORMAT, type SaveFile } from './save';
 export { simulateGame, assertInvariants, type SimResult, type SimOptions, type SimBankruptcy } from './sim';

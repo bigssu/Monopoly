@@ -20,6 +20,7 @@ import type {
   GameResult,
   GameState,
   Level,
+  NewsId,
   PlayerId,
   PropertyState,
   RankingEntry,
@@ -48,11 +49,17 @@ export function buildCost(price: number, toLevel: number): number {
   return round10(price * rate);
 }
 
-/** Cost of the next level on this city, or null if maxed. */
+/** Cost of the next level on this city, or null if maxed (half price in a "build boom" news round). */
 export function nextBuildCost(state: GameState, index: number): number | null {
   const prop = propertyAt(state, index);
   if (!isCity(index, state.settings.spacesPerSide ?? 7) || prop.level >= ECONOMY.maxLevel) return null;
-  return buildCost(priceOf(index, state.settings.spacesPerSide ?? 7), prop.level + 1);
+  const cost = buildCost(priceOf(index, state.settings.spacesPerSide ?? 7), prop.level + 1);
+  return newsActive(state, 'buildBoom') ? round10(cost * ECONOMY.newsBuildRate) : cost;
+}
+
+/** The news flash headline in force this round (rules version 2), if it is `id`. */
+export function newsActive(state: GameState, id: NewsId): boolean {
+  return state.news?.id === id && state.news.round === state.round && ruleFlags(state.settings).newsFlash;
 }
 
 /** Property value = price + Σ build costs of the current levels. */
@@ -95,8 +102,9 @@ export function ownsSide(state: GameState, pid: PlayerId, side: SideId): boolean
 export function tollOf(state: GameState, index: number): number {
   const prop = propertyAt(state, index);
   if (prop.owner === null) return 0;
+  const news = newsActive(state, 'tollFever') ? ECONOMY.newsTollMultiplier : 1;
   if (isHub(index, state.settings.spacesPerSide ?? 7)) {
-    return Math.round(ECONOMY.hubTollPerHub * hubCount(state, prop.owner) * hubStep(state, index) * lateTollMultiplier(state));
+    return Math.round(ECONOMY.hubTollPerHub * hubCount(state, prop.owner) * hubStep(state, index) * lateTollMultiplier(state)) * news;
   }
   const price = priceOf(index, state.settings.spacesPerSide ?? 7);
   const rate = ECONOMY.tollRates[prop.level] ?? 0;
@@ -106,14 +114,14 @@ export function tollOf(state: GameState, index: number): number {
     toll *= ECONOMY.groupLandMultiplier;
   }
   if (state.festival === index) toll *= festivalMultiplier(state);
-  return round10(toll * lateTollMultiplier(state));
+  return round10(toll * lateTollMultiplier(state)) * news;
 }
 
-/** Festival multiplier: ×2, or the olympics level's multiplier when that rule is on. */
+/** Festival multiplier: ×2, or the grand festival level's multiplier when that rule is on. */
 export function festivalMultiplier(state: GameState): number {
-  if (!ruleFlags(state.settings).olympics) return ECONOMY.festivalMultiplier;
-  const level = Math.min(ECONOMY.olympicsMultipliers.length, Math.max(1, state.festivalLevel ?? 1));
-  return ECONOMY.olympicsMultipliers[level - 1]!;
+  if (!ruleFlags(state.settings).grandFestival) return ECONOMY.festivalMultiplier;
+  const level = Math.min(ECONOMY.grandFestivalMultipliers.length, Math.max(1, state.festivalLevel ?? 1));
+  return ECONOMY.grandFestivalMultipliers[level - 1]!;
 }
 
 /** Late toll (rules ≥ normal, round limit only): ×1.25 … ×2.25 over the last five rounds. */
@@ -154,8 +162,22 @@ export function canBeTakenOver(state: GameState, index: number): boolean {
   return prop.level < ECONOMY.maxLevel;
 }
 
-export function takeoverPrice(state: GameState, index: number): number {
-  return ECONOMY.takeoverMultiplier * propertyValue(state, index);
+/**
+ * Takeover price: 2 × value; 1.5 × in a "takeover sale" news round; 1 × for a win-back (rules =
+ * advanced) — `buyer` lost this city to its owner in a takeover.
+ */
+export function takeoverPrice(state: GameState, index: number, buyer?: PlayerId): number {
+  const value = propertyValue(state, index);
+  if (buyer !== undefined && isWinBack(state, index, buyer)) return round10(ECONOMY.winBackMultiplier * value);
+  if (newsActive(state, 'takeoverSale')) return round10(ECONOMY.newsTakeoverMultiplier * value);
+  return ECONOMY.takeoverMultiplier * value;
+}
+
+/** Win-back: `buyer` lost the city at `index` in a takeover and its taker still owns it. */
+export function isWinBack(state: GameState, index: number, buyer: PlayerId): boolean {
+  if (!ruleFlags(state.settings).winBack) return false;
+  const t = state.takenFrom?.[index];
+  return !!t && t.from === buyer && t.by === state.properties[index]?.owner;
 }
 
 /** Cash from selling the top building level (levels 1–3 only; landmarks sell whole). */
