@@ -876,7 +876,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 > 범위: `src/ui/fx/vfx/**`(엔진·프리셋·테스트), `src/styles/vfx.css`. 이 단계의 단독 데모(`vfx-demo.html`, `vfx/demo.ts`)와
 > 데모용 스크립트(`vfx-strips.mjs`, `vfx-perf.mjs`)는 2026-10-06에 지웠다(아래 13.4–13.5는 그때의 기록). 지금은 실제 게임
 > 화면의 필름스트립(`e2e/vfx.spec.ts`)과 `npm run perf`의 fx 단계가 같은 것을 본다. **기존 파일은 수정하지 않았다** — 게임 화면 연동은
-> `docs/VFX-WIRING.md`의 체크리스트(각 기존 파일의 정확한 변경 + 코드 조각, 모든 `GameEvent` → 프리셋 매핑 표, perf `fx` 페이즈 F1–F10).
+> 연동 체크리스트 문서(구 `docs/VFX-WIRING.md`, 적용 후 삭제: 매핑 표는 14.2a)로 진행했다.
 
 ### 13.1 구조
 
@@ -987,7 +987,7 @@ groupFinale · plot650 · free3 · passStartLanded · victoryHubs`
 
 ### 13.6 남은 일 (연동 단계) — §14에서 완료
 
-`docs/VFX-WIRING.md`: CSS import, `time.ts reducedMotion()` 노출, `Board.spaceRect/popIcon/zoomPunch/dimIcon/highlight`,
+연동 체크리스트(구 `docs/VFX-WIRING.md`): CSS import, `time.ts reducedMotion()` 노출, `Board.spaceRect/popIcon/zoomPunch/dimIcon/highlight`,
 `PlayerPanel.clientRect`, `view.ts` 엔진 생성·수명, `shakeAll([table, fxLayer])`, `Stage` `.fx-closeup`·좌표 헬퍼, `animate.ts`의
 전 이벤트 매핑과 **`swap`/`frame` cue까지 `render()` 지연**, `Built.free` 분기, 파생 `GroupCompleted`, 스킵 핸들러 `vfx.skip()`,
 dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·제거, e2e. 실기기 A/B(§10.4)는 그 이후.
@@ -996,7 +996,7 @@ dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·
 
 ## 14. 인게임 연결 결과 (연동 단계, 2026-09-30)
 
-`docs/VFX-WIRING.md`의 체크리스트를 모두 적용해 엔진을 실제 게임 화면에 붙였다. 아래는 **연결된 것, 이벤트별 재생 내용,
+연동 체크리스트(구 `docs/VFX-WIRING.md`, 적용 후 삭제)를 모두 적용해 엔진을 실제 게임 화면에 붙였다. 아래는 **연결된 것, 이벤트별 재생 내용,
 보고 나서 고친 것, 측정, 남은 한계**다.
 
 ### 14.1 연결된 것
@@ -1050,6 +1050,72 @@ dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·
 `EVENT_FX`는 `{ [K in GameEventType]: … }` 타입이라 새 엔진 이벤트는 컴파일 에러, 테스트는 추가로 `src/engine/types.ts`의
 `GameEvent` 유니온을 런타임에 읽어 매핑 키와 비교한다(누락 시 실패). 이벤트마다 샘플 → 기대 프리셋 목록 → 각 호출이 유효한
 타임라인을 만드는지, `applyAt` cue가 타임라인에 있는지 확인(45개 테스트).
+
+### 14.2a 연동 당시의 이벤트별 호출 표 (구 `VFX-WIRING.md` §8)
+
+연동 체크리스트 문서(`docs/VFX-WIRING.md`)는 모두 적용된 뒤 지웠다. 그 문서의 매핑 표만 여기 남긴다. 지금의 정본은
+`src/ui/fx/fxmap.ts`(14.2)이고, 아래 "기존 코드에서 제거" 열의 `particles.*`는 이미 없어진 구 파티클 모듈이다.
+
+원칙:
+1. **상태 변경을 cue 프레임으로 미룬다**(VFX.md §7.2b.12-2): `Built`/`PropertyBought`/`TakenOver`는 현재 `vs` 변경 + `render()`를
+   먼저 한다 → 새 흐름에서는 `h.cue('swap' | 'frame')`를 기다린 **다음** 변경·`render()`. `fast`(instant)·reduced-motion에서는 cue가
+   즉시 resolve되므로 코드 경로가 하나로 유지된다.
+2. `play()`는 **DOM 변경 다음 프레임에** 시작(PERFORMANCE.md §7): 엔진의 첫 틱이 다음 격자 프레임이므로 추가 조치 불필요.
+3. 프리셋의 SFX/햅틱과 기존 호출이 겹치지 않게 "제거" 열을 지운다. Stage 스탬프/토스트(문구, ↻)는 유지 — 캔버스엔 글자가 없다.
+4. `satisfies Record<GameEventType, …>` 형태의 매핑 표를 두어 새 엔진 이벤트가 생기면 컴파일 에러가 나게 한다(VFX.md §8.4).
+
+| 이벤트 | 조건 | 호출 (블록 = `await h`) | cue/상태 | 기존 코드에서 제거 |
+|---|---|---|---|---|
+| `RoundStarted` | 마지막 3라운드 진입 | `void fx.play('ringPulse', { at: { stage: true }, color: '#F5A25D', sparkles: 0 })` | — | (토스트·`warning` 유지, 프리셋 sfx 없음) |
+| `TurnStarted` | 항상 | `void fx.play('ringPulse', { at: { space: pos }, player: id, sparkles: 3 })` (턴 후광, I0) | — | — |
+| `TurnEnded` | — | 없음 | — | — |
+| `DiceRolled` | 착지 | `void fx.play('diceLand', { points: stage.dice.clientCenters() })` — `dice.roll()` resolve 직후 | — | — |
+| 〃 | 더블 | `void fx.play('doublesFlash', {})` | — | 없음(프리셋은 햅틱만; `doubles` 소리는 `Dice.ts`가 재생), 스탬프 유지 |
+| 〃 | 3연속 더블 | `await fx.play('doublesFlash', { triple: true })` | — | `haptic('warning')` |
+| `TokenMoved` | walk, 홉마다 | `Board.hop`의 착지 콜백에서 `void fx.play('hopDust', { space: i, long: path.length >= 6, dir })` | — | — |
+| 〃 | jump | `await fx.play('cometJump', { from: ev.from, to: ev.to, player })` 후 `board.jump` | — | — |
+| `PassedStart` | | `void fx.play('passStart', { player, landed: ev.landed })` | — | `sfx('pass-start')`, `haptic`, `particles.coinShower` |
+| `MoneyChanged` | card + | `void fx.play('billRain', { player, n: tier })` | — | `sfx('cash-in')` |
+| 〃 | card − / tax / donation / bail | `void fx.play('coinIn', { from: { panel: player }, to: ev.spaceIndex !== undefined ? { space: ev.spaceIndex } : { stage: true }, n: 5 })` | — | `sfx('cash-out')` |
+| 〃 | salary/pot/toll/purchase/build/takeover/bankruptcy | 없음(전용 이벤트가 연출) — 숫자 카운트업만 | toll: `tollPay`의 `arrive` cue 이후 float | toll float 캡션은 유지 또는 `label:null` |
+| `PotChanged` | 증가 | `void fx.play('ringPulse', { at: { space: FESTIVAL_INDEX }, sparkles: 2, scale: 0.6 })` (팟 표시 위치 칸) | — | — |
+| `PropertyBought` | | `const h = fx.play('plotClaim', { space, player, price: ev.price, hub: isHub(space), via: ev.via }); await h.cue('frame');` → `vs.owner = …; render();` → `await h` | `frame` f10 | `sfx('buy')`, `haptic('success')`, `pulseSpace(stamp)`; 토스트 유지. 이후 그룹 완성 시 `groupChain` |
+| 〃 → 그룹 완성 | `completedGroup(vs, pid, i)` | `await fx.play('groupChain', { spaces, player, color }).cue('badge')` → 배지 DOM 팝, `await` | `badge`, `stamp` | Stage 스탬프 "독점"은 `stamp` cue에 |
+| `CannotAfford` | | `void fx.play('puff', { at: { panel: player }, smoke: 1 })` | — | 토스트 유지 |
+| `Built` | level 1–3, !free | `const h = fx.play('buildSeq', { space, player, level }); await h.cue('swap'); vs.level = level; render(); await h;` | `swap` f6/f9/f13 | `sfx('build')`, `haptic`, `pulseSpace(pop)` (팝은 `dom.pop`) |
+| 〃 | level 4 | `landmarkReveal` (또는 `buildSeq` level 4 — 같은 타임라인). 그룹도 완성되면 `{ group }` 전달(복합) | `swap` f17, `stamp` f22(Stage 스탬프 "명소 완성"), `settle` f36(정적 `.landmark` 글로우) | `sfx('landmark')`, `stage.stamp` 즉시 호출 → `stamp` cue로 이동 |
+| 〃 | `free` | `fx.play('buildSeq', { space, player, level, free: true, from: stage.cardClientCenter() })` (§7.2b.6; L4 → comet 변형) | `swap` f8 (L4 f17) | 동일 |
+| `Demolished` | typhoon | `await Promise.all([fx.play('puff', { at: { space }, smoke: 3, bricks: 8, scale: 1.2 }), stage.toast(…)])` | — | `sfx('warning')` 유지(프리셋 sfx 없음), `pulseSpace(shake)` 유지 |
+| 〃 | sale | `void fx.play('puff', { at: { space }, bricks: 3 })` | — | — |
+| `TollPaid` | !waived | `const h = fx.play('tollPay', { payer, receiver: ownerId, amount, festival, multiplier, space, payerCashAfter, label: null }); await Promise.all([stage.showToll(…), h]);` 수령자 float는 `h.cue('arrive')` 이후 | `arrive` | `sfx('toll')`, `haptic('medium')`, `particles.coinArc` |
+| 〃 | waived | `fx.play('tollPay', { …, waived: true })` | — | 동일 |
+| `TakenOver` | | `const h = fx.play('takeoverStamp', { space, buyer, seller }); void h.cue('stamp').then(() => stage.stamp(…)); await h.cue('frame'); vs.owner = buyer; render(); await h;` + 그룹 완성 검사 | `stamp` f16, `frame` f18 | `sfx('takeover')`, `haptic('heavy')`, `shake(view.table)`, `pulseSpace(stamp)` |
+| `TakeoverBlocked` | | `void fx.play('ringPulse', { at: { space }, color: '#6EC6F0', double: true, sparkles: 8 })` | — | 토스트·sfx 유지 |
+| `CardDrawn` | | `void fx.play('cardReveal', { tone: cardTone(ev.cardId), at: stage.cardClientCenter() })` 후 `await stage.showCard` (톤: 좋음 good·나쁨 bad·이동 move·보관 keep) | — | 없음(프리셋은 소리 없음; `card`는 `Stage.showCard`가 재생) |
+| `CardKept` | | `void fx.play('ringPulse', { at: { panel: player }, color: '#B08AF5', sparkles: 6 })` | — | — |
+| `CardUsed` | | `void fx.play('puff', { at: { panel: player }, color: '#FFFFFF' })` | — | — |
+| `CardNoEffect` | | `void fx.play('puff', { at: { stage: true } })` | — | — |
+| `ExpressGranted` | | `void fx.play('ringPulse', { at: { panel: player }, sparkles: 4 })` | — | — |
+| `SentToIsland` | | `await fx.play('islandSiren', { space: ISLAND_INDEX, player, cause: ev.cause })` | — | `sfx('island')`, `haptic` (토스트 유지) |
+| `IslandStay` | | `void fx.play('ringPulse', { at: { space: ISLAND_INDEX }, color: '#6EC6F0', double: true, sparkles: 0 })` | — | — |
+| `Escaped` | | `void fx.play('ringPulse', { at: { space: ISLAND_INDEX }, player, sparkles: 8 })` (bail: 먼저 `coinIn` panel→섬) | — | `sfx('escape')` 유지(프리셋 sfx 없음) |
+| `FestivalSet` | 칸 | `await fx.play('festivalBurst', { space, player, previous: ev.previous })` | — | `sfx('festival')`, `haptic`, `pulseSpace(pop)` |
+| 〃 | null | `void fx.play('puff', { at: { space: ev.previous } })` (previous 있을 때) | — | — |
+| `TravelGranted` | | `void fx.play('ringPulse', { at: { space: TRAVEL_INDEX }, color: '#6EC6F0', sparkles: 8 })` | — | — |
+| `TravelDeclined` | | 없음 | — | — |
+| `DebtStarted` | | `void fx.play('ringPulse', { at: { panel: player }, color: '#F5A25D', double: true, sparkles: 0 })` | — | 토스트·sfx 유지 |
+| `DebtSettled` | | `void fx.play('ringPulse', { at: { panel: player }, color: '#3DBB6E', sparkles: 6 })` | — | — |
+| `BuildingSold` / `PropertySold` | | `void fx.play('coinIn', { from: { space }, to: { panel: player }, n: 4 })` + `puff` | — | — |
+| `PropertyTransferred` | 처음 6칸만 | `void fx.play('ringPulse', { at: { space }, player: to ?? undefined, sparkles: 2 })` (60–90 ms 간격은 기존 `sleep(90)`) | — | — |
+| `Bankrupt` | | `await Promise.all([fx.play('bankruptcy', { player }), panel.breakApart(), stage.stamp(…)])` | — | `sfx('bankrupt')`, `haptic('heavy')`, `shake(view.table)` |
+| `AuctionStarted` | | `void fx.play('ringPulse', { at: { space }, sparkles: 4 })` | — | — |
+| `AuctionBid` | | `void fx.play('tap', { ...panel(pid).clientCenter(), player: pid })` | — | — |
+| `AuctionDropped` / `AuctionEnded` | | 없음(낙찰은 `PropertyBought via:'auction'`) | — | — |
+| `OneAway` | | `void fx.play('oneAway', { space: ev.missing, player })` + 기존 `edgeToast` | — | `sfx('warning')`, `haptic('warning')` |
+| `PromptOpened` | | 없음 | — | — |
+| `GameOver` | | `await fx.play('victory', { winner, kind, spaces, colors })` (triple: 그룹마다 한 칸 + `GROUP_COLORS`, line: 변의 7칸, hubs: `HUB_INDICES`) | 블록 f45 | `sfx('win')`, `haptic`, `particles.confetti(76)`; `stage.stamp` 유지, `sleep(1700)` → `h.done` 대기로 대체 가능 |
+
+`Bankrupt` 직후 `GameOver`가 오면(첫 파산 = 종료) 두 연출 사이 300–500 ms 여백: `await sleep(400)`(VFX.md §7.4).
 
 ### 14.3 보고 나서 고친 것 (스크린샷·필름스트립 검토)
 

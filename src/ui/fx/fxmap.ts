@@ -1,5 +1,5 @@
 /**
- * GameEvent → VFX preset mapping (docs/VFX.md §7, docs/VFX-WIRING.md §8) as a PURE function:
+ * GameEvent → VFX preset mapping (docs/VFX.md §7, §14.2) as a PURE function:
  * `planFx(event, ctx)` returns the preset calls for one engine event; the sequencer
  * (`animate.ts`) plays them, applies the event's state at the step's `applyAt` cue (the icon /
  * owner change happens under the dust curtain) and awaits `wait` ('block' = the preset's block

@@ -1,4 +1,4 @@
-/** VFX engine public API (docs/VFX.md §3, wiring: docs/VFX-WIRING.md). */
+/** VFX engine public API (docs/VFX.md §3, §13–14). */
 export { createFx, backingScale, type FxHandle, type FxOptions, type FxPlay, type FxQuality, type FxStats } from './engine';
 export { gameClock, ManualClock, type FxClock } from './clock';
 export { createCoords, SEAT_ANGLE, SEAT_DIR, seatLocal, type CoordSource, type Coords, type RectLike } from './coords';

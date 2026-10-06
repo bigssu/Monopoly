@@ -927,7 +927,7 @@ export class Board {
   }
 
   // -------------------------------------------------------------------------
-  // FX hooks (docs/VFX-WIRING.md §3): rects for the canvas engine, icon pop / dim / zoom punch.
+  // FX hooks (docs/VFX.md §14.1): rects for the canvas engine, icon pop / dim / zoom punch.
   // All on `anim()` (30 Hz grid, instant when animations are off).
   // -------------------------------------------------------------------------
 

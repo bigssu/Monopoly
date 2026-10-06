@@ -1,7 +1,7 @@
 /**
  * Coordinates for the FX canvas (VFX.md §3.4). Everything the engine draws is in *layer px*: CSS px
  * relative to the `.fx-layer` box. The game supplies client rects through injected callbacks
- * (Board / PlayerPanel helpers, see docs/VFX-WIRING.md); this module converts them, derives the board
+ * (Board / PlayerPanel helpers, see docs/VFX.md §14.1); this module converts them, derives the board
  * unit `u` (= board px / 32, the layout's --u) and handles seat rotation for the multi-seat table.
  */
 import type { PlayerId, Seat } from '@/engine';

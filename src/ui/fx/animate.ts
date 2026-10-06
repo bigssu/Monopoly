@@ -8,7 +8,7 @@
  * (docs/VFX.md §7). At the end the view is synced to `next`, so any drift is corrected and a
  * resumed game renders identically.
  *
- * VFX rules (docs/VFX-WIRING.md §8):
+ * VFX rules (docs/VFX.md §14.2):
  * - The sequencer awaits a preset's *block* frame only; its tail plays on in the background.
  * - Purchases, builds and takeovers apply their state at the preset's cue ('frame' / 'swap'):
  *   the owner colour / level icon changes under the dust curtain, not before the effect.

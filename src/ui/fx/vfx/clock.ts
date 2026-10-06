@@ -4,7 +4,7 @@
  * "instant" (speed 0 → no effects at all) and reduced motion (static highlight + sound only).
  *
  * `gameClock` binds it to `ui/fx/time.ts` (`reducedMotion()` = prefers-reduced-motion or the
- * in-app setting, docs/VFX-WIRING.md §2). `ManualClock` drives the engine
+ * in-app setting, docs/VFX.md §14.1). `ManualClock` drives the engine
  * deterministically (tests, demo filmstrips).
  */
 import { animSpeed, isManualClock, isSkipping, onFrame, reducedMotion } from '../time';

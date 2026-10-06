@@ -57,7 +57,7 @@ const SAMPLES: { [K in GameEventType]: Extract<GameEvent, { type: K }> } = {
   GameOver: { type: 'GameOver', result: { winnerId: 0, victory: 'hubs', round: 9, ranking: [] } },
 };
 
-/** What each event plays (docs/VFX-WIRING.md §8 table). */
+/** What each event plays (docs/VFX.md §14.2 table). */
 const EXPECTED: Record<GameEventType, PresetName[]> = {
   RoundStarted: ['ringPulse'],
   TurnStarted: ['ringPulse'],

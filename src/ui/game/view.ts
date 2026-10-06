@@ -61,7 +61,7 @@ export class GameView {
   readonly panels = new Map<PlayerId, PlayerPanel>();
   /** `.fx-layer` (z 40, pointer-events none): the VFX canvas. */
   readonly fx: HTMLElement;
-  /** Canvas sprite/particle engine (docs/VFX.md, wiring: docs/VFX-WIRING.md). */
+  /** Canvas sprite/particle engine (docs/VFX.md §13–14). */
   readonly vfx: FxHandle;
   private ladder = new PitchLadder();
   readonly menuSlot: HTMLElement;
