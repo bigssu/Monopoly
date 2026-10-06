@@ -21,7 +21,7 @@ export const SEAT_ORDER: readonly Seat[] = ['S', 'E', 'N', 'W'];
 
 export type Controller = 'human' | 'easy' | 'normal';
 
-export interface SeatDraft {
+interface SeatDraft {
   on: boolean;
   /** `null` = automatic "플레이어 n" (numbered among the active seats). */
   name: string | null;
@@ -57,8 +57,8 @@ const SEAT_DEFAULTS: Record<Seat, { tokenId: string; colorId: string }> = {
  * own `defaultSettings()` keeps 15 / 15 — seeded tests, the balance simulation and the dev hook's
  * demo games are measured against it.
  */
-export const SETUP_DEFAULT_ROUNDS = 30;
-export const SETUP_DEFAULT_TIMER = 30;
+const SETUP_DEFAULT_ROUNDS = 30;
+const SETUP_DEFAULT_TIMER = 30;
 
 export function defaultDraft(): SetupDraft {
   const base = defaultSettings({ roundLimit: SETUP_DEFAULT_ROUNDS, promptTimer: SETUP_DEFAULT_TIMER });
@@ -128,7 +128,7 @@ export function normalizeDraft(raw: unknown): SetupDraft {
 }
 
 /** Give later active seats a free color/token when they collide with an earlier one. */
-export function dedupe(d: SetupDraft): void {
+function dedupe(d: SetupDraft): void {
   const usedC = new Set<string>();
   const usedT = new Set<string>();
   for (const s of activeSeats(d)) {

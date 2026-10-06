@@ -28,7 +28,7 @@ export interface Rect {
   h: number;
 }
 
-export interface SeatBox extends Rect {
+interface SeatBox extends Rect {
   seat: Seat;
   /** Rotation of the panel content. */
   rot: number;
@@ -48,7 +48,7 @@ export interface GameLayout {
   seats: Partial<Record<Seat, SeatBox>>;
 }
 
-export const MENU_SIZE = 48;
+const MENU_SIZE = 48;
 
 export function computeLayout(W: number, H: number, seats: ReadonlySet<Seat>, upright = false): GameLayout {
   const portrait = H > W;

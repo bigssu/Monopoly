@@ -45,7 +45,7 @@ export function append(el: Element, children: (Child | Child[])[]): void {
   }
 }
 
-export interface TapOptions {
+interface TapOptions {
   sound?: SfxName | null;
   haptic?: HapticKind | null;
 }

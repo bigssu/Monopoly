@@ -6,7 +6,7 @@ import type { GameState, PlayerStats } from '@/engine';
 import { fmtMoney, t } from '@/i18n';
 
 /** Awards, most interesting first; each goes to the top player when the value is above zero. */
-export const AWARDS: readonly { id: string; key: keyof PlayerStats; icon: string; money?: boolean }[] = [
+const AWARDS: readonly { id: string; key: keyof PlayerStats; icon: string; money?: boolean }[] = [
   { id: 'toll', key: 'tollEarned', icon: 'coin', money: true },
   { id: 'big', key: 'biggestToll', icon: 'pot', money: true },
   { id: 'takeover', key: 'takeovers', icon: 'crown' },

@@ -83,7 +83,7 @@ export const GROUP_NAMES: Readonly<Record<GroupId, LocalizedName>> = {
 };
 
 /** Building level labels. Engine level ids: 0 land … 4 `landmark` (Korean label 명소). */
-export type BuildingLevelId = 'land' | 'villa' | 'building' | 'hotel' | 'landmark';
+type BuildingLevelId = 'land' | 'villa' | 'building' | 'hotel' | 'landmark';
 
 export const BUILDING_LEVEL_IDS: readonly BuildingLevelId[] = [
   'land',

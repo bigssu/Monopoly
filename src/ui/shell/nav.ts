@@ -5,18 +5,16 @@
 import { currentScreen, showScreen, type ScreenName, type ScreenProps } from '@/ui/router';
 import { hasSavedGame, loadSavedGame } from './persist';
 import { closeTopDialog } from './dialog';
+import { isNative } from './capacitor';
+import { reducedMotion } from '@/ui/fx/time';
 
 const FADE_MS = 260;
-
-function reducedMotion(): boolean {
-  if (document.documentElement.classList.contains('native-webview')) return true;
-  return document.documentElement.dataset.motion === 'reduced'; // the app setting (fx/time.ts policy)
-}
 
 /** `showScreen` with a snapshot of the old screen cross-fading out above the new one. */
 export function go<N extends ScreenName>(name: N, props: ScreenProps[N]): void {
   const app = document.getElementById('app');
-  if (app && app.firstElementChild && !reducedMotion()) {
+  // No cross-fade in the Android app or with reduced motion (the app setting, fx/time.ts policy).
+  if (app && app.firstElementChild && !isNative() && !reducedMotion()) {
     document.querySelectorAll('.screen-ghost').forEach((g) => g.remove());
     const ghost = document.createElement('div');
     ghost.className = 'screen-ghost';

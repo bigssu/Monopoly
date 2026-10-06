@@ -8,7 +8,7 @@
  */
 export type TrackId = 'title' | 'game' | 'final' | 'win';
 
-export interface MusicHost {
+interface MusicHost {
   musicOut(): { ctx: AudioContext; node: AudioNode } | null;
 }
 
@@ -88,7 +88,7 @@ export async function playMusic(id: TrackId, opts: { loop?: boolean; after?: Tra
   };
 }
 
-export function stopMusic(): void {
+function stopMusic(): void {
   const out = host?.musicOut();
   if (out && current) fadeOut(out.ctx, current);
   current = null;

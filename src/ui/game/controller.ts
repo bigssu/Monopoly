@@ -44,7 +44,7 @@ const PROMPT_STATS: PromptStat[] | null =
     ? (((window as unknown as { __lrPromptStats?: PromptStat[] }).__lrPromptStats ??= []))
     : null;
 
-export interface ControllerOpts {
+interface ControllerOpts {
   view: GameView;
   state: GameState;
   onGameOver: (state: GameState) => void;

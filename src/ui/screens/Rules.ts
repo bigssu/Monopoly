@@ -274,7 +274,7 @@ const PAGES: Page[] = [
  * Mount the rules viewer into `host`. `onClose` is called by the back / done buttons.
  * Returns a cleanup function.
  */
-export function mountRules(host: HTMLElement, onClose: () => void, startPage = 0): () => void {
+function mountRules(host: HTMLElement, onClose: () => void, startPage = 0): () => void {
   let page = Math.min(Math.max(0, startPage), PAGES.length - 1);
   const wrap = h('div', { class: 'rules' });
   host.append(wrap);

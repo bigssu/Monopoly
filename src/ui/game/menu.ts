@@ -12,7 +12,7 @@ import { FocusTrap } from '@/ui/shell/focus';
 import { h, iconEl } from './util';
 import { EASE } from '@/ui/fx/motion';
 
-export interface MenuHandlers {
+interface MenuHandlers {
   onOpen: () => void;
   onClose: () => void;
   onRules: () => void;

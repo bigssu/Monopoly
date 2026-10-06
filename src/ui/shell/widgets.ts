@@ -6,7 +6,7 @@ import { playerColor } from '@/content/palette';
 import { h, onTap } from './dom';
 import { iconEl } from '@/ui/game/util';
 
-export interface SegOption<T> {
+interface SegOption<T> {
   value: T;
   label: string;
   aria?: string;

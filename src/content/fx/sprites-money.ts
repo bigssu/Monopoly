@@ -17,7 +17,7 @@ import { MASK_SPRITES } from './sprites-mask';
 export type Metal = 'gold' | 'silver' | 'bronze';
 
 /** Coin palettes: face (top layer), rim (darker copy / edge), deep (shadowed edge), light (highlight). */
-export const METAL: Record<Metal, { face: string; rim: string; deep: string; light: string }> = {
+const METAL: Record<Metal, { face: string; rim: string; deep: string; light: string }> = {
   gold: { face: C.gold, rim: C.goldD, deep: C.goldDD, light: C.goldL },
   silver: { face: '#DCE3EE', rim: '#A3AFC4', deep: '#738099', light: '#F6F8FC' },
   bronze: { face: '#E69C61', rim: '#BD7442', deep: '#8D5029', light: '#F8C899' },
@@ -33,7 +33,7 @@ function emblem(m: Metal, ink: string, r = 8.6): string {
 // ---------------------------------------------------------------- spinning coin (any metal)
 
 /** One frame of a coin spinning about its vertical axis (same geometry as the gold `coin_spin`). */
-export function coinSpinMetal(m: Metal): (i: number, n: number) => string {
+function coinSpinMetal(m: Metal): (i: number, n: number) => string {
   const P = METAL[m];
   return (i, n) => {
     const th = (2 * Math.PI * i) / n;
@@ -76,7 +76,7 @@ export const COIN_TOP = { w: 40, h: 14 } as const;
  * One coin seen edge-on in a stack: a cylinder-shaded band with a reeded edge, a bright rim line
  * at the top and a dark gap curve at the bottom. Tiles seamlessly in y (repeat-y builds a column).
  */
-export function coinSlice(m: Metal): string {
+function coinSlice(m: Metal): string {
   const P = METAL[m];
   const { w, h } = SLICE;
   const defs =
@@ -96,7 +96,7 @@ export function coinSlice(m: Metal): string {
 }
 
 /** The top coin's face: an ellipse with the metal's emblem, foreshortened. */
-export function coinTop(m: Metal): string {
+function coinTop(m: Metal): string {
   const P = METAL[m];
   const { w, h } = COIN_TOP;
   const body =
@@ -303,7 +303,7 @@ function coinBurst(i: number, n: number): string {
 const METALS: Metal[] = ['gold', 'silver', 'bronze'];
 
 /** Spinning-coin frames for the DOM coin pool (8-frame strip, baked 1.2× for 40–90 px coins). */
-export const COIN_SPIN = { n: 8, k: 1.2 } as const;
+const COIN_SPIN = { n: 8, k: 1.2 } as const;
 
 /** Sprites borrowed from the shared FX set, re-baked into the money atlas (white ones are tinted by
  *  `mask-image` in the DOM), so the money stage never loads the canvas-VFX atlases. */

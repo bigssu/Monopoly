@@ -23,7 +23,7 @@
  */
 import type { Player, Seat } from '@/engine';
 
-export type ViewMode = 'fixed' | 'table';
+type ViewMode = 'fixed' | 'table';
 
 /** Seats in turn order around the table (S bottom, E right, N top, W left). */
 export const SEAT_CYCLE: readonly Seat[] = ['S', 'E', 'N', 'W'];

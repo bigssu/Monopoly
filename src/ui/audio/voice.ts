@@ -3,7 +3,7 @@
  * and decodes `voice/<id>.ogg` (Opus), keeps a small cache, plays one line at a time through the
  * shared audio graph (synth.ts `voiceOut`) and ducks the sound effects while it speaks.
  */
-export interface VoiceHost {
+interface VoiceHost {
   /** Shared context + output node, or null when sound is off / not unlocked yet. */
   voiceOut(): { ctx: AudioContext; node: AudioNode } | null;
   duck(on: boolean): void;

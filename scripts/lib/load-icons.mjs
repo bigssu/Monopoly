@@ -15,7 +15,6 @@ export const FILES = [
 export function loadAll() {
   const sets = {};
   for (const [file, name] of FILES) {
-    if (!fs.existsSync(path.join(dir, `${file}.ts`))) continue;
     const text = fs.readFileSync(path.join(dir, `${file}.ts`), 'utf8');
     const entries = {};
     if (file === 'logo') {

@@ -29,14 +29,14 @@ export interface FxFrame {
   sh: number;
 }
 
-export interface FxAtlasFile {
+interface FxAtlasFile {
   file: string;
   w: number;
   h: number;
   bytes: number;
 }
 
-export interface FxAnimJson extends FxAnimMeta {
+interface FxAnimJson extends FxAnimMeta {
   frames: string[];
   /** Raster px per nominal px (dpr * k). Anchor of frame f: dx = (f.ox - f.sw / 2) / scale, dy likewise. */
   scale: number;

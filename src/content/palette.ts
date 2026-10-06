@@ -60,7 +60,7 @@ export const OWNER_INK_CONTRAST = 4.5;
  * The player's `dark` shade pushed toward black just far enough to read on the full player color
  * (≥ 5:1, a margin over OWNER_INK_CONTRAST), so the ink still carries the color's hue.
  */
-export function deepShade(c: PlayerColor): string {
+function deepShade(c: PlayerColor): string {
   const ch = channels(c.dark);
   let out = '#000000';
   for (let k = 0.5; k >= 0; k -= 0.05) {

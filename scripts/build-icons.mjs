@@ -15,7 +15,6 @@ const jobs = [
 ];
 fs.mkdirSync(out, { recursive: true });
 for (const [file, name, doc] of jobs) {
-  if (!fs.existsSync(path.join(here, 'icons-src', `${file}.mjs`))) continue;
   const src = pathToFileURL(path.join(here, 'icons-src', `${file}.mjs`)).href;
   const map = (await import(src)).default;
   if (typeof map === 'string') {

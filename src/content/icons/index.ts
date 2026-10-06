@@ -34,7 +34,7 @@ export function iconMarkup(id: string): string {
 // ---------------------------------------------------------------------------------------------
 
 /** Element id of the icon symbol for `id` in the page's sprite. */
-export const iconSymbolId = (id: string): string => `i-${id}`;
+const iconSymbolId = (id: string): string => `i-${id}`;
 
 const ROOT_RE = /^<svg\b([^>]*)>([\s\S]*)<\/svg>\s*$/;
 const VIEWBOX_RE = /\sviewBox="([^"]*)"/;
@@ -62,7 +62,7 @@ function parts(id: string): Parts {
 }
 
 /** Markup of the hidden sprite: one `<symbol id="i-<id>">` per icon. */
-export function iconSpriteMarkup(): string {
+function iconSpriteMarkup(): string {
   const symbols = ICON_IDS.map((id) => {
     const p = parts(id);
     const body = p.rootAttrs ? `<g ${p.rootAttrs}>${p.inner}</g>` : p.inner;
@@ -77,7 +77,7 @@ let spriteInstalled = false;
  * screen is then a two-element `<svg><use href="#i-…"/></svg>` instead of a copy of its 5–40
  * shapes: a prompt card with 20 icons builds ~40 DOM nodes instead of ~230.
  */
-export function installIconSprite(doc: Document | undefined = typeof document === 'undefined' ? undefined : document): void {
+function installIconSprite(doc: Document | undefined = typeof document === 'undefined' ? undefined : document): void {
   if (spriteInstalled || !doc?.body) return;
   if (!doc.getElementById('lr-icon-sprite')) doc.body.insertAdjacentHTML('afterbegin', iconSpriteMarkup());
   spriteInstalled = true;

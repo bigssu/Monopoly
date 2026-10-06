@@ -15,7 +15,7 @@ export interface ScreenProps {
   result: { state: GameState };
 }
 export type ScreenName = keyof ScreenProps;
-export type ScreenFactory<N extends ScreenName> = (root: HTMLElement, props: ScreenProps[N]) => () => void;
+type ScreenFactory<N extends ScreenName> = (root: HTMLElement, props: ScreenProps[N]) => () => void;
 
 const screens = new Map<ScreenName, ScreenFactory<ScreenName>>();
 let unmount: (() => void) | null = null;

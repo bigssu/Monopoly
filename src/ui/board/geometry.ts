@@ -13,7 +13,7 @@ export const SIDE_W = (VB - 2 * DEPTH) / 7;
 /** Inner (stage) square. */
 export const INNER = { x: DEPTH, y: DEPTH, size: VB - 2 * DEPTH };
 
-export type Edge = 'S' | 'W' | 'N' | 'E';
+type Edge = 'S' | 'W' | 'N' | 'E';
 
 export interface SpaceGeom {
   index: number;
@@ -134,7 +134,7 @@ export function getBoardGeometry(size: SpacesPerSide = 7, uprightTop = false): r
 export const GEOM: readonly SpaceGeom[] = getBoardGeometry();
 
 /** Rotate a local-frame offset (relative to the space centre) into board units. */
-export function localToBoard(g: SpaceGeom, lx: number, ly: number): { x: number; y: number } {
+function localToBoard(g: SpaceGeom, lx: number, ly: number): { x: number; y: number } {
   // Corners keep token offsets axis-aligned.
   const r = ((g.corner ? 0 : g.rot) * Math.PI) / 180;
   const c = Math.cos(r);

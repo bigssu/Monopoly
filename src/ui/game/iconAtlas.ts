@@ -191,20 +191,23 @@ export function prepareIconAtlas(entries: readonly AtlasEntry[], cellPx: number)
       requested.set(k, { id: e.id, tint: TINTED.has(e.id) ? e.tint!.toLowerCase() : undefined });
     }
   }
-  const want = wantedAtlas();
-  const missing = !atlas || atlas.cell !== want.layout.cell || atlas.cols !== want.layout.cols || atlas.rows !== want.layout.rows || [...want.entries.keys()].some((k) => !atlas!.index.has(k));
-  if (!missing || typeof document === 'undefined') return building ?? Promise.resolve();
+  if (fresh(wantedAtlas()) || typeof document === 'undefined') return building ?? Promise.resolve();
   const prev = building ?? Promise.resolve();
   const buildGeneration = generation;
   building = prev
     .then(() => {
       if (buildGeneration !== generation) return;
       const want = wantedAtlas();
-      if (atlas && atlas.cell === want.layout.cell && atlas.cols === want.layout.cols && atlas.rows === want.layout.rows && [...want.entries.keys()].every((k) => atlas!.index.has(k))) return;
+      if (fresh(want)) return;
       return build([...want.entries], want.layout, buildGeneration);
     })
     .catch((e: unknown) => console.warn('[icons] atlas failed', e));
   return building;
+}
+
+/** The current atlas already holds every wanted icon, in the wanted layout. */
+function fresh(want: ReturnType<typeof wantedAtlas>): boolean {
+  return !!atlas && atlas.cell === want.layout.cell && atlas.cols === want.layout.cols && atlas.rows === want.layout.rows && [...want.entries.keys()].every((k) => atlas!.index.has(k));
 }
 
 async function build(list: Array<[string, AtlasEntry]>, { cell, cols, rows, width, height }: ReturnType<typeof atlasLayout>, buildGeneration: number): Promise<void> {

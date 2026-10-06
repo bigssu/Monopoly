@@ -28,7 +28,7 @@ export function demoSettings(n = 4, cpu = true): Settings {
   return defaultSettings({ players: defaultPlayers(n, { cpu }) });
 }
 
-export interface LotAndRollHook {
+interface LotAndRollHook {
   startGame(settings: Settings, seed: number): void;
   getState(): GameState | null;
   dispatch(action: Action): Promise<boolean>;

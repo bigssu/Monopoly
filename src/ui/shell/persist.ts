@@ -9,7 +9,7 @@ export const SAVE_KEY = 'lotandroll:save:v1';
 /** Previous good save, used if the latest one is unreadable. */
 export const SAVE_BACKUP_KEY = 'lotandroll:save:v1:prev';
 
-export interface SavedGameSummary {
+interface SavedGameSummary {
   savedAt: string | null;
   round: number;
   roundLimit: number | null;

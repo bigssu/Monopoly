@@ -56,7 +56,7 @@ function openLicenses(): void {
 }
 
 /** Mount the settings UI into `host`; returns a cleanup function. */
-export function mountSettings(host: HTMLElement, onClose: () => void): () => void {
+function mountSettings(host: HTMLElement, onClose: () => void): () => void {
   const wrap = h('div', { class: 'settings' });
   host.append(wrap);
 

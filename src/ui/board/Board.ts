@@ -97,7 +97,7 @@ function estWidth(s: string): number {
 const KO_BREAK: Record<string, number> = { 우주정거장: 2, 고속열차역: 2, 부에노스아이레스: 4, 멕시코시티: 3, 케이프타운: 3 };
 
 /** Fit a label into `maxW` (board units): one line, or two lines when it would get tiny. */
-export function fitLabel(text: string, maxW: number, maxFont: number): { lines: string[]; size: number } {
+function fitLabel(text: string, maxW: number, maxFont: number): { lines: string[]; size: number } {
   const one = Math.min(maxFont, maxW / estWidth(text));
   if (one >= maxFont * 0.8) return { lines: [text], size: one };
   let a: string;

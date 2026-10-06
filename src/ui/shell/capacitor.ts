@@ -32,7 +32,7 @@ export function nativePreferences(): Promise<PreferencesPlugin | null> {
   return prefsP;
 }
 
-export interface NativeHandlers {
+interface NativeHandlers {
   /** Hardware back button. */
   onBack(): void;
   /** App went to the background. */
