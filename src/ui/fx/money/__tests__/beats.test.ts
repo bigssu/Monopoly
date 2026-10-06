@@ -32,6 +32,8 @@ const SCENARIOS: Array<[string, string, (st: MoneyStage) => MoneyPlay]> = [
   ['tax', 'tax', (st) => SCENES.pay(st, { seat: 'S', cash: 3000, playerColor: '#f00', amount: 300, kind: 'tax' })],
   ['bail', 'bail', (st) => SCENES.pay(st, { seat: 'S', cash: 3000, playerColor: '#f00', amount: 100, kind: 'bail' })],
   ['sale (bank → me)', 'transfer', (st) => SCENES.transfer(st, { from: 'bank', to: P('S', 100), amount: 60 })],
+  ['sell a building (crying dealer)', 'sell', (st) => SCENES.sell(st, { seat: 'S', cash: 100, playerColor: '#f00', items: [{ spaceIndex: 4, building: 2, amount: 60 }] })],
+  ['sell land + a hotel', 'sell', (st) => SCENES.sell(st, { seat: 'N', cash: 40, playerColor: '#f00', items: [{ spaceIndex: 4, building: 3, amount: 150 }, { spaceIndex: 6, building: null, amount: 120 }] })],
   ['leader tax (via centre)', 'transfer', (st) => SCENES.transfer(st, { from: P('E', 3000), to: P('S', 1000), via: 'center', amount: 200 })],
   ['bankruptcy', 'bankruptcy', (st) => SCENES.bankruptcy(st, { debtor: P('S', 120), creditor: P('N', 3000), properties: [1, 2, 4] })],
 ];

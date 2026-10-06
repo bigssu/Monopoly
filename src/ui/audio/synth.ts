@@ -63,6 +63,7 @@ export const THROTTLE: Partial<Record<SfxName, number>> = {
   'coin-clink': 0,
   'coin-thud': 0.1,
   'coin-break': 0.06,
+  sob: 0.5,
 };
 export const DEFAULT_THROTTLE = 0.04;
 
@@ -408,6 +409,20 @@ export class SynthSfx implements Sfx {
         this.bell(N.E7 * p, t, 0.16, 0.09, out);
         this.sparkle(t + 0.02, 5, 0.12, 0.05, out, 3600, 6200);
         return 0.25;
+
+      case 'sob': {
+        // The crying dealer (sell cut-in): two hiccuping breaths, then a falling "huu" with a wobble.
+        // Soft and low-passed: a sting under the coins, not a wail.
+        for (const at of [0, 0.13]) {
+          this.tone({ f: N.A4 * p, f2: N.F4 * p, t: t + at, d: 0.09, type: 'triangle', g: 0.15, a: 0.008, lp: 1500 }, out);
+          this.noise({ t: t + at, d: 0.08, g: 0.045, type: 'bandpass', f: 1300, q: 0.8 }, out);
+        }
+        const huu = { f: N.G4 * p, f2: N.C4 * p, glide: 0.55, t: t + 0.28, d: 0.62, a: 0.025, hold: 0.3 };
+        this.tone({ ...huu, type: 'triangle', g: 0.17, lp: 1400, vib: { rate: 7, depth: 12, delay: 0.08 } }, out);
+        this.tone({ ...huu, f: huu.f * 0.5, f2: huu.f2 * 0.5, type: 'sine', g: 0.08 }, out);
+        this.noise({ t: t + 0.28, d: 0.4, g: 0.03, type: 'lowpass', f: 900 }, out);
+        return 0.95;
+      }
 
       case 'tap':
         this.tone({ f: 1500 * p, f2: 950 * p, t, d: 0.05, type: 'triangle', g: 0.2, a: 0.002 }, out);

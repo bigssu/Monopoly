@@ -10,10 +10,12 @@ export type SfxName =
   // Money events (src/ui/fx/money/sound.ts): synthesized only, no sample.
   | 'coin-clink' | 'coin-thud' | 'coin-break'
   // A thrown die hitting the dice area's wall (src/ui/stage/Dice.ts): synthesized only.
-  | 'dice-clack';
+  | 'dice-clack'
+  // The crying dealer of the sell cut-in (src/ui/fx/money/scenes.ts `sell`): synthesized only.
+  | 'sob';
 
 /** Sounds that are always synthesized (no generated sample ships for them). */
-export const SYNTH_ONLY_SFX: readonly SfxName[] = ['coin-clink', 'coin-thud', 'coin-break', 'dice-clack'];
+export const SYNTH_ONLY_SFX: readonly SfxName[] = ['coin-clink', 'coin-thud', 'coin-break', 'dice-clack', 'sob'];
 
 export interface SfxOpts {
   /** Playback-rate / frequency multiplier. */

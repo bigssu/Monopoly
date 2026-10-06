@@ -32,6 +32,10 @@ export const MONEY_STRINGS = {
     'm.doubleUp.lose': '더블업 실패',
     'm.sale.building': '건물 매각',
     'm.sale.land': '{name} 매각',
+    'm.sell.1': '별장 매각',
+    'm.sell.2': '빌딩 매각',
+    'm.sell.3': '호텔 매각',
+    'm.sell.4': '명소 매각',
   },
   en: {
     'm.toll': 'Toll',
@@ -63,6 +67,10 @@ export const MONEY_STRINGS = {
     'm.doubleUp.lose': 'Double-up lost',
     'm.sale.building': 'Building sold',
     'm.sale.land': 'Sold {name}',
+    'm.sell.1': 'Villa sold',
+    'm.sell.2': 'Building sold',
+    'm.sell.3': 'Hotel sold',
+    'm.sell.4': 'Landmark sold',
   },
 } as const;
 

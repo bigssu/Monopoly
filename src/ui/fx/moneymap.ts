@@ -17,7 +17,8 @@
  * - MoneyChanged(tax / donation / bail) (+ PotChanged) → pay
  * - every consecutive MoneyChanged(card) of one card → collectFromAll / payAll / transfer via the
  *   centre / receive bonus / pay fine
- * - BuildingSold / PropertySold (+ Demolished(sale), FestivalSet) + MoneyChanged(sale) → sale
+ * - BuildingSold / PropertySold (+ Demolished(sale)) + MoneyChanged(sale) → sell (the crying dealer);
+ *   consecutive sales of one player in one batch are one sell scene (one item each)
  * - Bankrupt + MoneyChanged(bankruptcy)* + PropertyTransferred* → bankruptcy
  * A group is `keep` (the stage stays up for the next scene, one cut-in) when the next group follows
  * with nothing else in between.
@@ -40,7 +41,7 @@ export type MoneyScene =
   | { kind: 'transfer'; from: PlayerId; to: PlayerId; amount: number; reason: MoneyReason; cardId: CardId | null }
   | { kind: 'receive'; player: PlayerId; amount: number; source: 'salary' | 'bonus' | 'pot' | 'doubleUp'; cardId: CardId | null }
   | { kind: 'pay'; player: PlayerId; amount: number; sink: 'tax' | 'donation' | 'bail' | 'fine' | 'doubleUp'; cardId: CardId | null; spaceIndex: number | null }
-  | { kind: 'sale'; player: PlayerId; amount: number; spaceIndex: number; building: Level | null }
+  | { kind: 'sell'; player: PlayerId; amount: number; items: SellItem[] }
   | {
       kind: 'bankruptcy';
       debtor: PlayerId;
@@ -51,6 +52,13 @@ export type MoneyScene =
     };
 
 export type MoneySceneKind = MoneyScene['kind'];
+
+/** One asset sold to the bank: a building (the level it had before the sale) or the land itself (null). */
+export interface SellItem {
+  spaceIndex: number;
+  building: Level | null;
+  amount: number;
+}
 
 export interface MoneyGroup {
   /** First event of the group (the scene plays here; cash in the view state is still "before"). */
@@ -74,7 +82,7 @@ export const REASON_SCENES: { readonly [R in MoneyReason]: readonly MoneySceneKi
   donation: ['pay'],
   bail: ['pay'],
   card: ['collectFromAll', 'payAll', 'transfer', 'receive', 'pay'],
-  sale: ['sale'],
+  sale: ['sell'],
   auction: ['purchase'],
   bankruptcy: ['bankruptcy'],
   news: ['transfer'],
@@ -161,11 +169,26 @@ export function planMoney(events: readonly GameEvent[]): MoneyGroup[] {
       }
       case 'BuildingSold':
       case 'PropertySold': {
-        const k = find(i, (x) => isMC(x, 'sale') && x.playerId === e.playerId, 3);
-        const d = e.type === 'BuildingSold' ? find(i, (x) => x.type === 'Demolished' && x.cause === 'sale' && x.spaceIndex === e.spaceIndex, 2) : -1;
-        // The building sold is the level it had (the event carries the level after the sale).
-        const building = e.type === 'BuildingSold' ? (Math.min(4, e.level + 1) as Level) : null;
-        add({ kind: 'sale', player: e.playerId, amount: e.amount, spaceIndex: e.spaceIndex, building }, [i, k, d]);
+        // One cut-in for the sales that follow each other (the engine sells one asset per action,
+        // so normally one item; a batch with several stays one scene).
+        const idx: number[] = [];
+        const items: SellItem[] = [];
+        let j = i;
+        for (;;) {
+          const x = events[j] as Extract<GameEvent, { type: 'BuildingSold' | 'PropertySold' }>;
+          const k = find(j, (y) => isMC(y, 'sale') && y.playerId === x.playerId, 3);
+          const d = x.type === 'BuildingSold' ? find(j, (y) => y.type === 'Demolished' && y.cause === 'sale' && y.spaceIndex === x.spaceIndex, 2) : -1;
+          // The building sold is the level it had (the event carries the level after the sale).
+          items.push({ spaceIndex: x.spaceIndex, building: x.type === 'BuildingSold' ? (Math.min(4, x.level + 1) as Level) : null, amount: x.amount });
+          idx.push(j, k, d);
+          const last = Math.max(j, k, d);
+          const n = events[last + 1];
+          if (!n || used.has(last + 1) || (n.type !== 'BuildingSold' && n.type !== 'PropertySold') || n.playerId !== e.playerId) break;
+          j = last + 1;
+          // Taken now, so the next item's searches skip this item's events.
+          idx.filter((q) => q >= 0).forEach(take);
+        }
+        add({ kind: 'sell', player: e.playerId, amount: items.reduce((a, it) => a + it.amount, 0), items }, idx);
         break;
       }
       case 'Bankrupt': {
@@ -290,7 +313,7 @@ function planMoneyChanged(
       add({ kind: 'receive', player: e.playerId, amount: e.delta, source: 'pot', cardId: null }, [i]);
       return;
     case 'sale':
-      add({ kind: 'sale', player: e.playerId, amount: e.delta, spaceIndex: e.spaceIndex ?? 0, building: null }, [i]);
+      add({ kind: 'sell', player: e.playerId, amount: e.delta, items: [{ spaceIndex: e.spaceIndex ?? 0, building: null, amount: e.delta }] }, [i]);
       return;
     default: {
       // toll / purchase / takeover / auction / bankruptcy without their event (never emitted so):

@@ -158,7 +158,7 @@ describe('moneymap: grouping (§4.3)', () => {
     expect(planMoney([mc(0, -200, 800, 'card', 'bank')])[0]!.scene).toMatchObject({ kind: 'pay', sink: 'fine' });
   });
 
-  it('debt sales → sale scenes (building level sold), then the settled toll chains', () => {
+  it('debt sales → sell scenes (building level sold), then the settled toll chains', () => {
     const g = planMoney([
       { type: 'BuildingSold', playerId: 1, spaceIndex: 5, level: 1, amount: 60 },
       { type: 'Demolished', spaceIndex: 5, ownerId: 1, level: 1, cause: 'sale' },
@@ -169,11 +169,57 @@ describe('moneymap: grouping (§4.3)', () => {
       { type: 'DebtSettled', playerId: 1, amount: 250 },
     ]);
     expect(g.map((x) => x.scene)).toEqual([
-      { kind: 'sale', player: 1, amount: 60, spaceIndex: 5, building: 2 },
+      { kind: 'sell', player: 1, amount: 60, items: [{ spaceIndex: 5, building: 2, amount: 60 }] },
       { kind: 'toll', payer: 1, owner: 0, spaceIndex: 9, amount: 250, festival: false, multiplier: 1 },
     ]);
     expect(g[0]!.events).toEqual([0, 1, 2]);
     expect(g[0]!.keep).toBe(true);
+  });
+
+  it('sell: a land sale is one sell scene for the seller; sales in a row are one scene with the total', () => {
+    const land = planMoney([
+      { type: 'PropertySold', playerId: 2, spaceIndex: 9, amount: 140 },
+      mc(2, 140, 190, 'sale', 'bank', 9),
+      { type: 'PromptOpened', phase: { kind: 'debt', playerId: 2 } as never },
+    ]);
+    expect(land.map((x) => x.scene)).toEqual([{ kind: 'sell', player: 2, amount: 140, items: [{ spaceIndex: 9, building: null, amount: 140 }] }]);
+    expect(land[0]!.events).toEqual([0, 1]);
+    expect(land[0]!.keep).toBe(false);
+
+    const evs: GameEvent[] = [
+      { type: 'BuildingSold', playerId: 0, spaceIndex: 4, level: 2, amount: 75 },
+      { type: 'Demolished', spaceIndex: 4, ownerId: 0, level: 2, cause: 'sale' },
+      mc(0, 75, 95, 'sale', 'bank', 4),
+      { type: 'BuildingSold', playerId: 0, spaceIndex: 4, level: 1, amount: 50 },
+      { type: 'Demolished', spaceIndex: 4, ownerId: 0, level: 1, cause: 'sale' },
+      mc(0, 50, 145, 'sale', 'bank', 4),
+      { type: 'PropertySold', playerId: 0, spaceIndex: 6, amount: 60 },
+      mc(0, 60, 205, 'sale', 'bank', 6),
+      // Another player's sale is its own scene.
+      { type: 'PropertySold', playerId: 1, spaceIndex: 8, amount: 70 },
+      mc(1, 70, 300, 'sale', 'bank', 8),
+    ];
+    const run = planMoney(evs);
+    expect(kinds(run)).toEqual(['sell', 'sell']);
+    expect(run[0]!.scene).toEqual({
+      kind: 'sell', player: 0, amount: 185,
+      items: [{ spaceIndex: 4, building: 3, amount: 75 }, { spaceIndex: 4, building: 2, amount: 50 }, { spaceIndex: 6, building: null, amount: 60 }],
+    });
+    expect(run[0]!.events).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(run[0]!.keep).toBe(true);
+    expect(run[1]!.scene).toEqual({ kind: 'sell', player: 1, amount: 70, items: [{ spaceIndex: 8, building: null, amount: 70 }] });
+    expect(run[1]!.events).toEqual([8, 9]);
+    // The group's state = the engine's: cash after the last sale, the level sold, the land back to the bank.
+    const vs = {
+      players: [{ cash: 20 }, { cash: 230 }],
+      properties: { 4: { owner: 0, level: 3 }, 6: { owner: 0, level: 0 }, 8: { owner: 1, level: 0 } },
+      pot: 0,
+    } as unknown as GameState;
+    for (const k of run[0]!.events) applyMoneyState(vs, evs[k]!);
+    expect(vs.players[0]!.cash).toBe(205);
+    expect(vs.properties[4]).toEqual({ owner: 0, level: 1 });
+    expect(vs.properties[6]).toEqual({ owner: null, level: 0 });
+    expect(vs.properties[8]).toEqual({ owner: 1, level: 0 });
   });
 
   it('bankruptcy: Bankrupt + remaining cash + every deed is one scene', () => {

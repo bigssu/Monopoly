@@ -50,8 +50,8 @@ function start(st: MoneyStage, vs: GameState, sc: MoneyScene, keep: boolean): M.
       return M.receive(st, { ...me(sc.player), amount: sc.amount, kind: sc.source === 'pot' ? 'pot' : sc.source === 'salary' ? 'salary' : 'bonus', keep });
     case 'pay':
       return M.pay(st, { ...me(sc.player), amount: sc.amount, kind: sc.sink === 'doubleUp' ? 'fine' : sc.sink, keep });
-    case 'sale':
-      return M.transfer(st, { from: 'bank', to: party(sc.player), amount: sc.amount, keep });
+    case 'sell':
+      return M.sell(st, { ...me(sc.player), items: sc.items.map((it) => ({ ...it, building: it.building ? (Math.min(4, it.building) as 1 | 2 | 3 | 4) : null })), keep });
     case 'bankruptcy':
       return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, receivers: sc.receivers.map((r) => ({ ...party(r.id), amount: r.amount })), keep });
   }

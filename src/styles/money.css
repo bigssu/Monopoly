@@ -250,6 +250,72 @@
 .mh-deeds.n1 .mh-card, .mh-deeds.n2 .mh-card { width: 40%; }
 .mh-deeds.n3 .mh-card { width: 29%; }
 
+/* Sell (scenes.ts `sell`): the crying dealer, big, lower left; the sold city card(s) upper right with
+   the building on them; the bank badge pops on the card. Tears and drops are DOM in the sprite's
+   own box (positions in % of it, motion written per scene-clock step): no canvas, no extra layer —
+   they paint inside the stage (2D) or the tilted hero (3D) like the rest of the picture. */
+.mh-sell { position: absolute; inset: 0; }
+.mh-sold { position: absolute; right: -4%; top: 0; width: 42%; height: 54%; }
+.mh-sold-i, .mh-sold-c { position: absolute; inset: 0; }
+.mh-sold-i { transform-origin: 50% 100%; }
+.mh-sold-c { transform-origin: 50% 90%; }
+.mh-sold-b {
+  position: absolute;
+  left: 18%;
+  width: 64%;
+  bottom: -8%;
+  height: 52%;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 calc(var(--hu) * 0.8) 0 rgba(0, 0, 0, 0.3));
+}
+/* Rubble of the crumbling building (moved from its middle). */
+.mh-chunk {
+  position: absolute;
+  left: 43%;
+  top: 72%;
+  width: 14%;
+  height: 10%;
+  border-radius: calc(var(--hu) * 0.5);
+  background: #D9C6A3;
+  box-shadow: inset 0 calc(var(--hu) * -0.5) 0 rgba(0, 0, 0, 0.25);
+  opacity: 0;
+}
+.mh-chunk:nth-of-type(2n) { background: #B9A27E; width: 11%; height: 8%; }
+/* A smaller card than the toll's: its name fits the band. */
+.mh-sold .mh-band { font-size: calc(var(--hu) * 4.2); }
+.mh-chunk:nth-of-type(3n) { background: var(--pc, #C9B79C); }
+.mh-bankb { position: absolute; left: 27%; bottom: -8%; width: 46%; height: 40%; transform: scale(0); transform-origin: 50% 70%; }
+.mh-crier { position: absolute; transform-origin: 50% 100%; }
+.mh-crier-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The sprite is cut at the waist: fade it out instead of a hard edge mid-screen. */
+  -webkit-mask-image: linear-gradient(#000 80%, transparent 99%);
+  mask-image: linear-gradient(#000 80%, transparent 99%);
+}
+/* A wet line down the cheek from each eye's lower lid (grows from the lid). */
+.mh-stream {
+  position: absolute;
+  width: 1.8%;
+  height: 11%;
+  margin-left: -0.9%;
+  border-radius: 999px;
+  background: linear-gradient(rgba(176, 222, 255, 0.95), rgba(140, 200, 255, 0.55) 70%, rgba(140, 200, 255, 0));
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+}
+/* A tear drop (point up), centred on the lid. */
+.mh-tear {
+  position: absolute;
+  width: 3.6%;
+  height: 5%;
+  margin: -1.2% 0 0 -1.8%;
+  opacity: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 25'%3E%3Cpath d='M9 1C9 1 2 11 2 16.5a7 7 0 0 0 14 0C16 11 9 1 9 1Z' fill='%2389CCFF' stroke='%23fff' stroke-width='1.4'/%3E%3Cellipse cx='6.6' cy='15.5' rx='1.8' ry='3' fill='%23fff' opacity='.85'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+
 /* ------------------------------------------------------------------ plaques & stamp */
 .ms-plq {
   position: absolute;

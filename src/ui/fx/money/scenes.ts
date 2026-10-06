@@ -1123,6 +1123,242 @@ export function pay(st: MoneyStage, a: PayArgs): MoneyPlay {
   });
 }
 
+export interface SellItem {
+  spaceIndex: number;
+  /** The building sold (the level it had), or null: the land itself went back to the bank. */
+  building: 1 | 2 | 3 | 4 | null;
+  amount: number;
+}
+
+export interface SellArgs extends SceneOpts {
+  seat: Seat;
+  cash: number;
+  playerColor: string;
+  /** What was sold in this decision (one cut-in; ≤ 3 cards shown). */
+  items: SellItem[];
+}
+
+/**
+ * The sad dealer sprite in the sell hero (fractions of the hero box): big, lower left, its cut-off
+ * waist faded out. Its eyes' lower lids, measured on public/dealer/sad.webp (320 × 320: dark pupil
+ * pixels, viewer's left eye ≈ x 38–43 %, y 34–40 %; right eye ≈ x 53–57 %, y 32–38 %), as fractions
+ * of the sprite: the tears are placed in the sprite's own box, so they sit on the face at every
+ * render tier and hero scale.
+ */
+const CRIER = { left: -0.06, top: 0.22, size: 0.8 } as const;
+export const SAD_EYES: ReadonlyArray<{ x: number; y: number; drift: number }> = [
+  { x: 0.405, y: 0.398, drift: -1 },
+  { x: 0.548, y: 0.374, drift: 0.4 },
+];
+const TEARS_PER_EYE = 3;
+/** One tear's life (scene ms): wells up on the lid, runs down the cheek, drips off. */
+const TEAR_MS = f(30);
+/** The bank badge on the sold card (fraction of the hero box): the coins come out of it. */
+const BANK_AT = { x: 0.83, y: 0.47 } as const;
+
+/** A point of the hero box (fractions) in stage px, under the hero's current pose. */
+function heroPt(x: Ctx, fx: number, fy: number): Pt {
+  const p = x.st.heroPose;
+  const h = x.st.geom.hero;
+  const v = rotate((fx - 0.5) * h * p.s, (fy - 0.5) * h * p.s * Math.cos((p.rx * Math.PI) / 180), p.rz);
+  return { x: p.x + v.x, y: p.y + v.y };
+}
+
+function sellHero(x: Ctx, a: SellArgs): string {
+  const shown = a.items.slice(0, 3);
+  const n = shown.length;
+  const cards = shown
+    .map((it, k) => {
+      const back = n - 1 - k;
+      const off = back ? ` style="transform:translate(${-back * 16}%,${-back * 7}%) rotate(${-back * 6}deg) scale(${(1 - back * 0.08).toFixed(2)})"` : '';
+      const bld = it.building ? `<div class="mh-sold-b">${icon(BUILDING[it.building])}</div>` + '<i class="mh-chunk"></i>'.repeat(4) : '';
+      return `<div class="mh-sold-i${it.building ? '' : ' is-land'}"${off}><div class="mh-sold-c">${cityCard(art(x, it.spaceIndex), a.playerColor)}</div>${bld}</div>`;
+    })
+    .join('');
+  const eyes = SAD_EYES.map((e) => `left:${(e.x * 100).toFixed(1)}%;top:${(e.y * 100).toFixed(1)}%`);
+  const streams = eyes.map((st) => `<i class="mh-stream" style="${st}"></i>`).join('');
+  const tears = eyes.map((st) => `<i class="mh-tear" style="${st}"></i>`.repeat(TEARS_PER_EYE)).join('');
+  return (
+    `<div class="mh-sell" style="--pc:${a.playerColor}">` +
+    `<div class="mh-sold n${n}">${cards}<div class="mh-bankb">${bank()}</div></div>` +
+    `<div class="mh-crier" style="left:${CRIER.left * 100}%;top:${CRIER.top * 100}%;width:${CRIER.size * 100}%;height:${CRIER.size * 100}%">` +
+    `<img class="mh-crier-img" src="dealer/sad.webp" alt="" draggable="false">${streams}${tears}</div>` +
+    `</div>`
+  );
+}
+
+/** A sniffle: the dealer breathes in (stretches up), sobs (squashes down) and settles — squash & stretch. */
+function sniffle(x: Ctx, el: HTMLElement | null, k = 1, frames = 9): Promise<void> {
+  if (!el) return x.c.after(f(frames));
+  return x.st.tween(f(frames), (u) => {
+    const sy = u < 0.4 ? 1 + 0.06 * k * Math.sin((Math.PI * u) / 0.4) : 1 - 0.075 * k * Math.sin((Math.PI * (u - 0.4)) / 0.6) * (1.2 - u);
+    const sx = 1 - (sy - 1) * 0.85;
+    el.style.transform = u >= 1 ? '' : `scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+  });
+}
+
+/**
+ * The tears: a stream grows down from each eye, then drops well up on the lid, run down the cheek
+ * and drip off, one after another, on the scene clock (30 Hz; paused / skipped / manual like
+ * everything else here) until the stage goes down — the follow-through of the still hold. Reduced
+ * motion: the streams and one drop per eye stand still on the cheeks.
+ */
+function cry(x: Ctx, crier: HTMLElement | null): void {
+  if (!crier) return;
+  const streams = [...crier.querySelectorAll<HTMLElement>('.mh-stream')];
+  const drops = [...crier.querySelectorAll<HTMLElement>('.mh-tear')];
+  // 1 % of the sprite's box, in hero px (the hero's own transform scales it with the picture).
+  const U = (x.st.geom.hero * CRIER.size) / 100;
+  const place = (el: HTMLElement, eye: number, u: number): void => {
+    const drift = SAD_EYES[eye]!.drift;
+    let px = 0;
+    let py = 0;
+    let sx = 1;
+    let sy = 1;
+    let o = 1;
+    if (u < 0.22) {
+      // Wells up on the lid.
+      const k = u / 0.22;
+      sx = sy = 0.35 + 0.65 * k;
+      py = 0.6 * k;
+      o = Math.min(1, k * 2);
+    } else if (u < 0.62) {
+      // Runs down the cheek, gathering speed (slow in).
+      const k = (u - 0.22) / 0.4;
+      py = 0.6 + 9 * k * k;
+      px = drift * 1.4 * k;
+    } else {
+      // Drips off the face, stretching, and fades.
+      const k = (u - 0.62) / 0.38;
+      py = 9.6 + 20 * k * k;
+      px = drift * (1.4 + 0.8 * k);
+      sx = 1 - 0.18 * k;
+      sy = 1 + 0.35 * k;
+      o = 1 - k;
+    }
+    el.style.transform = `translate(${(px * U).toFixed(1)}px,${(py * U).toFixed(1)}px) scale(${sx.toFixed(3)},${sy.toFixed(3)})`;
+    el.style.opacity = o.toFixed(2);
+  };
+  if (x.st.reduced()) {
+    for (const s of streams) s.style.transform = 'scaleY(1)';
+    drops.forEach((d, j) => (j % TEARS_PER_EYE === 0 ? place(d, Math.floor(j / TEARS_PER_EYE), 0.42) : (d.style.opacity = '0')));
+    return;
+  }
+  void x.st.tween(f(8), (u) => streams.forEach((s) => (s.style.transform = `scaleY(${smooth(u).toFixed(3)})`)));
+  const t0 = x.c.t + f(4);
+  x.c.add((t) => {
+    if (t > 1e12) return false; // the clock is being disposed: the stage parks
+    drops.forEach((d, j) => {
+      const eye = Math.floor(j / TEARS_PER_EYE);
+      const life = (t - t0) / TEAR_MS - (j % TEARS_PER_EYE) / TEARS_PER_EYE - eye * 0.17;
+      if (life < 0) return;
+      place(d, eye, life % 1);
+    });
+    return true;
+  });
+}
+
+/**
+ * Selling to the bank (debt): the dealer, big, cries — tears stream from his eyes, he sniffles and
+ * sobs — while the sold building lifts off its city card and crumbles (the land: its card turns the
+ * bank's grey and lifts away), then the bank pays: coins from the bank badge into my wallet.
+ */
+export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
+  const total = a.items.reduce((s, it) => s + it.amount, 0);
+  const tier = a.tier ?? maxTier('M', tierFor(total));
+  return runScene(st, 'sell', tier, a, async (x) => {
+    const w = walletOf(x, { seat: a.seat, cash: a.cash, color: a.playerColor });
+    void heroIn(x, sellHero(x, a), a.seat, 'is-sell', { s: 1, rx: 10 });
+    const g = x.st.geom;
+    const root = x.st.heroIn;
+    const crier = root.querySelector<HTMLElement>('.mh-crier');
+    const front = frontOf(x, a.seat, 0.42);
+    // INTRO: the stage settles, the tears start.
+    await x.at(6);
+    cry(x, crier);
+    await x.at(BEATS_F.intro - BEATS_F.lift);
+    // Anticipation: a sob — he breathes in and his shoulders drop — while the building trembles and lifts.
+    x.st.sound.cue('sob');
+    x.st.sound.buzz('light');
+    void sniffle(x, crier);
+    const items = [...root.querySelectorAll<HTMLElement>('.mh-sold-i')];
+    const lifts = items.map((it, k) => {
+      const b = it.querySelector<HTMLElement>('.mh-sold-b') ?? it.querySelector<HTMLElement>('.mh-sold-c');
+      return x.c.after(f(k * 3)).then(() =>
+        x.st.tween(f(BEATS_F.lift), (u) => {
+          if (!b) return;
+          const rise = (b.classList.contains('mh-sold-c') ? 12 : 30) * easeOutBack(u, 1.4);
+          b.style.transform = `translateY(${(-rise).toFixed(2)}%) rotate(${(Math.sin(u * Math.PI * 6) * 3 * (1 - u * 0.5)).toFixed(2)}deg)`;
+        }),
+      );
+    });
+    await Promise.all(lifts);
+    // ACTION 1: what was sold crumbles away (the building) or goes back to the bank (the land).
+    await Promise.all(
+      items.map((it, k) =>
+        x.c.after(f(k * 6)).then(async () => {
+          const land = it.classList.contains('is-land');
+          const card = it.querySelector<HTMLElement>('.mh-card');
+          x.st.sound.cue('coin-thud', { pitch: land ? 0.8 : 0.6 });
+          x.st.sound.buzz('medium');
+          void x.st.shake(2, 6);
+          void x.st.fx('dust_puff', heroPt(x, 0.82, land ? 0.3 : 0.42), { scale: g.hero / 170, tint: '#E9D3B0', fps: 16 });
+          if (land && card) {
+            card.style.setProperty('--frame', '#8E9BB5');
+            card.classList.add('is-stamped');
+          }
+          const b = it.querySelector<HTMLElement>(land ? '.mh-sold-c' : '.mh-sold-b');
+          const chunks = [...it.querySelectorAll<HTMLElement>('.mh-chunk')];
+          await x.st.tween(f(10), (u) => {
+            const e = smooth(u);
+            if (b && land) {
+              b.style.transform = `translateY(${(-12 - 8 * e).toFixed(2)}%) rotate(${(-5 * e).toFixed(2)}deg)`;
+              b.style.opacity = (1 - 0.5 * e).toFixed(2);
+            } else if (b) {
+              b.style.transform = `translateY(${(-30 + 34 * e).toFixed(2)}%) scale(${(1 + 0.2 * e).toFixed(3)},${(1 - 0.65 * e).toFixed(3)})`;
+              b.style.opacity = (1 - u ** 1.5).toFixed(2);
+            }
+            chunks.forEach((c, j) => {
+              const dir = (j - 1.5) / 1.5;
+              c.style.transform = `translate(${(dir * 260 * u).toFixed(0)}%,${(-160 * u + 520 * u * u).toFixed(0)}%) rotate(${(dir * 220 * u).toFixed(0)}deg)`;
+              c.style.opacity = (u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85).toFixed(2);
+            });
+          });
+        }),
+      ),
+    );
+    // ACTION 2: the bank pays — its badge pops on the card, coins rain into my pile.
+    const badge = root.querySelector<HTMLElement>('.mh-bankb');
+    x.st.sound.cue('pass-start', { pitch: 0.9 });
+    await x.st.tween(f(6), (u) => {
+      if (badge) badge.style.transform = `scale(${easeOutBack(u, 2).toFixed(3)})`;
+    });
+    const flights = flightsForAmount(total, { min: 6, max: 8 });
+    await stream(x, { point: () => heroPt(x, BANK_AT.x, BANK_AT.y) }, { wallet: w, sound: 'receive' }, flights, {
+      start: x.c.t / f(1), stagger: 3, sid: 0, hopF: 6, travelF: 15,
+    });
+    const one = a.items.length === 1 ? a.items[0]! : null;
+    await finish(x, {
+      keep: a.keep,
+      seat: a.seat,
+      result: async () => {
+        w.bump(x.st, 1.1, f(6));
+        void x.st.fx('coin_burst', w.center(), { scale: x.coin / 30 });
+        void w.merge(x.st, (_m, at) => void x.st.fx('coin_burst', at, { scale: x.coin / 36 }));
+        // He sniffles again, smaller (follow-through); the tears keep running through the still hold.
+        await sniffle(x, crier, 0.7, 8);
+      },
+      plaque: () =>
+        revealPlaque(x, 0, a.seat, front, {
+          title: a.title ?? (one ? (one.building ? t(`m.sell.${one.building}`) : t('m.sale.land', { name: art(x, one.spaceIndex).name })) : t('m.sale')),
+          amount: total,
+          sign: '+',
+          tone: 'gold',
+        }),
+    });
+  });
+}
+
 export interface BankruptcyArgs extends SceneOpts {
   debtor: Party;
   /** Creditor, or null for the bank. */
@@ -1206,6 +1442,6 @@ export function bankruptcy(st: MoneyStage, a: BankruptcyArgs): MoneyPlay {
 }
 
 /** Every scene, by name (demo / wiring tables). */
-export const SCENES = { transfer, purchase, build, toll, tollWaived, takeover, collectFromAll, payAll, receive, pay, bankruptcy } as const;
+export const SCENES = { transfer, purchase, build, toll, tollWaived, takeover, collectFromAll, payAll, receive, pay, sell, bankruptcy } as const;
 export type SceneName = keyof typeof SCENES;
 export type { Metal };

@@ -38,7 +38,6 @@ import { playerColor } from '@/content/palette';
 import { loc, t } from '@/i18n';
 import type { GameView } from '@/ui/game/view';
 import { isDevHook, money, spaceIcon } from '@/ui/game/util';
-import { iconMarkup } from '@/content/icons';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
 import { animSpeed, eventHold, headless, sleep, turnRest, wait, whenRunning } from './time';
@@ -47,7 +46,7 @@ import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
 import { applyMoneyState, planMoney, type MoneyGroup, type MoneyScene } from './moneymap';
 import * as M from './money';
-import { festivalMultiplier, type Level as EngineLevel } from '@/engine';
+import { festivalMultiplier } from '@/engine';
 import { CARD_STRETCH } from '@/ui/stage/Stage';
 
 type Alive = () => boolean;
@@ -604,7 +603,6 @@ function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean
   // Drawn seats (wallets, coin endpoints); what the cut-in faces is the stage's call (`upright`).
   const party = (pid: PlayerId): M.Party => ({ seat: view.orient.seat(vs.players[pid]!.seat), cash: vs.players[pid]!.cash, color: view.colorOf(pid) });
   const me = (pid: PlayerId) => ({ seat: view.orient.seat(vs.players[pid]!.seat), cash: vs.players[pid]!.cash, playerColor: view.colorOf(pid) });
-  const name = (i: number): string => loc(boardOf(vs)[i]!.short);
   switch (sc.kind) {
     case 'purchase':
       return M.purchase(st, { ...me(sc.player), spaceIndex: sc.spaceIndex, price: sc.price, auction: sc.via === 'auction', keep });
@@ -637,27 +635,11 @@ function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean
       const title = sc.sink === 'doubleUp' ? t('m.doubleUp.lose') : cardTitle(sc.cardId);
       return M.pay(st, { ...me(sc.player), amount: sc.amount, kind, keep, ...(title ? { title } : {}) });
     }
-    case 'sale': {
-      // §4.2 "dismantle" picture is not built yet: the sold building (or the city card) is the hero.
-      const art = sc.building !== null ? buildingArt(sc.building) : undefined;
-      return M.transfer(st, {
-        from: 'bank', to: party(sc.player), amount: sc.amount, keep,
-        title: sc.building !== null ? t('m.sale.building') : t('m.sale.land', { name: name(sc.spaceIndex) }),
-        ...(art ? { hero: art } : {}),
-      });
-    }
+    case 'sell':
+      // The crying dealer: the sold building crumbles off its card, the bank pays (MONEY-EVENTS §11.1).
+      return M.sell(st, { ...me(sc.player), items: sc.items.map((it) => ({ ...it, building: it.building ? (Math.min(4, it.building) as 1 | 2 | 3 | 4) : null })), keep });
     case 'bankruptcy':
       return M.bankruptcy(st, { debtor: party(sc.debtor), creditor: sc.creditor === null ? null : party(sc.creditor), properties: sc.properties, receivers: sc.receivers.map((r) => ({ ...party(r.id), amount: r.amount })), keep });
-  }
-}
-
-const BUILDING_ICON: Record<1 | 2 | 3 | 4, string> = { 1: 'villa', 2: 'building', 3: 'hotel', 4: 'landmark' };
-function buildingArt(level: EngineLevel): string | undefined {
-  const id = BUILDING_ICON[Math.max(1, Math.min(4, level)) as 1 | 2 | 3 | 4];
-  try {
-    return `<div class="mh-sinkpic">${iconMarkup(id)}</div>`;
-  } catch {
-    return undefined;
   }
 }
 

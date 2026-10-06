@@ -5,8 +5,8 @@
  */
 export { MoneyStage, SEATS, SEAT_UP, type MoneyHost, type BoardCamera, type SpaceArt, type Rect, type StageGeom } from './stage';
 export {
-  transfer, purchase, build, toll, tollWaived, takeover, collectFromAll, payAll, receive, pay, bankruptcy, runScene, SCENES, CUES,
-  type MoneyPlay, type MoneyCue, type Party, type Place, type End, type SceneOpts,
+  transfer, purchase, build, toll, tollWaived, takeover, collectFromAll, payAll, receive, pay, sell, bankruptcy, runScene, SCENES, CUES,
+  type MoneyPlay, type MoneyCue, type Party, type Place, type End, type SceneOpts, type SellItem,
 } from './scenes';
 export { tierFor, maxTier, TIER, type Tier, type Metal } from './denom';
 export { loadMoneyAtlas } from './atlas';
