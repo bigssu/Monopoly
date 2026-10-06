@@ -13,7 +13,7 @@
  *
  * | the dice throw (stage/Dice.ts, throw.ts) | normal: thrown, 1.1–1.9 s by the flick's strength / ~1.06 s (a toss) ÷ speed, ×5 on skip | reduced motion: no trajectory, the in-place roll (~1 s: the roll is the key reveal, it keeps its time) | headless: 0 | paused: finishes (own clock steps) | the "throw me" wobble and hint blink: decorations (skipped under `noMotion()`; its rattles still play) |
  *
- * | an event presentation (`EVENT_EXTEND`) | motion stretched by `eventStretch()` (+`motionMs`), final pose held `eventHold()` longer (+`holdMs`) | reduced motion: the same added time, no movement | headless: 0 | skip: ÷5 like the rest |
+ * | an event presentation (`EVENT_EXTEND`) | motion stretched by `eventStretch()` (+`motionMs`), final pose held `eventHold()` longer (+`holdMs`) | reduced motion: the same added time, no movement (canvas presets: none, as before; they never held the sequence) | headless: 0 | skip: ×5 like the rest (a canvas effect also drops its stretch) |
  *
  * EVENT_EXTEND (product owner, 2026-10-06: "still too fast"): every event presentation the player
  * watches as the consequence of a landing / a turn lasts `motionMs + holdMs` longer than its base
@@ -24,7 +24,7 @@
  *   motion beats (intro, coins, result, plaque, out; the sounds ride the same clock) and the still
  *   hold grows by `holdMs`; the floor `MIN_SCENE_MS` includes both.
  * - VFX presets of an event (fx/animate.ts `EXTENDED`): the timeline and its particles run slower
- *   (vfx `extend`), then `eventHold()` before the next event.
+ *   (vfx `extend`) and its block comes `motionMs` later, then `eventHold()` before the next event.
  * - the event card, event toasts and stamps (stage/Stage.ts): tweens × `eventStretch`, read hold
  *   + `holdMs`.
  * Not events: the dice, token moves, the turn / round banner, the CPU hand, prompts and buttons,
