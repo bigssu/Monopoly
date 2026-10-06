@@ -797,34 +797,26 @@ export class Board {
     if (add) this.defsEl.insertAdjacentHTML('beforeend', add);
   }
 
-  /** Brief highlight of a space (bought / built / stamped). */
-  async pulseSpace(i: number, kind: 'pop' | 'stamp' | 'shake' = 'pop'): Promise<void> {
+  /** A space shakes in red: a building lost to a typhoon, a quake, or a sale for debt. */
+  async pulseSpace(i: number): Promise<void> {
     const grp = this.groups[i];
     if (!grp || noMotion()) return;
     const g = this.geom[i]!;
-    const cls = `fx-${kind}`;
-    const ring = h('div', { class: `space-flash ${cls}` });
+    const ring = h('div', { class: 'space-flash fx-shake' });
     const k = 100 / VB;
     ring.style.left = `${g.x * k}%`;
     ring.style.top = `${g.y * k}%`;
     ring.style.width = `${g.w * k}%`;
     ring.style.height = `${g.h * k}%`;
     this.overlay.append(ring);
-    const frames: Keyframe[] =
-      kind === 'shake'
-        ? [
-            { transform: 'translateX(0)', opacity: 1 },
-            { transform: 'translateX(-6%)', offset: 0.2 },
-            { transform: 'translateX(6%)', offset: 0.45 },
-            { transform: 'translateX(-3%)', offset: 0.7 },
-            { transform: 'translateX(0)', opacity: 0 },
-          ]
-        : [
-            { transform: 'scale(.6)', opacity: 0 },
-            { transform: 'scale(1.12)', opacity: 1, offset: 0.45 },
-            { transform: 'scale(1)', opacity: 0 },
-          ];
-    await anim(ring, frames, { duration: kind === 'stamp' ? 700 : 520, easing: EASE.overshoot });
+    const frames: Keyframe[] = [
+      { transform: 'translateX(0)', opacity: 1 },
+      { transform: 'translateX(-6%)', offset: 0.2 },
+      { transform: 'translateX(6%)', offset: 0.45 },
+      { transform: 'translateX(-3%)', offset: 0.7 },
+      { transform: 'translateX(0)', opacity: 0 },
+    ];
+    await anim(ring, frames, { duration: 520, easing: EASE.overshoot });
     ring.remove();
   }
 

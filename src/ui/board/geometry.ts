@@ -9,7 +9,6 @@ export const VB = 3200;
 /** Ring depth = corner size. */
 export const DEPTH = 460;
 /** Width of a side space. */
-export const SIDE_W = (VB - 2 * DEPTH) / 7;
 /** Inner (stage) square. */
 export const INNER = { x: DEPTH, y: DEPTH, size: VB - 2 * DEPTH };
 

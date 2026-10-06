@@ -385,10 +385,10 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         view.playSfx('warning');
         await Promise.all([
           ...hs,
-          board.pulseSpace(ev.spaceIndex, 'shake'),
+          board.pulseSpace(ev.spaceIndex),
           stage.toast(t(ev.cause === 'quake' ? 'g.quake' : 'g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!), true),
         ]);
-      } else await board.pulseSpace(ev.spaceIndex, 'shake');
+      } else await board.pulseSpace(ev.spaceIndex);
       return;
     }
     // --- Rules version 2 (docs/research/08-fun-analysis.md) ---------------------------------------
