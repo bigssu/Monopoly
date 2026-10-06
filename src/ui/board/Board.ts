@@ -8,6 +8,7 @@ import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, animSpeed, D, gridTimeout, isSkipping, noMotion, onFrame } from '@/ui/fx/time';
+import { esc } from '@/ui/shell/dom';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
 import { BLD_OUT_MAX, DEPTH, INNER, VB, buildingGeom, buildingLayout, getBoardGeometry, tokenSpot, type BuildingGeom, type BuildingLevel, type SpaceGeom } from './geometry';
@@ -75,10 +76,6 @@ function iconAt(id: string, x: number, y: number, size: number, cls = '', tint?:
     '<svg ',
     `<svg x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${size}" height="${size}" class="${cls}" `,
   );
-}
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function estWidth(s: string): number {
