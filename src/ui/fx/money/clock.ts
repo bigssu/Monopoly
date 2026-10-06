@@ -13,7 +13,7 @@
  * The clock registers ONE frame step while something waits on it and unregisters itself when idle
  * (zero idle cost). Headless (speed 0) scenes never start a clock: they resolve at once.
  */
-import { animSpeed, gamePace, isHeld, isManualClock, isSkipping, onFrame, whenRunning } from '../time';
+import { animSpeed, frameGrid, gamePace, isHeld, isManualClock, isSkipping, onFrame, whenRunning } from '../time';
 
 /** One 30 fps frame (ms): research / spec beats are written in frames. */
 export const FRAME = 1000 / 30;
@@ -154,8 +154,12 @@ export class MoneyClock {
       this.arm();
       return false;
     }
-    // The first step after arming advances one frame (the step itself is on the frame grid).
-    const dt = Number.isNaN(this.last) ? FRAME : Math.min(100, Math.max(0, now - this.last));
+    // The first step after arming advances one frame (the step itself is on the frame grid). A step
+    // of the manual clock is exactly one period: `now - last` there carries the float rounding of
+    // the clock's absolute value, which starts at the real performance.now(), so the same scene
+    // ended a frame earlier or later depending on how long the process had been running (a wait's
+    // nearest-frame snap or EPS margin flipped).
+    const dt = Number.isNaN(this.last) ? FRAME : isManualClock() ? frameGrid().period : Math.min(100, Math.max(0, now - this.last));
     this.last = now;
     // Headless mid-scene: jump to the end of everything that is waiting.
     if (animSpeed() === 0) this.t += 1e7;

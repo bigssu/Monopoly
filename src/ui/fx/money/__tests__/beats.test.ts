@@ -6,7 +6,7 @@
  * EVENT_EXTEND (fx/time.ts, 2026-10-06): every cut-in is on screen motionMs + holdMs longer than
  * before it (BASE below), its still hold holdMs longer.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EVENT_EXTEND, flushAll, setAnimSpeed, setManualClock, setPace, setReducedMotion, stepClock } from '../../time';
 import { MoneyStage } from '../stage';
 import { BEATS_F, CUES, MIN_SCENE_MS, MOTION_STRETCH, SCENES, type MoneyPlay } from '../scenes';
@@ -142,5 +142,23 @@ describe('money cut-in beats (≥ 3 s, anticipation, still hold)', () => {
     const slow = await run(SCENARIOS[0]![2], null);
     // At pace 1 the whole cut-in, extension included, runs √½ as long.
     expect(Math.abs(slow.frames - (BASE.purchase![0] + EXT_F) * Math.SQRT1_2)).toBeLessThanOrEqual(SLACK_F + 1);
+  });
+
+  it('frame counts do not depend on when the manual clock was switched on', async () => {
+    // The manual clock starts at the real performance.now(). Scene time used to add up
+    // `now - last`, whose float rounding depends on that value: under load (a later start) a cut-in
+    // ended a frame earlier or later, and "waived toll" ×0.7 came out longer than ×1.
+    const frames: string[] = [];
+    for (const start of [0, 7.25, 54321.987, 3.7e6 + 0.123]) {
+      flushAll();
+      setManualClock(false);
+      const now = vi.spyOn(performance, 'now').mockReturnValue(start);
+      setManualClock(true);
+      now.mockRestore();
+      const counts = [];
+      for (const i of [0, 6, 7]) counts.push((await run(SCENARIOS[i]![2], null)).frames, (await run(SCENARIOS[i]![2], SCENARIOS[i]![1])).frames);
+      frames.push(counts.join('/'));
+    }
+    expect(new Set(frames).size, frames.join(' ')).toBe(1);
   });
 });
