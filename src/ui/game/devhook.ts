@@ -6,6 +6,7 @@
  *     policy's choice for whoever must act — e2e tests click the matching on-screen control)
  *   + setLang('ko' | 'en')
  *   + cpuHand() (the CPU hand's press log; freeze(true) holds every hand at its press until release())
+ *   + dice() (every roll's record: in place / thrown, path, plan, bounces, clacks, timing)
  */
 import { chooseAction, defaultPlayers, defaultSettings, deepClone, legalActions, type Action, type GameState, type Settings } from '@/engine';
 import { setLang, type Lang } from '@/i18n';
@@ -15,6 +16,7 @@ import type { FxStats, PresetName, PresetParams } from '@/ui/fx/vfx';
 import type { GameController } from './controller';
 import { isDevHook } from './util';
 import { handDev, type HandRecord } from '@/ui/stage/CpuHand';
+import { diceDev, type ThrowRecord } from '@/ui/stage/Dice';
 
 let current: GameController | null = null;
 
@@ -55,6 +57,8 @@ export interface LotAndRollHook {
   money(): { live: boolean; t: number; kept: boolean; scenes: number; flying: number; tier: string; scale: number; tilt: boolean; camera: boolean; source: string; budgetMB: number; auto: string; health: string[]; log: string[] } | null;
   /** The CPU hand: presses so far, and a switch that holds each hand at its press. */
   cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; release(): void; frozen(): boolean };
+  /** The dice: every roll so far (how it was shown, and the throw's plan). */
+  dice(): { log: ThrowRecord[]; clear(): void };
 }
 
 declare global {
@@ -133,6 +137,12 @@ export function installDevHook(): void {
       },
       // A hand is being held at its press right now.
       frozen: () => !!handDev?.release,
+    }),
+    dice: () => ({
+      log: diceDev?.log ?? [],
+      clear: () => {
+        if (diceDev) diceDev.log.length = 0;
+      },
     }),
   };
 }

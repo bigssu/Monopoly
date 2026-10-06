@@ -67,7 +67,8 @@ describe('cpuHandTarget', () => {
     const s = createGame(defaultSettings({ players: defaultPlayers(2, { cpu: true }) }), 3);
     const at = (phase: Phase): GameState => ({ ...s, phase });
     const pre = at({ kind: 'preRoll', playerId: 0, rollAgain: false });
-    expect(cpuHandTarget(pre, { type: 'Roll', playerId: 0 })).toEqual({ kind: 'control', selector: '[data-action="Roll"]', space: null, hold: true });
+    // The turn's roll: the hand presses the pad (the dice) and flicks.
+    expect(cpuHandTarget(pre, { type: 'Roll', playerId: 0 })).toEqual({ kind: 'pad', selector: '.roll-pad' });
     // Build anywhere has no button: the hand taps the city on the board.
     expect(cpuHandTarget(pre, { type: 'Build', playerId: 0, spaceIndex: 5 })).toEqual({ kind: 'space', space: 5, selector: null });
 

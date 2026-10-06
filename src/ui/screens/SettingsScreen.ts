@@ -180,6 +180,7 @@ export function mountSettings(host: HTMLElement, onClose: () => void): () => voi
       row('play', t('settings.pace'), pace, t('settings.paceHint')),
       row('timer', t('settings.rest'), rest, t('settings.restHint')),
       row(SPARKLE_SVG, t('settings.motion'), motion, t('settings.motionHint')),
+      row('dice-face-5', t('settings.rollButton'), h('div', { class: 'set-inline' }, switcher(p.rollButton, (v) => prefs.set({ rollButton: v }), t('settings.rollButton'))), t('settings.rollButtonHint')),
       row('timer', t('settings.timer'), timer, t('settings.timerHint')),
       row(
         BATTERY_SVG,

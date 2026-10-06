@@ -1,10 +1,12 @@
 /**
  * The CPU hand: before a CPU decision is dispatched, a white glove (icon `cpu-hand`, cuff in the
  * CPU player's color) reaches in from the CPU's seat edge, lands on the control it chose (the
- * prompt button, or the board space for board picks), presses it — the control shows the same
+ * prompt button, the roll pad, or the board space for board picks), presses it — the control shows the same
  * pressed state a finger gives it, with a ripple ring, and a board space is outlined — and the
  * controller dispatches at the release. The lift and exit play on under the decision's own
- * animation. Which control each action maps to: `handTarget.ts`. Timings: `HAND` in fx/motion.ts.
+ * animation. A roll presses the dice on the roll pad, holds them while they rattle and flicks a
+ * short stroke toward the board centre: the throw follows the stroke (`Dice.aim`). Which control
+ * each action maps to: `handTarget.ts`. Timings: `HAND` in fx/motion.ts.
  *
  * Coordinates: the hand lives in a board-sized layer rotated to the CPU's drawn seat (SEAT_ANGLE
  * of `HandPress.seat`, about the board centre = the Stage centre), so "up" points into the board
@@ -112,16 +114,17 @@ export class CpuHand {
 
     // The control (the prompt goes up on the frame after the CPU's turn starts: allow a few).
     let el: HTMLElement | null = null;
+    const isPad = target.kind === 'pad';
     if (target.selector) {
       for (let k = 0; k < 4 && !el; k++) {
-        el = this.stage.promptCard?.querySelector<HTMLElement>(target.selector) ?? null;
+        el = isPad ? this.stage.rollPad : (this.stage.promptCard?.querySelector<HTMLElement>(target.selector) ?? null);
         if (!el) {
           await frame();
           if (!o.alive()) return;
         }
       }
     }
-    if (target.kind === 'control' && !el) return;
+    if ((target.kind === 'control' || isPad) && !el) return;
     // A card that only just went up is still sliding in: read its rect once it has landed.
     await this.stage.whenSettled();
     if (!o.alive()) return;
@@ -135,8 +138,9 @@ export class CpuHand {
     if (!bRect.width) return;
     const S = this.board.el.offsetWidth || bRect.width;
     const k = S / bRect.width;
-    const r = target.kind === 'space' ? this.board.spaceRect(target.space, bRect) : el!.getBoundingClientRect();
-    const radius = target.kind === 'space' ? '24%' : getComputedStyle(el!).borderRadius;
+    // The pad: the hand presses the dice themselves (the pair, in the middle of the pad).
+    const r = target.kind === 'space' ? this.board.spaceRect(target.space, bRect) : isPad ? this.stage.dice.pairRect() : el!.getBoundingClientRect();
+    const radius = target.kind === 'space' || isPad ? '24%' : getComputedStyle(el!).borderRadius;
     const angle = SEAT_ANGLE[o.seat];
     const rad = (-angle * Math.PI) / 180;
     const cos = Math.cos(rad);
@@ -183,8 +187,9 @@ export class CpuHand {
       card?.style.setProperty('--cpu-hand', o.color);
       el?.classList.toggle('is-cpu-pick', on);
     };
-    const isRoll = target.kind === 'control' && target.hold;
-    const rollBtn = el?.classList.contains('roll-btn') ? el : null;
+    const isRoll = isPad || (target.kind === 'control' && target.hold);
+    const rollBtn = isPad || el?.classList.contains('roll-btn') ? el : null;
+    const space = target.kind === 'pad' ? null : target.space;
     let unmark: (() => void) | null = null;
     let stopShake: (() => void) | null = null;
     const unpress = (): void => {
@@ -217,7 +222,7 @@ export class CpuHand {
     if (rollBtn) rollBtn.classList.add('is-held');
     else el?.classList.add('is-pressed');
     if (isRoll) stopShake = this.shakeDice();
-    if (target.space !== null) unmark = this.board.highlight(target.space, o.color, 60_000);
+    if (space !== null) unmark = this.board.highlight(space, o.color, 60_000);
     this.ring(layer, hand, cx, cy, tw, th, radius, o.color);
     const up = at(qx, qy, TILT, 1);
     const down = at(qx, qy + H * 0.03, TILT, 0.86);
@@ -236,9 +241,26 @@ export class CpuHand {
     }
     if (!o.alive()) return this.drop();
 
+    // 3b. A roll: a short stroke toward the board centre ("up" from the seat), the dice still in
+    //     hand; the throw goes the way of the stroke (a little variety in its angle).
+    let lifted = down;
+    let rest = up;
+    if (isPad) {
+      const flick = at(qx, qy - H * 0.55, TILT + 6, 0.9);
+      hand.style.transform = flick;
+      await anim(hand, [{ transform: down }, { transform: flick }], { duration: HAND.flick, easing: EASE.anticipate });
+      if (!o.alive()) return this.drop();
+      const a = rad * -1 + ((Math.random() - 0.5) * 24 * Math.PI) / 180;
+      // Layer "up" (0, -1) on screen: the layer is rotated by `angle` about the board centre.
+      const speed = 1500 + Math.random() * 700;
+      this.stage.dice.aim(this.stage.toLocal({ x: Math.sin(a) * speed, y: -Math.cos(a) * speed }));
+      lifted = flick;
+      rest = at(qx, qy - H * 0.7, TILT + 4, 1);
+    }
+
     // 4. Release = dispatch (the caller dispatches when this resolves). Lift and leave meanwhile.
     unpress();
-    this.leaving = this.leave(hand, layer, down, up, at(sx, sy, TILT - 8, 1));
+    this.leaving = this.leave(hand, layer, lifted, rest, at(sx, sy, TILT - 8, 1));
   }
 
   private leaving: Promise<void> = Promise.resolve();

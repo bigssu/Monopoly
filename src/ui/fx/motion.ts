@@ -71,7 +71,7 @@ export const DUR = {
  *
  * Added time per decision = reach + hover + press + hold:
  * pace 1 (fastest) ≈ 390 ms, pace 2 (default) ≈ 520 ms, pace 3 ≈ 650 ms; a roll is held longer so
- * the dice shake reads (≈ 720 ms at pace 2). Headless (speed 0): none, the hand is not shown.
+ * the dice shake reads, then flicked (≈ 830 ms at pace 2). Headless (speed 0): none, the hand is not shown.
  */
 export const HAND = {
   /** Seat edge → control (tween). Shorter at a fast game pace: 180 + 30 × pace ms. */
@@ -84,6 +84,8 @@ export const HAND = {
   /** Held down (beat); a roll is held so the dice shake can be seen. */
   hold: 60,
   holdRoll: 160,
+  /** A roll's flick: the short stroke toward the board centre that throws the dice (tween). */
+  flick: 110,
   /** Lift and leave (tweens, not waited for). */
   lift: 90,
   exit: 240,

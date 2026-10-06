@@ -4,8 +4,10 @@
  * Pure (no DOM): the controls are found by the stable `data-*` hooks `prompts.ts` puts on every
  * prompt button (`data-action`, `data-space`, `data-card`, `data-guess`).
  *
- * - `control`: a button in the prompt card (roll, buy, pass, sell, bid, card, guess…). `space` is
- *   the board space it is about, highlighted while pressed (debt sales).
+ * - `pad`: the roll pad over the stage centre (Stage.armPad): the hand presses the dice, holds
+ *   them while they rattle, and flicks toward the board centre (the throw follows the stroke).
+ * - `control`: a button in the prompt card (buy, pass, sell, bid, card, guess, the island roll…).
+ *   `space` is the board space it is about, highlighted while pressed (debt sales).
  * - `space`: a board space (travel destination, festival, free upgrade, typhoon target, build
  *   anywhere). `selector` is the matching row of the prompt's list, shown pressed with it.
  * - `none`: no visible control; the CPU acts without the hand. Only reachable with an action the
@@ -17,6 +19,7 @@
 import type { Action, ActionType, GameState, Phase } from '@/engine';
 
 export type HandTarget =
+  | { kind: 'pad'; selector: string }
   | { kind: 'control'; selector: string; space: number | null; hold: boolean }
   | { kind: 'space'; space: number; selector: string | null }
   | { kind: 'none'; reason: string };
@@ -68,6 +71,8 @@ export function cpuHandTarget(state: GameState, a: Action): HandTarget {
   const ph = state.phase;
   if (ph.kind === 'gameOver') return { kind: 'none', reason: 'game over' };
   if (!OFFERED_IN[a.type].includes(ph.kind)) return { kind: 'none', reason: `${a.type} has no control in the ${ph.kind} prompt` };
+  // The turn's roll: the pad (the roll button, when shown in Settings, is not what the hand uses).
+  if (a.type === 'Roll' && ph.kind === 'preRoll') return { kind: 'pad', selector: '.roll-pad' };
   // Build anywhere (preRoll): humans pick the city on the board; there is no button for it.
   if (a.type === 'Build' && ph.kind === 'preRoll') return { kind: 'space', space: a.spaceIndex, selector: null };
   if (BOARD_PICK.has(a.type) && 'spaceIndex' in a) return { kind: 'space', space: a.spaceIndex, selector: controlSelector(a) };

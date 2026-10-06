@@ -38,6 +38,8 @@ import { onFrame } from '@/ui/fx/time';
 import type { Board } from '@/ui/board/Board';
 import { cardIcon, chip, groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, TINT, tokenBadge, type ChipTone } from '@/ui/game/util';
 import type { Dice } from './Dice';
+import type { Stage } from './Stage';
+import { releaseVelocity } from './throw';
 
 export interface PromptCtx {
   state: GameState;
@@ -46,6 +48,10 @@ export interface PromptCtx {
   act: (a: Action) => void;
   board: Board;
   dice: Dice;
+  /** The roll pad and the stage frame (pointer → stage px). */
+  stage: Stage;
+  /** Settings "굴리기 버튼 보이기": the roll button is shown beside the pad. */
+  rollButton: boolean;
 }
 
 export interface PromptResult {
@@ -180,10 +186,24 @@ function spaceTitle(state: GameState, i: number): string {
 const GAUGE_PERIOD_MS = 1600;
 const GAUGE_MIN_MS = 300;
 
+/**
+ * The roll: the stage centre is a pad (Stage.armPad, docs/DESIGN.md "Dice throw"). Press and hold
+ * anywhere on it: the dice shake (rattle + haptic, and the B7 gauge swings while held); release
+ * with a swipe: the dice are thrown in that direction (the release velocity over the last 80 ms,
+ * in the stage's frame); release without one, or the keyboard (Enter / Space on the focused pad):
+ * a weak toss forward. Leaving the pad before the release still throws (pointer capture); a
+ * cancelled pointer only stops the shake. The throw never changes the result: the same `Roll`
+ * (+ gauge) is dispatched and the engine's RNG decides. The roll button (Settings "굴리기 버튼
+ * 보이기", off by default) works as before beside it.
+ */
 function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): PromptResult {
   const p = ctx.state.players[ph.playerId]!;
-  const rollBtn = h('button', { class: 'roll-btn', type: 'button', 'data-action': 'Roll' });
-  rollBtn.append(iconEl('dice-face-5', 'ico roll-ico'), h('span', { class: 'roll-label', text: t('g.roll') }));
+  const pad = ctx.stage.armPad(ctx.cpu);
+  let rollBtn: HTMLButtonElement | null = null;
+  if (ctx.rollButton) {
+    rollBtn = h('button', { class: 'roll-btn', type: 'button', 'data-action': 'Roll' }) as HTMLButtonElement;
+    rollBtn.append(iconEl('dice-face-5', 'ico roll-ico'), h('span', { class: 'roll-label', text: t('g.roll') }));
+  }
   const roll: Action = { type: 'Roll', playerId: ph.playerId };
   // Dice gauge (rules = advanced): while held, a gauge swings low ↔ high (slow at the ends);
   // releasing after GAUGE_MIN_MS sends where it was. A quick tap or the keyboard rolls neutral.
@@ -194,49 +214,77 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
     : null;
   let gauge: number | undefined;
   let stopGauge: (() => void) | null = null;
-  if (ctx.cpu) rollBtn.disabled = true;
-  else {
-    let down = false;
+  if (ctx.cpu) {
+    if (rollBtn) rollBtn.disabled = true;
+  } else {
+    // One press at a time (pad or button); its control and its pointer samples [x, y, t].
+    let active: HTMLElement | null = null;
     let fired = false;
     let heldAt = 0;
-    const fire = (): void => {
+    let samples: [number, number, number][] = [];
+    const fire = (aim: { x: number; y: number } | null): void => {
       if (fired) return;
       fired = true;
       stopGauge?.();
       ctx.dice.shake(false);
+      ctx.dice.aim(aim);
       ctx.act(gauge === undefined ? roll : { ...roll, gauge });
     };
-    rollBtn.addEventListener('pointerdown', (e) => {
-      down = true;
-      rollBtn.setPointerCapture?.(e.pointerId);
-      rollBtn.classList.add('is-held');
-      ctx.dice.shake(true);
-      if (gaugeOn) {
-        heldAt = performance.now();
-        stopGauge = onFrame((now) => {
-          const g = 0.5 + 0.5 * Math.sin(((now - heldAt) / GAUGE_PERIOD_MS) * 2 * Math.PI);
-          gauge = now - heldAt >= GAUGE_MIN_MS ? g : undefined;
-          fill.style.transform = `scaleX(${g.toFixed(3)})`;
-          return true;
+    const bind = (el: HTMLElement, flick: boolean): void => {
+      el.addEventListener('pointerdown', (e) => {
+        if (fired || active) return;
+        active = el;
+        el.setPointerCapture?.(e.pointerId);
+        el.classList.add('is-held');
+        samples = [[e.clientX, e.clientY, e.timeStamp]];
+        ctx.dice.stopInvite();
+        ctx.dice.shake(true);
+        if (gaugeOn) {
+          heldAt = performance.now();
+          stopGauge = onFrame((now) => {
+            const g = 0.5 + 0.5 * Math.sin(((now - heldAt) / GAUGE_PERIOD_MS) * 2 * Math.PI);
+            gauge = now - heldAt >= GAUGE_MIN_MS ? g : undefined;
+            fill.style.transform = `scaleX(${g.toFixed(3)})`;
+            return true;
+          });
+        }
+      });
+      if (flick) {
+        el.addEventListener('pointermove', (e) => {
+          if (active !== el) return;
+          samples.push([e.clientX, e.clientY, e.timeStamp]);
+          if (samples.length > 48) samples.splice(0, samples.length - 48);
         });
       }
-    });
-    rollBtn.addEventListener('pointerup', () => {
-      if (!down) return;
-      down = false;
-      rollBtn.classList.remove('is-held');
-      fire();
-    });
-    rollBtn.addEventListener('pointercancel', () => {
-      down = false;
-      rollBtn.classList.remove('is-held');
-      stopGauge?.();
-      gauge = undefined;
-      ctx.dice.shake(false);
-    });
-    rollBtn.addEventListener('click', (e) => {
-      if ((e as MouseEvent).detail === 0) fire(); // keyboard
-    });
+      el.addEventListener('pointerup', (e) => {
+        if (active !== el) return;
+        active = null;
+        el.classList.remove('is-held');
+        let aim: { x: number; y: number } | null = null;
+        if (flick) {
+          samples.push([e.clientX, e.clientY, e.timeStamp]);
+          const v = releaseVelocity(samples);
+          if (v.x || v.y) aim = ctx.stage.toLocal(v);
+        }
+        fire(aim);
+      });
+      el.addEventListener('pointercancel', () => {
+        if (active !== el) return;
+        active = null;
+        el.classList.remove('is-held');
+        stopGauge?.();
+        stopGauge = null;
+        gauge = undefined;
+        ctx.dice.shake(false);
+      });
+      el.addEventListener('click', (e) => {
+        if ((e as MouseEvent).detail === 0) fire(null); // keyboard: a weak toss
+      });
+    };
+    bind(pad, true);
+    if (rollBtn) bind(rollBtn, false);
+    // "Throw me": the dice wobble when the human's roll comes up.
+    ctx.dice.invite();
   }
   const tags = h('div', { class: 'pc-tags' });
   if (ph.rollAgain) tags.append(tag(t('g.doubles.again'), 'gold', 'dice-face-6'));
@@ -249,11 +297,16 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
       (i) => ctx.act({ type: 'Build', playerId: ph.playerId, spaceIndex: i }),
     );
   }
-  const el = h('div', { class: `pcard pc-roll${ctx.cpu ? ' is-cpu' : ''}` });
+  const el = h('div', { class: `pcard pc-roll${ctx.cpu ? ' is-cpu' : ''}${rollBtn ? ' has-button' : ''}` });
   if (tags.childNodes.length) el.append(tags);
-  el.append(rollBtn);
+  if (rollBtn) el.append(rollBtn);
   if (gaugeEl) el.append(gaugeEl);
-  if (!ctx.cpu) el.append(h('div', { class: 'roll-hint', text: t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') }));
+  if (!ctx.cpu) {
+    // Where the button was: a hint strip (the button, when shown, keeps its own hint).
+    const hint = rollBtn ? t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') : t('g.roll.flick');
+    el.append(h('div', { class: `roll-hint${rollBtn ? '' : ' is-strip'}`, text: hint }));
+    if (!rollBtn && gaugeOn) el.append(h('div', { class: 'roll-hint', text: t('g.gauge.hint') }));
+  }
   return { el };
 }
 

@@ -11,6 +11,7 @@ import { haptic } from '@/ui/audio/haptics';
 import { anim, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
+import type { Box, Vec } from './throw';
 import { EASE } from '@/ui/fx/motion';
 
 export type Tone = 'info' | 'good' | 'bad' | 'gold';
@@ -44,6 +45,10 @@ export class Stage {
   private turning: Promise<void> = Promise.resolve();
   private entering: Promise<void> = Promise.resolve();
   private infoInvoker: HTMLElement | SVGElement | null = null;
+  /** The roll pad (a roll prompt is up): see `armPad`. */
+  private pad: HTMLButtonElement | null = null;
+  /** Top of the dice area in the stage's own px (the pad starts there), from `measureDice`. */
+  private padTop = -1;
 
   constructor() {
     this.dice = new Dice();
@@ -61,6 +66,7 @@ export class Stage {
     this.rot = h('div', { class: 'stage-rot' }, top, this.rankStrip, diceWrap, this.promptSlot, this.toastLayer, this.popLayer);
     // The backdrop (`.stage-bg`) belongs to the board (Board.ts): pop-out buildings sit on it, under this.
     this.el = h('div', { class: 'stage' }, this.rot);
+    this.dice.arena = () => this.measureArena();
     this.popLayer.addEventListener('click', () => this.hideInfo());
     this.popLayer.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
@@ -109,6 +115,61 @@ export class Stage {
   /** The prompt card on the stage (null when none is up). */
   get promptCard(): HTMLElement | null {
     return this.promptSlot.firstElementChild as HTMLElement | null;
+  }
+
+  /**
+   * The roll pad: a transparent button over the stage centre (the dice area and the roll
+   * prompt's strip, below the banner / round line), under the prompt card. Pressing it shakes the
+   * dice, releasing throws them (prompts.ts binds it; a CPU's hand presses it, disabled). Removed
+   * with the prompt (`clearPrompt`). It paints nothing: no layer, no idle cost.
+   */
+  armPad(cpu: boolean): HTMLButtonElement {
+    this.pad?.remove();
+    const pad = h('button', { class: 'roll-pad', type: 'button', 'data-action': 'Roll', 'aria-label': t('g.roll.pad') }) as HTMLButtonElement;
+    if (cpu) pad.disabled = true;
+    if (this.padTop >= 0) pad.style.top = `${this.padTop}px`;
+    this.rot.insertBefore(pad, this.promptSlot);
+    this.pad = pad;
+    return pad;
+  }
+
+  /** The roll pad, while a roll prompt is up. */
+  get rollPad(): HTMLButtonElement | null {
+    return this.pad;
+  }
+
+  /** A client-px vector (a pointer's velocity) in the stage's own frame: unrotated, layout px. */
+  toLocal(v: Vec): Vec {
+    const r = this.el.getBoundingClientRect();
+    const k = r.width > 0 ? this.el.offsetWidth / r.width : 1;
+    const a = (-this.angle * Math.PI) / 180;
+    return { x: (v.x * Math.cos(a) - v.y * Math.sin(a)) * k, y: (v.x * Math.sin(a) + v.y * Math.cos(a)) * k };
+  }
+
+  /**
+   * The dice area's walls (die edges) in the dice pair's own px, for a throw: the stage's inner
+   * width (its side padding off) × the dice slot's height (below the banner, round line and
+   * ranking strip; above the acting seat's building margin). Layout offsets, so the stage's
+   * rotation and the board's scale do not matter. Read once when a throw starts.
+   */
+  private measureArena(): Box | null {
+    if (!this.rot.isConnected || this.el.classList.contains('has-big')) return null;
+    const pair = this.dice.pairEl;
+    let x = 0;
+    let y = 0;
+    let n: HTMLElement | null = pair;
+    while (n && n !== this.rot) {
+      x += n.offsetLeft;
+      y += n.offsetTop;
+      n = n.offsetParent as HTMLElement | null;
+    }
+    const w = this.rot.clientWidth;
+    const top = this.diceWrap.offsetTop;
+    const hgt = this.diceWrap.offsetHeight;
+    if (n !== this.rot || w <= 0 || hgt <= 0) return null;
+    const u = (parseFloat(document.documentElement.style.getPropertyValue('--board')) || 0) / 32;
+    const side = u * 0.5;
+    return { left: side - x, right: w - side - x, top: top - y, bottom: top + hgt - y };
   }
 
   /** Update the (static) turn banner text for the player whose turn it is. */
@@ -217,7 +278,8 @@ export class Stage {
     this.fitDice();
     // Keyboard / switch users land on the main action (touch is unaffected).
     if (document.activeElement === document.body || this.el.contains(document.activeElement)) {
-      card.querySelector<HTMLElement>('.roll-btn:not(:disabled), .pbtn.is-primary:not(:disabled), .pbtn:not(:disabled)')?.focus({ preventScroll: true });
+      const pad = this.pad && !this.pad.disabled ? this.pad : null;
+      (card.querySelector<HTMLElement>('.roll-btn:not(:disabled)') ?? pad ?? card.querySelector<HTMLElement>('.pbtn.is-primary:not(:disabled), .pbtn:not(:disabled)'))?.focus({ preventScroll: true });
     }
     // On the slot (its own layer, same box as the card): see .st-prompt in stage.css.
     this.entering = anim(this.promptSlot, [{ transform: 'translateY(30%) scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
@@ -255,6 +317,12 @@ export class Stage {
   private measureDice(): void {
     // `no-dice` only hides the dice (visibility), so the sizes read the same with it on or off.
     const free = this.diceWrap.clientHeight;
+    // The roll pad starts where the dice area does (under the banner / round line / ranking).
+    const top = this.diceWrap.offsetTop;
+    if (top !== this.padTop) {
+      this.padTop = top;
+      if (this.pad) this.pad.style.top = `${top}px`;
+    }
     const need = this.dice.el.offsetHeight;
     const hide = this.el.classList.contains('has-prompt') && free > 0 && need > 0 && free < need * 0.9;
     if (hide !== this.el.classList.contains('no-dice')) this.el.classList.toggle('no-dice', hide);
@@ -271,6 +339,9 @@ export class Stage {
     this.clearTimer();
     // A held roll button may vanish without a pointerup (timer / dispatch): stop the shake loop.
     this.dice.shake(false);
+    this.dice.stopInvite();
+    this.pad?.remove();
+    this.pad = null;
     this.promptSlot.innerHTML = '';
     this.el.classList.remove('has-prompt', 'has-big', 'no-dice');
   }
@@ -402,6 +473,7 @@ export class Stage {
     this.popLayer.append(content);
     this.popLayer.classList.add('is-on');
     this.promptSlot.inert = true;
+    if (this.pad) this.pad.inert = true;
     content.focus({ preventScroll: true });
     void anim(content, [{ transform: 'scale(.85)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
       duration: 220,
@@ -413,6 +485,7 @@ export class Stage {
     this.popLayer.classList.remove('is-on');
     this.popLayer.innerHTML = '';
     this.promptSlot.inert = false;
+    if (this.pad) this.pad.inert = false;
     const invoker = this.infoInvoker;
     this.infoInvoker = null;
     if (invoker?.isConnected) invoker.focus({ preventScroll: true });

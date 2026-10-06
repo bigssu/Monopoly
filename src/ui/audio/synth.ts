@@ -53,6 +53,8 @@ export const THROTTLE: Partial<Record<SfxName, number>> = {
   hop: 0.03,
   'timer-tick': 0.08,
   'dice-shake': 0.09,
+  // A throw plays at most three, at least 60 ms apart (throw.ts).
+  'dice-clack': 0.05,
   'cash-in': 0.05,
   'cash-out': 0.05,
   toll: 0.05,
@@ -433,6 +435,14 @@ export class SynthSfx implements Sfx {
         hit(t + 0.075, 0.85);
         hit(t + 0.2, 0.3);
         return 0.35;
+      }
+
+      case 'dice-clack': {
+        // A thrown die against the wall: one short, bright knock (dice-land's hit, higher and drier).
+        this.tone({ f: 320 * p, f2: 140 * p, t, d: 0.07, g: 0.3, a: 0.001 }, out);
+        this.noise({ t, d: 0.022, g: 0.2, type: 'bandpass', f: 3200 * p, q: 1.4 }, out);
+        this.tone({ f: 1900 * p, f2: 1300 * p, t, d: 0.03, type: 'triangle', g: 0.09 }, out);
+        return 0.1;
       }
 
       case 'doubles':

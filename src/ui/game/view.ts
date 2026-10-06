@@ -84,6 +84,7 @@ export class GameView {
   private rotateOverlay: HTMLElement;
   private stopWatch: () => void = () => {};
   private stopPrefs: () => void = () => {};
+  private stopDicePrefs: () => void = () => {};
   private state: GameState;
 
   constructor(state: GameState) {
@@ -166,6 +167,13 @@ export class GameView {
     const native = isNative();
     this.vfx.setQuality(devQ ?? fxQualityOn(prefs.get(), native));
     if (!devQ) this.stopPrefs = prefs.onChange((n, prev) => fxQualityOn(n, native) !== fxQualityOn(prev, native) && this.vfx.setQuality(fxQualityOn(n, native)));
+    // How dice throws are drawn follows the same switch (docs/DESIGN.md "Dice throw"): canvas
+    // effects on → one temporary canvas; off (the Android app's default) → the DOM dice themselves.
+    // Dev A/B: ?dev=1&dice=dom|canvas.
+    const devDice = isDevHook() ? new URLSearchParams(location.search).get('dice') : null;
+    const dicePath = (): 'canvas' | 'dom' => (devDice === 'dom' || devDice === 'canvas' ? devDice : (devQ ?? fxQualityOn(prefs.get(), native)) === 'off' ? 'dom' : 'canvas');
+    this.stage.dice.path = dicePath();
+    this.stopDicePrefs = prefs.onChange(() => (this.stage.dice.path = dicePath()));
     this.menuSlot = h('div', { class: 'menu-slot' });
     this.rotateOverlay = h(
       'div',
@@ -405,6 +413,7 @@ export class GameView {
     this.board.el.style.transform = '';
     this.dealer.dispose();
     this.stopPrefs();
+    this.stopDicePrefs();
     this.vfx.dispose();
     this.stage.dropCloseUp();
     this.stopWatch();

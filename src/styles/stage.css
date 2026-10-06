@@ -148,9 +148,15 @@
 }
 .face svg { width: 100%; height: 100%; display: block; }
 .face.is-side { background: linear-gradient(160deg, #C3CAD6 0%, #AEB6C4 100%); box-shadow: inset 0 0 0 max(1.5px, calc(var(--u) * 0.06)) #98A1B1; }
-/* Rolling: Dice.ts draws both tumbling, bouncing dice into one canvas over the pair. */
+/* Rolling / throwing: Dice.ts draws both dice into one canvas (the in-place roll over the pair, a
+   throw over its bounding box) while the DOM dice hide; or, with canvas effects off (the Android
+   default), moves the DOM dice themselves: one layer per die only while they fly. */
 .dice-canvas { position: absolute; pointer-events: none; }
-.dice.is-rolling .die { visibility: hidden; }
+.dice.is-canvas .die { visibility: hidden; }
+.dice.is-flying .die { will-change: transform; }
+/* "Throw me" wobble (Dice.invite): the pair is its own layer while a human's roll is up, so the
+   wobbles are compositor-only (no repaint when the second one starts 5 s later). */
+.dice.is-inviting .dice-pair { will-change: transform; }
 .dice.is-shaking .die { animation: lr-shake 120ms linear infinite; }
 .dice.is-shaking .die:nth-child(2) { animation-delay: -60ms; }
 @keyframes lr-shake {
@@ -437,6 +443,43 @@
 .native-webview .roll-btn::before { content: none; animation: none; }
 :root[data-motion="reduced"] .roll-btn::before { animation: none; }
 .roll-hint { font-size: max(12px, calc(var(--u) * 0.55)); color: #BCDAD6; font-weight: 700; }
+/* Without the roll button: the hint strip where it stood. */
+.roll-hint.is-strip {
+  padding: calc(var(--u) * 0.3) calc(var(--u) * 0.9);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 max(1px, calc(var(--u) * 0.05)) rgba(188, 218, 214, 0.35);
+  color: #D9EAE8;
+  text-align: center;
+}
+/* The roll card lets presses through to the pad under it (only its own controls take them). */
+.pc-roll { pointer-events: none; }
+.pc-roll .roll-btn, .pc-roll .timer-ring { pointer-events: auto; }
+/* The throw pad (Stage.armPad): transparent, over the dice area and the roll card's strip, under
+   the card itself. It paints nothing (no layer, no idle cost); keyboard focus shows a soft ring. */
+.roll-pad {
+  position: absolute;
+  top: 22%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--u) * 0.8);
+  background: none;
+  color: inherit;
+  cursor: grab;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.roll-pad.is-held { cursor: grabbing; }
+.roll-pad:disabled { cursor: default; }
+.roll-pad:focus { outline: none; }
+.roll-pad:focus-visible { outline: max(2px, calc(var(--u) * 0.1)) dashed rgba(255, 214, 107, 0.35); outline-offset: calc(var(--u) * -0.4); }
 .pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -1.2); top: auto; bottom: calc(var(--u) * 1.6); }
 
 /* Lists (festival / upgrade / debt) */

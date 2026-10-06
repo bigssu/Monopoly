@@ -1,5 +1,5 @@
 /**
- * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality, game pace, turn pause, dealer, money cut-in resolution / 3D).
+ * App preferences (language, sound, haptics, volume, prompt timer, last setup, battery saver, effects quality, game pace, turn pause, dealer, money cut-in resolution / 3D, roll button).
  *
  *   prefs.get().sound
  *   prefs.set({ volume: 0.6 })
@@ -42,6 +42,8 @@ export interface Prefs {
   moneyRes: MoneyResPref;
   /** Money cut-in 3D (hero tilt + board camera): auto by device tier, or forced on / off. */
   money3d: Money3dPref;
+  /** Show the roll button beside the throw pad (off: press, hold and flick the dice). */
+  rollButton: boolean;
 }
 
 export const MONEY_RES_PREFS = ['auto', 'high', 'low'] as const;
@@ -99,7 +101,7 @@ function detectLang(): Lang {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto' };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 15, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto', rollButton: false };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -123,6 +125,7 @@ function sanitize(raw: unknown): Prefs {
     motion: MOTION_PREFS.includes(r.motion as MotionPref) ? (r.motion as MotionPref) : d.motion,
     moneyRes: MONEY_RES_PREFS.includes(r.moneyRes as MoneyResPref) ? (r.moneyRes as MoneyResPref) : d.moneyRes,
     money3d: MONEY_3D_PREFS.includes(r.money3d as Money3dPref) ? (r.money3d as Money3dPref) : d.money3d,
+    rollButton: r.rollButton === true,
   };
 }
 

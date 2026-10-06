@@ -24,6 +24,15 @@ import { D, endSkip, frame, gamePace, headless, onFrame, setHeld, skip, whenRunn
 import { buildPromptFor } from '@/ui/stage/prompts';
 import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
+
+/** Settings "굴리기 버튼 보이기" (prefs may be unavailable in tests). */
+function rollButtonPref(): boolean {
+  try {
+    return prefs.get().rollButton;
+  } catch {
+    return false;
+  }
+}
 import { playMusic } from '@/ui/audio/music';
 import type { GameView } from './view';
 import { isDevHook } from './util';
@@ -263,6 +272,8 @@ export class GameController {
       act: (a) => void this.dispatch(a),
       board,
       dice: stage.dice,
+      stage,
+      rollButton: rollButtonPref(),
     });
     if (PROMPT_STATS && res) {
       // Dev (?dev=1): prompt build cost for scripts/perf*.mjs and docs/PERFORMANCE.md.
