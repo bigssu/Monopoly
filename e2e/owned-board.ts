@@ -6,7 +6,9 @@
  *  - every built space has ONE pop-out building element, mostly outside its card toward the
  *    board centre, inside the board, clear of the card's name and price and of every other
  *    building, never taking taps;
- *  - unowned spaces have no building and no owner fill.
+ *  - unowned spaces have no building and no owner fill;
+ *  - every seat panel lists exactly its player's spaces (no legend, nothing of anyone else's),
+ *    and its card is only as tall as its content, flush with its box's seat (or top) edge.
  * Returns a list of problems (empty = fine) plus counts for the caller's expectations.
  */
 import type { Page } from '@playwright/test';
@@ -98,6 +100,31 @@ export async function checkOwnedBoard(page: Page): Promise<OwnedReport> {
     const ix = (c: string): number => order.indexOf(c);
     if (!(ix('board-svg') < ix('board-bldgs') && ix('board-bldgs') < ix('stage-host') && ix('stage-host') < ix('token-layer') && ix('token-layer') < ix('board-overlay'))) {
       problems.push(`layer order ${order.join(' < ')}`);
+    }
+    // Seat panels (DESIGN.md §6 "Player panel"): each lists exactly its player's cities and hubs
+    // (nothing for anyone else's, no legend), and its card fits its content, flush with one edge.
+    for (const p of s.players) {
+      const pp = document.querySelector<HTMLElement>(`.pp[data-pid="${p.id}"]`);
+      if (!pp) {
+        problems.push(`panel ${p.id}: missing`);
+        continue;
+      }
+      const mine = s.properties.flatMap((pr, i) => (pr && pr.owner === p.id ? [i] : []));
+      const shown = [...pp.querySelectorAll<HTMLElement>('.own')].map((c) => Number(c.dataset.i)).sort((a, b) => a - b);
+      if (shown.join() !== mine.join()) problems.push(`panel ${p.id}: shows [${shown.join()}], owns [${mine.join()}]`);
+      const label = pp.querySelector('.pp-owned')?.getAttribute('aria-label') ?? '';
+      if (mine.length ? !label.includes(String(mine.length)) : !pp.querySelector('.pp-none')) problems.push(`panel ${p.id}: label "${label}" for ${mine.length} owned`);
+      if (pp.querySelector('.pp-sets-h, .pp-sets, .slot')) problems.push(`panel ${p.id}: the old set grid / legend is back`);
+      const card = pp.querySelector<HTMLElement>('.pp-card')!;
+      const top = card.offsetTop;
+      const below = pp.clientHeight - card.offsetTop - card.offsetHeight;
+      if (top < -0.5 || below < -0.5) problems.push(`panel ${p.id}: card ${card.offsetHeight}px spills out of its ${pp.clientHeight}px box`);
+      if (Math.abs(pp.classList.contains('is-top') ? top : below) > 1) problems.push(`panel ${p.id}: card not flush with its edge (${top} / ${below})`);
+      const cr = card.getBoundingClientRect();
+      for (const c of pp.querySelectorAll('.own')) {
+        const r = c.getBoundingClientRect();
+        if (r.left < cr.left - 1 || r.right > cr.right + 1 || r.top < cr.top - 1 || r.bottom > cr.bottom + 1) problems.push(`panel ${p.id}: chip ${(c as HTMLElement).dataset.i} outside the card`);
+      }
     }
     return { problems, owned, buildings: blds.length };
   }, colors);

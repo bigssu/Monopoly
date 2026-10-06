@@ -209,7 +209,7 @@ async function expectPanelsFit(page: Page): Promise<void> {
     }
     for (const pp of document.querySelectorAll<HTMLElement>('.pp')) {
       const box = pp.getBoundingClientRect();
-      for (const sel of ['.pp-name', '.pp-cash', '.pp-sets']) {
+      for (const sel of ['.pp-card', '.pp-name', '.pp-cash', '.pp-owned']) {
         const r = pp.querySelector(sel)?.getBoundingClientRect();
         if (r && (r.left < box.left - 1 || r.right > box.right + 1 || r.top < box.top - 1 || r.bottom > box.bottom + 1)) bad.push(`panel ${pp.dataset.seat} ${sel} spills out`);
       }

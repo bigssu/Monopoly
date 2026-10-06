@@ -87,13 +87,16 @@ test('nine-space board keeps every ownership chip inside small four-player panel
   await expect(page.locator('.board-base')).toBeVisible();
   const clipped = await page.locator('.pp-card').evaluateAll((cards) => cards.flatMap((card, player) => {
     const bounds = card.getBoundingClientRect();
-    return [...card.querySelectorAll('.slot')].flatMap((slot, index) => {
-      const r = slot.getBoundingClientRect();
+    return [...card.querySelectorAll('.own')].flatMap((chip, index) => {
+      const r = chip.getBoundingClientRect();
       return r.left < bounds.left - 1 || r.right > bounds.right + 1 || r.top < bounds.top - 1 || r.bottom > bounds.bottom + 1
-        ? [`player ${player}, slot ${index}`] : [];
+        ? [`player ${player}, chip ${index}`] : [];
     });
   }));
   expect(clipped).toEqual([]);
-  for (const panel of await page.locator('.pp').all()) await expect(panel).toHaveCSS('--member-tracks', '5');
+  // Only what each player owns: one chip for player 0, nothing (a short line) for the others.
+  await expect(page.locator('.pp[data-pid="0"] .own')).toHaveCount(1);
+  await expect(page.locator('.pp .own')).toHaveCount(1);
+  await expect(page.locator('.pp .pp-none')).toHaveCount(3);
   await page.screenshot({ path: test.info().outputPath('board-9-small-four-player.png'), scale: 'css' });
 });
