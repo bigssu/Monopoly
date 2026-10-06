@@ -303,7 +303,7 @@ test.describe('fixed view: one human vs CPUs', () => {
         const hook = window.__lotAndRoll!;
         hook.loadState(hook.getState()!);
       });
-      await page.waitForSelector('.st-prompt [data-action]', { timeout: 30_000 });
+      await page.waitForSelector('.stage [data-action]', { timeout: 30_000 });
       await page.waitForTimeout(600);
       await page.screenshot({ path: `${SHOTS}/fixed-mid-${size}.png` });
       await expectPanelsFit(page);

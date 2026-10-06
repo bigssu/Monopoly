@@ -14,7 +14,7 @@
  */
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, D, gridTimeout, headless, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
+import { anim, D, headless, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, isDevHook } from '@/ui/game/util';
 import { EASE } from '@/ui/fx/motion';
@@ -420,9 +420,11 @@ export class Dice {
     this.el.classList.add('is-inviting');
     const wobble = (n: number): void => void anim(this.pair, wobbleFrames(n), { duration: 400 * n, easing: 'linear' });
     wobble(3);
-    const cancel = gridTimeout(() => wobble(1), 5000);
+    // A plain timer (the wobble itself is quantized onto the grid by `anim`): a grid timeout set
+    // while a test's hand-driven clock runs would wait in manual time after it stops.
+    const id = window.setTimeout(() => wobble(1), 5000);
     this.inviteStop = () => {
-      cancel();
+      window.clearTimeout(id);
       for (const a of this.pair.getAnimations()) a.cancel();
       this.el.classList.remove('is-inviting');
     };

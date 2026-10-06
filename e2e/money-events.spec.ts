@@ -73,7 +73,7 @@ const stageLive = (page: Page): Promise<boolean> => page.evaluate(() => !!docume
 
 /** Click the prompt control for `action`, watch the stage come up, wait for the next human prompt. */
 async function act(page: Page, action: string): Promise<{ sawStage: boolean }> {
-  const btn = page.locator(`.st-prompt [data-action="${action}"]:not(:disabled)`).first();
+  const btn = page.locator(`.stage [data-action="${action}"]:not(:disabled)`).first();
   await expect(btn).toBeVisible({ timeout: 30_000 });
   const n0 = (await log(page)).length;
   await btn.click();
@@ -566,7 +566,7 @@ test.describe('a cut-in cut short (review round 1)', () => {
       if (how === 'resize') await page.setViewportSize({ width: 1500, height: 1000 });
       else await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
       expect(await idleWithin(page, 20_000), 'the game goes on (no hang)').toBe(true);
-      await expect(page.locator('.st-prompt [data-action]:not(:disabled)').first()).toBeVisible();
+      await expect(page.locator('.stage [data-action]:not(:disabled)').first()).toBeVisible();
       const r = await page.evaluate(() => {
         const s = window.__lotAndRoll!.getState()!;
         return {
