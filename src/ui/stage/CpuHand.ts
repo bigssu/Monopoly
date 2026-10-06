@@ -5,7 +5,9 @@
  * pressed state a finger gives it, with a ripple ring, and a board space is outlined — and the
  * controller dispatches at the release. The lift and exit play on under the decision's own
  * animation. A roll presses the dice on the roll pad, holds them while they rattle and flicks a
- * short stroke toward the board centre: the throw follows the stroke (`Dice.aim`). Which control
+ * short stroke toward the board centre: the throw follows the stroke (`Dice.aim`), at a medium
+ * strength picked per turn (`cpuFlick`: seeded by the game and the turn, so some CPU throws reach
+ * the screen's edges and some stay short). Which control
  * each action maps to: `handTarget.ts`. Timings: `HAND` in fx/motion.ts.
  *
  * Coordinates: the hand lives in a board-sized layer rotated to the CPU's drawn seat (SEAT_ANGLE
@@ -30,6 +32,7 @@ import { h, isDevHook, SEAT_ANGLE, svgNode } from '@/ui/game/util';
 import type { Board } from '@/ui/board/Board';
 import type { Stage } from './Stage';
 import { cpuHandTarget, type HandTarget } from './handTarget';
+import { cpuFlick } from './throw';
 
 /** Fingertip in the 64×64 art (scripts/icons-src/buildings.mjs, 'cpu-hand'), as fractions. */
 const TIP_X = 23.5 / 64;
@@ -250,10 +253,11 @@ export class CpuHand {
       hand.style.transform = flick;
       await anim(hand, [{ transform: down }, { transform: flick }], { duration: HAND.flick, easing: EASE.anticipate });
       if (!o.alive()) return this.drop();
-      const a = rad * -1 + ((Math.random() - 0.5) * 24 * Math.PI) / 180;
+      const st = o.state;
+      const pick = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
+      const a = rad * -1 + (pick.angle * Math.PI) / 180;
       // Layer "up" (0, -1) on screen: the layer is rotated by `angle` about the board centre.
-      const speed = 1500 + Math.random() * 700;
-      this.stage.dice.aim(this.stage.toLocal({ x: Math.sin(a) * speed, y: -Math.cos(a) * speed }));
+      this.stage.dice.aim(this.stage.toLocal({ x: Math.sin(a) * pick.speed, y: -Math.cos(a) * pick.speed }));
       lifted = flick;
       rest = at(qx, qy - H * 0.7, TILT + 4, 1);
     }
