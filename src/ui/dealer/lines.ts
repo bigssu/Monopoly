@@ -695,7 +695,7 @@ export const SITUATIONS: Record<string, Situation> = {
     level: 'min',
     priority: P.end,
     expr: 'present',
-    takes: [['이건 모은 땅 판이에요! 같은 색을 모두 모으면 통행료가 두 배, 점선 칸은 독점까지 한 칸 남은 땅이에요.', 'This is your set board! Own a whole colour to double its tolls; a dashed square is the one you still need.']],
+    takes: [['여기는 내가 산 땅이에요! 같은 색을 모두 모으면 통행료가 두 배, 금색 테두리는 다 모은 색이에요.', 'These are the lands you own! Own a whole colour to double its tolls; a gold rim marks a finished colour.']],
   },
   'explain.start': { level: 'normal', priority: P.info, expr: 'present', takes: [['출발 칸이에요! 지나갈 때마다 월급을 받아요.', 'This is Start! Collect a salary each time you pass.']] },
   'explain.city': { level: 'normal', priority: P.info, expr: 'present', takes: [['도시는 사서 건물을 올릴 수 있어요. 다른 사람이 오면 통행료를 받아요!', 'Buy cities and build. Others pay you tolls!']] },

@@ -1,49 +1,55 @@
 /**
- * A seat panel: token, name, cash (tweened), total assets, property chips, held cards,
- * island badge, turn glow, rank (last 3 rounds), bankrupt state. Rotated to face its seat
- * by layout.ts; content adapts to its own (pre-rotation) box with container queries.
+ * A seat panel: token, name, cash (tweened), total assets, the spaces this player owns (chips),
+ * held cards, island badge, turn glow, rank (last 3 rounds), bankrupt state. Rotated to face its
+ * seat by layout.ts; content adapts to its own (pre-rotation) box with container queries. The card
+ * is only as tall as its content and stands on the box's seat edge (panels.css), so `clientRect`
+ * reads the card, not the box.
  */
-import {
-  GROUP_IDS,
-  citiesInGroup,
-  getBoardInfo,
-  oneAwayWarnings,
-  ranking,
-  totalAssets,
-  type GameState,
-  type Player,
-  type SpacesPerSide,
-} from '@/engine';
+import { getBoardInfo, ranking, totalAssets, type GameState, type Player, type SpacesPerSide } from '@/engine';
 import { getCard } from '@/content/cards';
 import { fmtMoney, loc, t } from '@/i18n';
 import { anim, D, gridTimeout, headless, onFrame } from '@/ui/fx/time';
-import { chip, groupColor, h, iconEl, iconId, setPlayerVars, spaceIcon, svgNode } from '@/ui/game/util';
+import { chip, clamp, groupColor, h, iconEl, iconId, setPlayerVars, spaceIcon, svgNode } from '@/ui/game/util';
 import { atlasNode } from '@/ui/game/iconAtlas';
-import { playerColor } from '@/content/palette';
 import { EASE } from '@/ui/fx/motion';
+import { chipSize, ownedChips, type OwnedChip } from './owned';
 
 const CARD_ICON: Record<string, string> = { escape: 'cards-escape', 'toll-pass': 'cards-freepass', shield: 'cards-shield' };
 
-/** The set grid: one line per color group + one for hubs (board order). */
-const setsFor = (size: SpacesPerSide): readonly (readonly number[])[] => [...GROUP_IDS.map((g) => citiesInGroup(g, size)), getBoardInfo(size).hubIndices];
+/** Room for the owned chips in the panel's box (px, pre-rotation). */
+interface ChipRoom {
+  inner: number;
+  avail: number;
+  max: number;
+  /** Card padding, header-to-chips gap, header height without / with badges, empty line. */
+  pad: number;
+  gap: number;
+  head: number;
+  headBadges: number;
+  none: number;
+}
 
 export class PlayerPanel {
   readonly el: HTMLElement;
-  /** Draw the set-square pictures not drawn yet: from the atlas once it is ready, else the sprite. */
+  /** Draw the chip pictures not drawn yet: from the atlas once it is ready, else the sprite. */
   fillIcons(): void {
-    for (const [ico, id] of this.slotIcons) ico.append(atlasNode(iconId(id)) ?? svgNode(id));
-    this.slotIcons = [];
+    for (const [ico, id] of this.chipIcons) ico.append(atlasNode(iconId(id)) ?? svgNode(id));
+    this.chipIcons = [];
   }
 
-  /** The set grid was tapped (the dealer explains it). */
+  /** The owned chips were tapped (the dealer explains them). */
   onSetsTap: (() => void) | null = null;
   private cardEl: HTMLElement;
   private cashNum: HTMLElement;
   private assets: HTMLElement;
-  private chips: HTMLElement;
-  private slots: Map<number, HTMLElement>;
-  /** Set-square pictures still to draw (see `fillIcons`). */
-  private slotIcons: Array<[HTMLElement, string]> = [];
+  private owned: HTMLElement;
+  private none: HTMLElement;
+  /** One chip per owned space, created when bought, dropped when lost. */
+  private chips = new Map<number, HTMLElement>();
+  /** Last rendered class + level of every chip. */
+  private chipState = new Map<number, { cls: string; level: number }>();
+  /** Chip pictures still to draw (see `fillIcons`). */
+  private chipIcons: Array<[HTMLElement, string]> = [];
   private badges: HTMLElement;
   private rank: HTMLElement;
   private floats: HTMLElement;
@@ -53,20 +59,19 @@ export class PlayerPanel {
   private target = 0;
   private stopTween: (() => void) | null = null;
   private sig = '';
+  private ownedKey = '';
   private badgeKey = '';
-  /** Last rendered class + content (0 = empty, 1-3 pips, 4 = star) of every set slot. */
-  private slotState = new Map<number, { cls: string; content: number }>();
+  private owns = 0;
+  /** Chip rows + size + badge count: when it changes, so does the card's height. */
+  private shape = '';
+  private room: ChipRoom = { inner: 200, avail: 200, max: 32, pad: 8, gap: 5, head: 32, headBadges: 32, none: 14 };
+  private chipBox = { size: 0, gap: 0, rows: 0 };
 
-  private readonly sets: readonly (readonly number[])[];
   private readonly board;
-  private readonly maxMembers: number;
 
   constructor(readonly player: Player, size: SpacesPerSide = 7) {
-    this.sets = setsFor(size);
     this.board = getBoardInfo(size).board;
-    this.maxMembers = Math.max(...this.sets.map((set) => set.length));
     this.el = h('div', { class: player.isCpu ? 'pp is-cpu' : 'pp', 'data-seat': player.seat, 'data-pid': player.id });
-    this.el.style.setProperty('--member-tracks', String(this.maxMembers));
     setPlayerVars(this.el, player.colorId);
     const badge = h('span', { class: 'pp-tok' }, svgNode(player.tokenId));
     this.rank = h('span', { class: 'pp-rank' });
@@ -77,77 +82,80 @@ export class PlayerPanel {
     this.cashNum = h('span', { class: 'pp-cash-n' });
     const cash = h('div', { class: 'pp-cash' }, iconEl('coin', 'ico pp-coin'), this.cashNum);
     this.assets = h('div', { class: 'pp-assets' });
-    this.chips = h('div', { class: 'pp-sets', role: 'button', tabindex: '0', 'aria-label': t('g.panel.setsHelp') });
-    // What the grid is: one square per city (rows = colour groups, circles = hubs).
-    const setsHead = h(
-      'div',
-      { class: 'pp-sets-h', 'aria-hidden': 'true' },
-      h('b', { text: t('g.panel.sets') }),
-      h('span', { class: 'lg-mine' }, h('i'), t('g.panel.setsMine')),
-      h('span', { class: 'lg-miss' }, h('i'), t('g.panel.setsMissing')),
-      h('span', { class: 'lg-taken' }, h('i'), t('g.panel.setsTaken')),
-    );
+    // Only what this player owns: one chip per city / hub (owned.ts), nothing for anyone else's.
+    this.none = h('span', { class: 'pp-none', text: t('g.panel.noProps') });
+    this.owned = h('div', { class: 'pp-owned', role: 'button', tabindex: '0', 'aria-label': t('g.panel.noProps') }, this.none);
     const explain = (): void => this.onSetsTap?.();
-    for (const el of [this.chips, setsHead]) el.addEventListener('click', explain);
-    this.chips.addEventListener('keydown', (e) => {
+    this.owned.addEventListener('click', explain);
+    this.owned.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         explain();
       }
     });
-    this.slots = new Map();
-    this.sets.forEach((members, g) => {
-      members.forEach((i, k) => {
-        const sp = this.board[i]!;
-        const slot = h('span', { class: `slot${sp.kind === 'hub' ? ' is-hub' : ''}` });
-        // Each square shows its city's landmark (or the hub): faded until it is mine.
-        // From the icon atlas (one element each). Until the game's atlas is ready they stay empty and
-        // `fillIcons` draws them: 28 sprite <use> shadow trees per panel made the panels most of the
-        // game's first layout (docs/PERFORMANCE.md "라운드 2").
-        const ico = h('span', { class: 'ico slot-ico', 'aria-hidden': 'true' });
-        const id = spaceIcon(sp);
-        const bm = atlasNode(iconId(id));
-        if (bm) ico.append(bm);
-        else this.slotIcons.push([ico, id]);
-        slot.append(ico, h('span', { class: 'slot-mark' }));
-        slot.style.setProperty('--gc', groupColor(sp) ?? '#7B8AA3');
-        slot.style.setProperty('--g', String(g + 1));
-        slot.style.setProperty('--k', String(k + 1));
-        slot.title = loc(sp.short);
-        this.chips.append(slot);
-        this.slots.set(i, slot);
-      });
-    });
     this.floats = h('div', { class: 'pp-floats' });
     this.wash = h('div', { class: 'pp-wash' });
     const head = h('div', { class: 'pp-head' }, h('div', { class: 'pp-tokwrap' }, badge, this.rank), h('div', { class: 'pp-id' }, name, cash, h('div', { class: 'pp-sub' }, this.assets, this.badges)));
-    this.cardEl = h('div', { class: 'pp-card' }, head, setsHead, this.chips, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats, this.wash);
+    this.cardEl = h('div', { class: 'pp-card' }, head, this.owned, h('div', { class: 'pp-broken', 'data-label': t('g.panel.bankrupt') }), this.floats, this.wash);
     this.el.append(this.cardEl);
     this.shown = player.cash;
     this.target = player.cash;
     this.cashNum.textContent = fmtMoney(player.cash);
   }
 
-  /** Choose the set-grid orientation that gives the biggest chips for this box (px, pre-rotation). */
+  /**
+   * The panel's box (px, pre-rotation): how much room the chips have under the header. The
+   * header sizes mirror panels.css (.pp-card padding / gap, .pp-tok, .pp-name, .pp-cash,
+   * .pp-assets, .pp-badges .chip; narrow and .is-wide variants).
+   */
   setBox(w: number, hgt: number): void {
-    const pad = Math.max(8, Math.min(w, hgt) * 0.05);
+    const m = Math.min(w, hgt);
+    const pad = clamp(m * 0.05, 8, 18);
+    const gap = clamp(m * 0.03, 5, 14);
     const wide = w / hgt >= 1.25;
-    const tok = Math.max(32, Math.min(104, wide ? Math.min(0.2 * w, 0.3 * hgt) : Math.min(0.3 * w, 0.22 * hgt)));
+    const tok = clamp(wide ? Math.min(0.2 * w, 0.3 * hgt) : Math.min(0.3 * w, 0.22 * hgt), 32, 104);
+    const name = clamp(wide ? Math.min(0.06 * w, 0.1 * hgt) : Math.min(0.09 * w, 0.07 * hgt), 13, 28);
+    const cash = clamp(wide ? Math.min(0.09 * w, 0.145 * hgt) : Math.min(0.14 * w, 0.1 * hgt), 17, 46);
+    const sub = clamp(wide ? Math.min(0.038 * w, 0.06 * hgt) : Math.min(0.056 * w, 0.042 * hgt), 11, 17);
+    const badge = clamp(Math.min(0.1 * w, 0.08 * hgt), 20, 32);
+    const id = name * 1.15 + cash * 1.1 + m * 0.01;
+    const head = Math.max(tok, id + sub * 1.3);
+    const headBadges = Math.max(tok, id + Math.max(sub * 1.3, badge));
     const inner = w - pad * 2;
-    // Leave room for the set grid's title + legend, which wraps on narrow cards: its font follows
-    // panels.css (.pp-sets-h, clamp(11px, min(4.4cqw, 3.4cqh), 14px)) and it is ~17em long.
-    const font = Math.max(11, Math.min(0.044 * w, 0.034 * hgt, 14));
-    const head = Math.ceil((17 * font) / inner) * font * 1.25;
-    const avail = hgt - tok - pad * 3 - head;
-    const colsMode = Math.min(inner / this.sets.length, avail / this.maxMembers);
-    const rowsMode = Math.min(inner / this.maxMembers, avail / this.sets.length);
-    const rows = rowsMode > colsMode * 1.05;
-    this.chips.classList.toggle('is-rows', rows);
-    this.chips.classList.toggle('is-cols', !rows);
-    this.el.style.setProperty('--slot', `${Math.floor(Math.max(10, (rows ? rowsMode : colsMode) * 0.84))}px`);
+    const none = clamp(Math.min(0.05 * w, 0.036 * hgt), 11, 15) * 1.3;
+    this.room = { inner, avail: Math.max(0, hgt - pad * 2 - headBadges - gap) * 0.95, max: clamp(Math.min(tok * 0.48, inner / 5.2), 18, 48), pad, gap, head, headBadges, none };
+    this.shape = '';
+    this.layoutChips();
   }
 
-  update(state: GameState, opts: { isTurn: boolean }): void {
+  /** Size the chips so every owned space fits the box; returns the shape key. */
+  private layoutChips(): string {
+    const { size, gap, rows } = chipSize(Math.max(1, this.owns), this.room.inner, this.room.avail, this.room.max, 12);
+    this.chipBox = { size, gap, rows: this.owns ? rows : 0 };
+    const s = `${size}px`;
+    if (this.owned.style.getPropertyValue('--chip') !== s) {
+      this.owned.style.setProperty('--chip', s);
+      this.owned.style.setProperty('--chip-gap', `${gap}px`);
+    }
+    return `${this.owns ? rows : 0}|${size}|${this.badges.childElementCount}`;
+  }
+
+  /**
+   * The card's height (px, pre-rotation) from the box sizes and what it shows: the game view turns
+   * it into the card's client rect (layout.ts `cardRect`) without measuring the DOM.
+   */
+  cardHeight(): number {
+    const r = this.room;
+    const head = this.badges.childElementCount ? r.headBadges : r.head;
+    const { size, gap, rows } = this.chipBox;
+    return r.pad * 2 + head + r.gap + (rows ? rows * (size + gap) - gap : r.none);
+  }
+
+  /**
+   * Render the state. Returns true when the card's height may have changed (chip rows, chip
+   * size, badges): a cached client rect of the card is stale then.
+   */
+  update(state: GameState, opts: { isTurn: boolean }): boolean {
     const p = state.players[this.player.id]!;
     this.el.classList.toggle('is-turn', opts.isTurn && !p.bankrupt);
     this.el.classList.toggle('is-bankrupt', p.bankrupt);
@@ -157,11 +165,10 @@ export class PlayerPanel {
     const limit = state.settings.roundLimit;
     const showRank = limit !== null && state.round > limit - 3;
     const r = showRank ? (ranking(state).find((e) => e.playerId === p.id)?.rank ?? 0) : 0;
-    // Mine with level, or who else owns it (others' squares get the owner's colour dot).
-    const props = this.sets.flat().map((i) => { const o = state.properties[i]?.owner; return o === p.id ? `${state.properties[i]!.level}` : o === null || o === undefined ? '-' : `o${o}`; });
-    const away = oneAwayWarnings(state).filter((w) => w.playerId === p.id && w.kind !== 'line').map((w) => w.missing);
-    const sig = [totalAssets(state, p.id), r, props.join(','), away.join(','), p.cards.join(','), p.islandTurns, state.festival, p.expressPending, p.travelPending].join('|');
-    if (sig === this.sig) return;
+    const chips = ownedChips(state, p.id);
+    const ownedKey = chips.map((c) => `${c.index}:${c.level}:${c.complete ? 1 : 0}:${c.festival ? 1 : 0}`).join(',');
+    const sig = [totalAssets(state, p.id), r, ownedKey, p.cards.join(','), p.islandTurns, p.expressPending, p.travelPending].join('|');
+    if (sig === this.sig) return false;
     this.sig = sig;
     const assets = t('g.panel.assets', { amount: fmtMoney(totalAssets(state, p.id)) });
     if (this.assets.textContent !== assets) this.assets.textContent = assets;
@@ -169,43 +176,72 @@ export class PlayerPanel {
     if (this.rank.textContent !== rank) this.rank.textContent = rank;
     this.rank.classList.toggle('is-on', r > 0);
     this.rank.classList.toggle('is-first', r === 1);
-    // Set grid.
-    this.sets.forEach((members) => {
-      const complete = members.every((i) => state.properties[i]?.owner === p.id);
-      for (const i of members) {
-        const slot = this.slots.get(i)!;
-        const pr = state.properties[i]!;
-        const mine = pr.owner === p.id;
-        const taken = !mine && pr.owner !== null;
-        const cls = `slot${this.board[i]!.kind === 'hub' ? ' is-hub' : ''}${mine ? ' is-mine' : ''}${taken ? ' is-taken' : ''}${complete ? ' is-complete' : ''}${mine && pr.level === 4 ? ' is-lm' : ''}${mine && state.festival === i ? ' is-fest' : ''}${!mine && away.includes(i) ? ' is-missing' : ''}`;
-        if (taken) slot.style.setProperty('--oc', playerColor(state.players[pr.owner!]!.colorId).hex);
-        // Only touch slots that changed: rebuilding all 28 on every money change restyled and
-        // re-laid-out ~250 elements per panel (docs/PERFORMANCE.md).
-        const content = mine ? pr.level : 0;
-        const prev = this.slotState.get(i);
-        if (prev && prev.cls === cls && prev.content === content) continue;
-        this.slotState.set(i, { cls, content });
-        if (slot.className !== cls) slot.className = cls;
-        if (prev?.content === content) continue;
-        // The icon stays; only the building mark (pips / landmark star) is redrawn.
-        const mark = slot.querySelector('.slot-mark')!;
-        mark.textContent = '';
-        if (mine && pr.level > 0 && pr.level < 4) {
-          const pips = h('span', { class: 'slot-pips' });
-          for (let k = 0; k < pr.level; k++) pips.append(h('i'));
-          mark.append(pips);
-        } else if (mine && pr.level === 4) mark.append(h('span', { class: 'slot-star', text: '★' }));
-      }
-    });
+    if (ownedKey !== this.ownedKey) {
+      this.ownedKey = ownedKey;
+      this.owns = chips.length;
+      this.renderChips(chips);
+    }
     // Badges (rebuilt only when they change).
     const badgeKey = [p.islandTurns, p.travelPending, p.expressPending, p.cards.join(',')].join('|');
-    if (badgeKey === this.badgeKey) return;
-    this.badgeKey = badgeKey;
-    this.badges.innerHTML = '';
-    if (p.islandTurns > 0) this.badges.append(chip({ icon: 'corner-island', text: String(p.islandTurns), tone: 'info', label: t('g.island.stay', { n: p.islandTurns }) }));
-    if (p.travelPending) this.badges.append(chip({ icon: 'corner-tour', label: t('g.kind.travel') }));
-    if (p.expressPending) this.badges.append(chip({ icon: 'hub-rail', text: '×2', label: t('g.express') }));
-    for (const c of p.cards) this.badges.append(chip({ icon: CARD_ICON[c] ?? 'cards-escape', tone: 'gold', cls: 'is-card', label: loc(getCard(c).title) }));
+    if (badgeKey !== this.badgeKey) {
+      this.badgeKey = badgeKey;
+      this.badges.innerHTML = '';
+      if (p.islandTurns > 0) this.badges.append(chip({ icon: 'corner-island', text: String(p.islandTurns), tone: 'info', label: t('g.island.stay', { n: p.islandTurns }) }));
+      if (p.travelPending) this.badges.append(chip({ icon: 'corner-tour', label: t('g.kind.travel') }));
+      if (p.expressPending) this.badges.append(chip({ icon: 'hub-rail', text: '×2', label: t('g.express') }));
+      for (const c of p.cards) this.badges.append(chip({ icon: CARD_ICON[c] ?? 'cards-escape', tone: 'gold', cls: 'is-card', label: loc(getCard(c).title) }));
+    }
+    const shape = this.layoutChips();
+    if (shape === this.shape) return false;
+    this.shape = shape;
+    return true;
+  }
+
+  /** Owned chips in owned.ts order; only chips that changed are touched (a buy adds one element). */
+  private renderChips(chips: readonly OwnedChip[]): void {
+    const label = chips.length ? t('g.panel.owned', { n: chips.length }) : t('g.panel.noProps');
+    if (this.owned.getAttribute('aria-label') !== label) this.owned.setAttribute('aria-label', label);
+    if (chips.length) this.none.remove();
+    else if (!this.none.isConnected) this.owned.append(this.none);
+    const keep = new Set(chips.map((c) => c.index));
+    for (const [i, el] of this.chips) {
+      if (keep.has(i)) continue;
+      el.remove();
+      this.chips.delete(i);
+      this.chipState.delete(i);
+    }
+    chips.forEach((c, k) => {
+      let el = this.chips.get(c.index);
+      if (!el) {
+        const sp = this.board[c.index]!;
+        // The city's landmark (or the hub) from the icon atlas (one element); until the game's
+        // atlas is ready the chip stays empty and `fillIcons` draws it.
+        const ico = h('span', { class: 'ico own-ico', 'aria-hidden': 'true' });
+        const id = spaceIcon(sp);
+        const bm = atlasNode(iconId(id));
+        if (bm) ico.append(bm);
+        else this.chipIcons.push([ico, id]);
+        el = h('span', { class: 'own', 'data-i': c.index }, ico, h('span', { class: 'own-mark' }));
+        el.style.setProperty('--gc', groupColor(sp) ?? '#7B8AA3');
+        el.title = loc(sp.short);
+        this.chips.set(c.index, el);
+      }
+      if (this.owned.children[k] !== el) this.owned.insertBefore(el, this.owned.children[k] ?? null);
+      const cls = `own${c.kind === 'hub' ? ' is-hub' : ''}${c.complete ? ' is-complete' : ''}${c.level === 4 ? ' is-lm' : ''}${c.festival ? ' is-fest' : ''}`;
+      const prev = this.chipState.get(c.index);
+      if (prev && prev.cls === cls && prev.level === c.level) return;
+      this.chipState.set(c.index, { cls, level: c.level });
+      if (el.className !== cls) el.className = cls;
+      if (prev?.level === c.level) return;
+      // The building mark: 1-3 pips (villa / building / hotel) or the landmark star.
+      const mark = el.lastElementChild!;
+      mark.textContent = '';
+      if (c.level > 0 && c.level < 4) {
+        const pips = h('span', { class: 'own-pips' });
+        for (let n = 0; n < c.level; n++) pips.append(h('i'));
+        mark.append(pips);
+      } else if (c.level === 4) mark.append(h('span', { class: 'own-star', text: '★' }));
+    });
   }
 
   private tweenTo(v: number): void {
@@ -304,14 +340,14 @@ export class PlayerPanel {
     );
   }
 
-  /** Client rect (fx engine `getPanelRect`). */
+  /** Client rect of the card (fx `getPanelRect`, money-stage wallets): the box around it can be taller. */
   clientRect(): DOMRect {
-    return this.el.getBoundingClientRect();
+    return this.cardEl.getBoundingClientRect();
   }
 
-  /** Centre in client px (for coin arcs). */
+  /** Centre of the card in client px (for coin arcs). */
   clientCenter(): { x: number; y: number } {
-    const r = this.el.getBoundingClientRect();
+    const r = this.cardEl.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
 

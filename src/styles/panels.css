@@ -1,47 +1,43 @@
-/* Seat panels. Each .pp is sized (pre-rotation) and rotated by layout.ts; the card lays out with
-   container queries against its own box, so the same markup works as a strip or a column. */
+/* Seat panels. Each .pp is a box sized (pre-rotation) and rotated by layout.ts; the card lays out
+   with container queries against that box, so the same markup works as a strip or a column.
+   The card is only as tall as its content (header + the owned chips) and stands on the box's seat
+   edge, the pre-rotation bottom (.is-top: the top edge, fixed view N / E; layout.ts `cardOnTop`).
+   The rest of the box is empty and lets taps through. */
 
-.pp { position: absolute; z-index: 5; container-type: size; }
+.pp { position: absolute; z-index: 5; container-type: size; pointer-events: none; }
 .pp-card {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   gap: clamp(5px, 3cqmin, 14px);
   padding: clamp(8px, 5cqmin, 18px);
-  overflow: hidden;
   border-radius: clamp(14px, 7cqmin, 24px);
   background: linear-gradient(180deg, #FFFFFF 0%, #F4F6FA 100%);
-  box-shadow: inset 0 clamp(4px, 2.2cqmin, 8px) 0 var(--pc);
+  /* Top colour bar, then the resting drop shadow; the turn swaps the shadow for the glow rings. */
+  box-shadow:
+    inset 0 clamp(4px, 2.2cqmin, 8px) 0 var(--pc),
+    0 3px 8px rgba(0, 0, 0, 0.38),
+    0 2px 0 rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
   transition: opacity var(--t-slow);
 }
-/* Resting drop shadow (::before) and turn glow rings (::after) are pre-painted on the panel's
-   own pseudo-elements and switched by opacity at a turn change — instantly: a crossfade promoted
-   both pseudo-elements of both panels to GPU layers for its duration (and repainted them on
-   promotion and demotion, docs/PERFORMANCE.md); the pulsing ring below marks the turn anyway. */
-/* Both sit UNDER the card (z-index -1 in the panel's stacking context), and their spread stays
-   inside the 14 px gutter between panels and board: a shadow reaching over the board, or painted
-   above an animating wash, made Chrome lift whole panels (and once, both side columns in one
-   1600 px wide "overlap" layer, 24 MB) onto extra GPU layers (docs/PERFORMANCE.md). */
-.pp::before,
-.pp::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: clamp(14px, 7cqmin, 24px);
-  pointer-events: none;
-}
-.pp::before { box-shadow: 0 3px 8px rgba(0, 0, 0, 0.38), 0 2px 0 rgba(0, 0, 0, 0.2); }
-.pp::after {
-  opacity: 0;
+.pp.is-top .pp-card { top: 0; bottom: auto; }
+/* Shadow and glow are the card's own box-shadow (painted with its background, under the content
+   and under the animating wash), switched instantly at a turn change: a crossfade promoted extra
+   pseudo-element layers for its duration (docs/PERFORMANCE.md); the pulsing ring below marks the
+   turn anyway. Their spread stays inside the 14 px gutter between panels and board: a shadow
+   reaching over the board made Chrome lift whole panels onto extra GPU layers. */
+.pp.is-turn .pp-card {
   box-shadow:
+    inset 0 clamp(4px, 2.2cqmin, 8px) 0 var(--pc),
     0 0 0 3px var(--pc),
     0 0 0 6px rgba(255, 255, 255, 0.85),
     0 0 7px 3px var(--pc);
 }
-.pp.is-turn::before { opacity: 0; }
-.pp.is-turn::after { opacity: 1; }
 /* The pulsing ring calls a HUMAN to act; a CPU's turn keeps the static glow (a compositor pulse
    running under the CPU's dense main-thread updates cost ~2 extra presented frames/s). */
 .pp.is-turn:not(.is-cpu) .pp-card::before {
@@ -145,52 +141,36 @@
   background: rgba(232, 86, 79, 0.12);
 }
 
-/* Set grid: one line per color group (+ hubs). Orientation chosen in PlayerPanel.setBox. */
-.pp-sets {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  gap: clamp(2px, 1.2cqmin, 6px);
-  align-content: center;
-  justify-content: center;
+/* Owned chips: only the spaces this player owns (owned.ts order), wrapping in rows. Chip size and
+   gap come from PlayerPanel.setBox / update (--chip, --chip-gap) so every chip fits the box. */
+.pp-owned {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--chip-gap, 4px);
+  cursor: pointer;
 }
-.pp-sets.is-cols { grid-template-columns: repeat(8, var(--slot)); grid-template-rows: repeat(var(--member-tracks, 4), var(--slot)); }
-.pp-sets.is-rows { grid-template-columns: repeat(var(--member-tracks, 4), var(--slot)); grid-template-rows: repeat(8, var(--slot)); }
-.pp-sets.is-cols .slot { grid-column: var(--g); grid-row: var(--k); }
-.pp-sets.is-rows .slot { grid-row: var(--g); grid-column: var(--k); }
-/* Rings are outlines (outline-offset = -width draws exactly the old inset box-shadow ring) and
-   the owned shade is a gradient band: ~90 slots rasterize as plain fills, no shadow passes. */
-.slot {
-  --ring: max(1.5px, calc(var(--slot) * 0.07));
+.pp-none {
+  font-size: clamp(11px, min(5cqw, 3.6cqh), 15px);
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--ink-3);
+}
+/* Rings are outlines and the shade is a gradient band: chips rasterize as plain fills. */
+.own {
   position: relative;
-  width: var(--slot);
-  height: var(--slot);
+  flex: none;
+  width: var(--chip);
+  height: var(--chip);
   border-radius: 26%;
-  background: color-mix(in srgb, var(--gc) 14%, #fff);
-  outline: var(--ring) solid color-mix(in srgb, var(--gc) 45%, #fff);
-  outline-offset: calc(var(--ring) * -1);
-}
-.slot.is-hub { border-radius: 50%; }
-.slot.is-mine {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.2) 10%, transparent 10%), var(--gc);
-  outline: none;
 }
-.slot.is-complete.is-mine {
-  --ring: max(2px, calc(var(--slot) * 0.1));
-  outline: var(--ring) solid #FFD15C;
-  outline-offset: 0;
-}
-.slot.is-lm { outline: max(3px, calc(var(--slot) * 0.14)) solid #FFD66B; outline-offset: 0; }
-.slot.is-missing {
-  --ring: max(2px, calc(var(--slot) * 0.1));
-  background: #fff;
-  outline: var(--ring) solid var(--gc);
-  outline-offset: calc(var(--ring) * -1);
-  /* Static (formerly a perpetual opacity pulse: one GPU layer per missing slot, plus overlap
-     layers for everything painted above it in the panel). */
-  outline-style: dashed;
-}
-.slot.is-fest::after {
+.own.is-hub { border-radius: 50%; }
+/* Every city of the colour (every hub) is this player's: a gold rim. */
+.own.is-complete { outline: max(2px, calc(var(--chip) * 0.1)) solid #FFD15C; outline-offset: 0; }
+.own.is-lm { outline: max(3px, calc(var(--chip) * 0.14)) solid #FFD66B; outline-offset: 0; }
+.own.is-fest::after {
   content: '';
   position: absolute;
   right: -8%;
@@ -201,9 +181,12 @@
   background: #E8564F;
   outline: 1.5px solid #fff;
 }
-.slot-pips { position: absolute; left: 0; right: 0; bottom: 16%; display: flex; justify-content: center; gap: 9%; }
-.slot-pips i { width: 20%; aspect-ratio: 1; border-radius: 50%; background: #fff; outline: 1px solid rgba(0, 0, 0, 0.12); }
-.slot-star { position: absolute; right: -10%; top: -14%; color: #FFD15C; font-size: calc(var(--slot) * 0.46); line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
+.own-ico { position: absolute; left: 10%; top: 6%; width: 80%; height: 80%; }
+.own-mark { position: absolute; inset: 0; pointer-events: none; }
+/* Building level: 1-3 pips (villa / building / hotel), a star for a landmark. */
+.own-pips { position: absolute; left: 0; right: 0; bottom: 16%; display: flex; justify-content: center; gap: 9%; }
+.own-pips i { width: 20%; aspect-ratio: 1; border-radius: 50%; background: #fff; outline: 1px solid rgba(0, 0, 0, 0.12); }
+.own-star { position: absolute; right: -10%; top: -14%; color: #FFD15C; font-size: calc(var(--chip) * 0.46); line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35); }
 
 .pp-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6cqmin 1.5cqmin; min-width: 0; }
 .pp-sub .pp-assets { flex: 0 1 auto; min-width: 0; }
@@ -223,7 +206,8 @@
 .pp-badges .chip > .ico { width: auto; height: 88%; aspect-ratio: 1; }
 .pp-badges .chip.is-card { padding: 0 0.15em; }
 
-.pp-floats { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+/* Rising numbers stay inside the card (it used to clip everything; now only this layer does). */
+.pp-floats { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; overflow: hidden; }
 .pp-float {
   position: absolute;
   left: 50%;
@@ -275,22 +259,3 @@
   font-size: clamp(18px, 14cqmin, 44px);
   transform: rotate(-12deg);
 }
-
-/* Set grid title + legend: what the squares are (mine / one to go for the set). */
-.pp-sets-h { display: flex; align-items: center; justify-content: center; gap: 0 2.4cqmin; flex-wrap: wrap; font-size: clamp(11px, min(4.4cqw, 3.4cqh), 14px); font-weight: 800; color: var(--ink-2); cursor: pointer; }
-.pp-sets-h b { color: var(--ink-2); font-weight: 900; }
-.pp-sets-h span { display: inline-flex; align-items: center; gap: .3em; }
-.pp-sets-h i { width: .9em; height: .9em; border-radius: 26%; }
-.pp-sets-h .lg-mine i { background: var(--pc); }
-.pp-sets-h .lg-miss i { outline: 1.5px dashed var(--pc); outline-offset: -1.5px; }
-.pp-sets { cursor: pointer; }
-
-/* Set squares as pictures: the city landmark / hub icon, faded until owned. */
-.slot-ico { position: absolute; left: 10%; top: 6%; width: 80%; height: 80%; opacity: .32; }
-.slot.is-mine .slot-ico { opacity: 1; }
-.slot.is-missing .slot-ico { opacity: .75; }
-.slot-mark { position: absolute; inset: 0; pointer-events: none; }
-/* Owned by someone else: their colour dot in the corner (who holds it). */
-.slot.is-taken .slot-ico { opacity: .55; }
-.slot.is-taken::before { content: ''; position: absolute; left: -8%; top: -8%; width: 34%; height: 34%; border-radius: 50%; background: var(--oc); outline: 1.5px solid #fff; }
-.pp-sets-h .lg-taken i { border-radius: 50%; background: var(--ink-3); }

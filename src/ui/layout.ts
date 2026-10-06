@@ -115,6 +115,31 @@ export function computeLayout(W: number, H: number, seats: ReadonlySet<Seat>, up
   return { W, H, portrait, pad, board, u: size / 32, menu, seats: out };
 }
 
+/**
+ * A seat panel's card is only as tall as its content (DESIGN §6 "Player panel") and stands on one
+ * edge of the panel box: its seat edge (the box's pre-rotation bottom, which faces that seat), or,
+ * in the fixed view, the top edge for the two top seats (N, E) so they hang from the screen top.
+ */
+export function cardOnTop(seat: Seat, upright: boolean): boolean {
+  return upright && (seat === 'N' || seat === 'E');
+}
+
+/** The card's rect (client px) inside its seat box, from its pre-rotation height. */
+export function cardRect(b: SeatBox, cardH: number, onTop: boolean): Rect {
+  const ch = Math.min(b.innerH, Math.max(0, cardH));
+  // Card centre relative to the box centre, pre-rotation (y down), then rotated like the box.
+  const off = ((b.innerH - ch) / 2) * (onTop ? -1 : 1);
+  const r = (b.rot * Math.PI) / 180;
+  const dx = Math.round(-off * Math.sin(r) * 1000) / 1000;
+  const dy = Math.round(off * Math.cos(r) * 1000) / 1000;
+  const quarter = Math.abs(b.rot) % 180 === 90;
+  const w = quarter ? ch : b.innerW;
+  const hh = quarter ? b.innerW : ch;
+  const cx = b.x + b.w / 2 + dx;
+  const cy = b.y + b.h / 2 + dy;
+  return { x: cx - w / 2, y: cy - hh / 2, w, h: hh };
+}
+
 /** Position an element absolutely at a rect (px). */
 export function placeRect(el: HTMLElement, r: Rect): void {
   el.style.left = `${r.x}px`;

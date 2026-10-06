@@ -16,7 +16,7 @@ import { shakeAll } from '@/ui/fx/shake';
 import { sfx, type SfxName } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { playerColor } from '@/content/palette';
-import { computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
+import { cardOnTop, cardRect, computeLayout, placeRect, placeSeat, setBoardVar, watchViewport, type GameLayout } from '@/ui/layout';
 import { h, iconEl, isDevHook, prepareGameIcons, primeIconTints } from './util';
 import { disposeIconAtlas } from './iconAtlas';
 import { fxQualityOn, prefs } from '@/ui/shell/prefs';
@@ -107,7 +107,7 @@ export class GameView {
       getLayerRect: () => this.rect('layer', () => this.fx.getBoundingClientRect()),
       getBoardRect: () => this.rect('board', () => this.board.el.getBoundingClientRect()),
       getSpaceRect: (i) => this.board.spaceRect(i, this.rect('board', () => this.board.el.getBoundingClientRect())),
-      getPanelRect: (id) => (this.panels.has(id) ? this.rect(`p${id}`, () => this.panels.get(id)!.clientRect()) : null),
+      getPanelRect: (id) => this.panelRect(id),
       getSeat: (id) => this.seatOf(id),
       getFaceSeat: (id) => this.faceOf(id),
       getStageRect: () => this.rect('stage', () => this.stage.el.getBoundingClientRect()),
@@ -229,7 +229,7 @@ export class GameView {
       },
       seatRect: (seat) => {
         const p = this.state.players.find((q) => this.orient.seat(q.seat) === seat);
-        const r = p ? this.rects.get(`p${p.id}`) : undefined;
+        const r = p ? this.panelRect(p.id) : null;
         return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
       },
       tileRect: (i) => (defs[i] ? toRect(this.board.spaceRect(i, boardRect())) : null),
@@ -279,6 +279,22 @@ export class GameView {
     return r;
   }
 
+  /**
+   * A seat panel's card in client px, from the layout and the card's computed height (no DOM read:
+   * the first turn's FX must not force the fresh table through layout). Cached like the others.
+   */
+  private panelRect(pid: PlayerId): DOMRect | null {
+    const panel = this.panels.get(pid);
+    const p = this.state.players[pid];
+    if (!panel || !p) return null;
+    return this.rect(`p${pid}`, () => {
+      const box = this.layout?.seats[this.orient.seat(p.seat)];
+      if (!box) return panel.clientRect();
+      const r = cardRect(box, panel.cardHeight(), cardOnTop(box.seat, this.orient.fixed));
+      return new DOMRect(r.x, r.y, r.w, r.h);
+    });
+  }
+
   private applyLayout(W: number, H: number): void {
     // Effects hold client positions: drop them on resize / rotation (they last ~1-2 s).
     this.stopFx();
@@ -313,8 +329,10 @@ export class GameView {
     for (const p of this.state.players) {
       const box = L.seats[this.orient.seat(p.seat)];
       const panel = this.panels.get(p.id)!;
+      // The panel's rect is its card's, which is only as tall as its content and stands on one edge
+      // of the box (`panelRect`, recomputed in `render` when the card's height changes).
+      panel.el.classList.toggle('is-top', !!box && cardOnTop(box.seat, this.orient.fixed));
       if (box) {
-        this.rects.set(`p${p.id}`, new DOMRect(box.x, box.y, box.w, box.h));
         placeSeat(panel.el, box);
         panel.setBox(box.innerW, box.innerH);
       }
@@ -330,7 +348,7 @@ export class GameView {
     this.state = vs;
     this.board.render(vs);
     const actor = vs.phase.kind === 'gameOver' ? -1 : vs.current;
-    for (const [pid, panel] of this.panels) panel.update(vs, { isTurn: pid === actor });
+    for (const [pid, panel] of this.panels) if (panel.update(vs, { isTurn: pid === actor })) this.rects.delete(`p${pid}`);
   }
 
   /** The state the view last rendered (the sequencer's view state during playback). */
