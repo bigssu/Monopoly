@@ -1,16 +1,19 @@
 /**
  * Two dice (an orthographically projected cube drawn with 2D transforms, see `cubeFaces`).
- * `roll(a, b)` throws them onto the given faces: they fly across the dice area in the direction of
- * the player's flick (`aim`), bounce off its walls, roll to a stop and slide home (`throw.ts`; a
- * press without a swipe is a weak toss forward). Reduced motion: the in-place tumble (~1 s).
- * `shake(on)` jitters them while the player holds the dice; `invite()` wobbles them once at a
- * human's turn ("throw me").
+ * `roll(a, b)` throws them onto the given faces: a flick (`aim`) sends them across the SCREEN in
+ * its direction, as fast and as far as the finger pushed, off the screen's edges and back home
+ * (`throw.ts`); a press without a swipe is a weak toss forward inside the dice area. Reduced
+ * motion: the in-place tumble (~1 s). `shake(on)` jitters them while the player holds the dice;
+ * `invite()` wobbles them once at a human's turn ("throw me").
  *
- * Rendering (docs/DESIGN.md "Dice throw"): with canvas effects on (`fxQualityOn` not 'off': the web
- * build by default) the flying dice are drawn into ONE temporary software canvas sized to the
- * throw's bounding box; with them off (the Android app by default: some WebViews draw canvases
- * as white boxes) the two DOM cubes themselves are posed and moved on the 30 Hz clock, one layer
- * per die. Either way the landed dice are the crisp DOM ones at home.
+ * Rendering (docs/DESIGN.md "Dice throw"): a flick flies in a top-level layer (`.dice-fly`, over
+ * the board and the panels, created for the throw and removed at the landing; its frame is the
+ * Stage's, so the dice keep their turn toward the seat). With canvas effects on (`fxQualityOn`
+ * not 'off': the web build by default) the flying dice are drawn into ONE temporary software
+ * canvas sized to the throw's bounding box; with them off (the Android app by default: some
+ * WebViews draw canvases as white boxes) the two DOM cubes themselves move into that layer and
+ * are posed and moved on the 30 Hz clock, one layer per die. Either way the landed dice are the
+ * crisp DOM ones at home.
  */
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
@@ -18,7 +21,7 @@ import { anim, D, headless, isHeld, isSkipping, noMotion, onFrame, reducedMotion
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, isDevHook } from '@/ui/game/util';
 import { EASE } from '@/ui/fx/motion';
-import { bounceAt, planThrow, rollMode, sampleThrow, throwBounds, type Box, type ThrowPlan, type Vec } from './throw';
+import { bounceAt, frameFrom, isFlick, planThrow, rollMode, sampleThrow, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowPlan, type Vec } from './throw';
 
 const PIPS: Record<number, Array<[number, number]>> = {
   1: [[50, 50]],
@@ -339,6 +342,26 @@ export interface ThrowRecord {
   /** Walls (die centres) and the throw's bounding box (die centres), in the pair's px. */
   box: Box | null;
   bounds: Box | null;
+  /** A flick's: the walls' screen box (the viewport inside the safe area, less the margin), and
+   * the throw's bounding box of die centres on the screen (client px); null for a toss. */
+  view: Box | null;
+  screen: Box | null;
+  /** A flick's: the dice's homes on the screen (client px), where they land. */
+  homes: Vec[] | null;
+  /** Launch speed (px/s, pair frame) and the free roll's path (px). */
+  speed: number;
+  pathLen: number;
+}
+
+/** A flick's flight: the top-level layer, its frame (pair px → layer px) and the screen walls. */
+interface Flight {
+  layer: HTMLElement;
+  frame: HTMLElement;
+  f: Frame;
+  /** Client px of the layer's origin. */
+  at: Vec;
+  walls: Box;
+  view: Box;
 }
 
 /** Dev only (`?dev=1`): every roll's record; null in production. */
@@ -482,7 +505,7 @@ export class Dice {
     const edges = live && !reducedMotion() ? (this.arena?.() ?? null) : null;
     const mode = rollMode({ headless: !live, reduced: reducedMotion(), measured: !!edges });
     const rec: ThrowRecord | null = diceDev
-      ? { mode, path: null, kind: null, aim, faces: [a, b], planMs: 0, startedAt: performance.now(), endedAt: null, bounces: [], clacks: 0, travel: 0, box: null, bounds: null }
+      ? { mode, path: null, kind: null, aim, faces: [a, b], planMs: 0, startedAt: performance.now(), endedAt: null, bounces: [], clacks: 0, travel: 0, box: null, bounds: null, view: null, screen: null, homes: null, speed: 0, pathLen: 0 }
       : null;
     if (rec) diceDev!.log.push(rec);
     if (mode === 'throw') await this.throwDice(a, b, aim, edges!, rec);
@@ -515,7 +538,10 @@ export class Dice {
     return { ds: Math.max(38, u * 3.3), gap: u * 1.3 };
   }
 
-  /** Throw both dice (throw.ts) inside `edges` (die-edge walls, pair px) onto faces a, b. */
+  /**
+   * Throw both dice (throw.ts) onto faces a, b: a flick off the screen's edges (in a flight layer,
+   * `openFlight`), a toss inside `edges` (the dice area's die-edge walls, pair px).
+   */
   private throwDice(a: number, b: number, aim: Vec | null, edges: Box, rec: ThrowRecord | null): Promise<void> {
     this.stopTumble?.();
     const { ds, gap } = this.sizes();
@@ -523,30 +549,68 @@ export class Dice {
       { x: ds / 2, y: ds / 2 },
       { x: ds * 1.5 + gap, y: ds / 2 },
     ];
-    // Walls for the die CENTRES: half a die in, a little more at the top (the landing bounce's
-    // lift stays under the round line) and the bottom (the contact shadow).
-    const box: Box = { left: edges.left + ds / 2, right: edges.right - ds / 2, top: edges.top + ds * 0.75, bottom: edges.bottom - ds * 0.7 };
+    // A toss's walls for the die CENTRES: half a die in, a little more at the top (the landing
+    // bounce's lift stays under the round line) and the bottom (the contact shadow).
+    const tossBox: Box = { left: edges.left + ds / 2, right: edges.right - ds / 2, top: edges.top + ds * 0.75, bottom: edges.bottom - ds * 0.7 };
     const poses = [a, b].map((n, i) => {
       const from = this.dice[i]!.startPose();
       return { from, to: this.dice[i]!.land(n) };
     }) as [{ from: [number, number]; to: [number, number] }, { from: [number, number]; to: [number, number] }];
-    const plan = planThrow({ box, homes, ds, v: aim, poses });
+    const flight = isFlick(aim) ? this.openFlight(homes, ds) : null;
+    const plan = planThrow({ box: flight?.walls ?? tossBox, tossBox, homes, ds, v: aim, poses });
     if (rec) {
       rec.path = this.path;
       rec.kind = plan.kind;
       rec.planMs = plan.total;
       rec.bounces = plan.dice.map((d) => d.bounces);
-      rec.box = box;
+      rec.box = plan.box;
       rec.bounds = throwBounds(plan);
-      rec.travel = Math.max(
-        ...plan.dice.map((d) => {
-          let m = 0;
-          for (let k = 0; k < d.xs.length; k++) m = Math.max(m, Math.hypot(d.xs[k]! - d.home.x, d.ys[k]! - d.home.y));
-          return m;
-        }),
-      );
+      rec.travel = throwTravel(plan);
+      rec.speed = plan.speed;
+      rec.pathLen = plan.path;
+      if (flight) {
+        const o = flight.at;
+        const shift = (q: Box): Box => ({ left: q.left + o.x, right: q.right + o.x, top: q.top + o.y, bottom: q.bottom + o.y });
+        rec.view = shift(flight.view);
+        const c = [toScreen(flight.f, { x: rec.bounds.left, y: rec.bounds.top }), toScreen(flight.f, { x: rec.bounds.right, y: rec.bounds.bottom })];
+        rec.screen = shift({ left: Math.min(c[0]!.x, c[1]!.x), right: Math.max(c[0]!.x, c[1]!.x), top: Math.min(c[0]!.y, c[1]!.y), bottom: Math.max(c[0]!.y, c[1]!.y) });
+        rec.homes = homes.map((p) => {
+          const q = toScreen(flight.f, p);
+          return { x: q.x + o.x, y: q.y + o.y };
+        });
+      }
     }
-    return this.path === 'dom' ? this.flyDom(plan, homes, ds, rec) : this.flyCanvas(plan, ds, rec);
+    return this.path === 'dom' ? this.flyDom(plan, homes, ds, flight, rec) : this.flyCanvas(plan, ds, flight, rec);
+  }
+
+  /**
+   * A flick's flight layer: one top-level element over the game (above the board and the panels,
+   * under the effects layer and the money stage; pointer-transparent; inside the safe area) with a
+   * frame turned and scaled like the Stage, so the dice keep drawing in their own pair px and
+   * keep their turn toward the seat. The frame is measured from where the two dice stand (one
+   * layout read when the throw starts); the screen walls are the layer's box less a small margin.
+   * Removed at the landing.
+   */
+  private openFlight(homes: [Vec, Vec], ds: number): Flight | null {
+    const root = this.el.closest('.game') ?? document.body;
+    const layer = h('div', { class: 'dice-fly', 'aria-hidden': 'true' });
+    const frame = h('div', { class: 'dice-fly-frame' });
+    layer.append(frame);
+    root.append(layer);
+    const lr = layer.getBoundingClientRect();
+    const centres = this.dice.map((d) => {
+      const r = d.el.getBoundingClientRect();
+      return { x: r.left + r.width / 2 - lr.left, y: r.top + r.height / 2 - lr.top };
+    }) as [Vec, Vec];
+    const f = frameFrom(homes, centres);
+    if (!(lr.width > ds && lr.height > ds && f.s > 0 && Number.isFinite(f.s + f.ox + f.oy))) {
+      layer.remove();
+      return null;
+    }
+    const m = Math.max(6, Math.min(lr.width, lr.height) * 0.012);
+    const view: Box = { left: m, top: m, right: lr.width - m, bottom: lr.height - m };
+    frame.style.transform = `translate(${f.ox.toFixed(2)}px, ${f.oy.toFixed(2)}px) rotate(${f.a}deg) scale(${f.s.toFixed(5)})`;
+    return { layer, frame, f, at: { x: lr.left, y: lr.top }, walls: screenWalls(f, view, ds), view };
   }
 
   /** Step a planned throw on the shared 30 Hz clock: `draw(t)` with t in plan ms; wall clacks on the way. */
@@ -592,7 +656,7 @@ export class Dice {
    * dice are the crisp DOM ones again). The DOM dice, already at their final faces, reappear when
    * the canvas goes away.
    */
-  private flyCanvas(plan: ThrowPlan, ds: number, rec: ThrowRecord | null): Promise<void> {
+  private flyCanvas(plan: ThrowPlan, ds: number, flight: Flight | null, rec: ThrowRecord | null): Promise<void> {
     const b = throwBounds(plan);
     const r = ds * 0.9 * 1.15;
     const left = Math.floor(b.left - r);
@@ -608,7 +672,7 @@ export class Dice {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${hgt}px`;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || typeof ctx.roundRect !== 'function') return this.flyDom(plan, plan.dice.map((d) => d.home) as [Vec, Vec], ds, rec);
+    if (!ctx || typeof ctx.roundRect !== 'function') return this.flyDom(plan, plan.dice.map((d) => d.home) as [Vec, Vec], ds, flight, rec);
     const sp = sprites(ds, 1);
     let dirty: [number, number, number, number][] = [];
     const draw = (t: number): void => {
@@ -621,13 +685,14 @@ export class Dice {
         dirty.push(drawCube(ctx, sp, s.rx, s.ry, s.x - left, s.y - top + s.ty * ds, s.sx, s.sy));
       }
     };
-    this.pair.append(canvas);
+    (flight?.frame ?? this.pair).append(canvas);
     this.el.classList.add('is-rolling', 'is-canvas');
     return this.fly(
       plan,
       draw,
       () => {
         canvas.remove();
+        flight?.layer.remove();
         this.el.classList.remove('is-rolling', 'is-canvas');
       },
       rec,
@@ -639,8 +704,21 @@ export class Dice {
    * moved (translate + the landing squash) on the 30 Hz clock: one layer per die while flying,
    * no canvas at all.
    */
-  private flyDom(plan: ThrowPlan, homes: [Vec, Vec], ds: number, rec: ThrowRecord | null): Promise<void> {
+  private flyDom(plan: ThrowPlan, homes: [Vec, Vec], ds: number, flight: Flight | null, rec: ThrowRecord | null): Promise<void> {
     if (rec) rec.path = 'dom';
+    // A flick: the two cubes move up into the flight layer (at their homes in its frame); an
+    // invisible stand-in of the same size keeps each one's place in the pair.
+    const moved: [HTMLElement, HTMLElement][] = [];
+    if (flight) {
+      this.dice.forEach((d, i) => {
+        const ph = h('div', { class: 'die die-ph' });
+        d.el.replaceWith(ph);
+        d.el.style.left = `${(homes[i]!.x - ds / 2).toFixed(2)}px`;
+        d.el.style.top = `${(homes[i]!.y - ds / 2).toFixed(2)}px`;
+        flight.frame.append(d.el);
+        moved.push([d.el, ph]);
+      });
+    }
     const draw = (t: number): void => {
       for (const i of [0, 1] as const) {
         const s = sampleThrow(plan, i, t);
@@ -654,6 +732,12 @@ export class Dice {
       plan,
       draw,
       () => {
+        for (const [el, ph] of moved) {
+          ph.replaceWith(el);
+          el.style.left = '';
+          el.style.top = '';
+        }
+        flight?.layer.remove();
         for (const d of this.dice) {
           d.el.style.transform = '';
           d.set(d.value);

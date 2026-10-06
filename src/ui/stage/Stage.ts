@@ -11,7 +11,7 @@ import { haptic } from '@/ui/audio/haptics';
 import { anim, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
-import type { Box, Vec } from './throw';
+import { screenToStage, type Box, type Vec } from './throw';
 import { EASE } from '@/ui/fx/motion';
 
 export type Tone = 'info' | 'good' | 'bad' | 'gold';
@@ -140,12 +140,15 @@ export class Stage {
     return this.pad;
   }
 
-  /** A client-px vector (a pointer's velocity) in the stage's own frame: unrotated, layout px. */
+  /**
+   * A client-px vector (a pointer's velocity) in the stage's own frame: turned back by the stage's
+   * angle toward the acting seat, in layout px (`screenToStage`). So a flick toward a screen edge
+   * throws toward that physical edge for every seat, and in the fixed view (angle 0).
+   */
   toLocal(v: Vec): Vec {
     const r = this.el.getBoundingClientRect();
     const k = r.width > 0 ? this.el.offsetWidth / r.width : 1;
-    const a = (-this.angle * Math.PI) / 180;
-    return { x: (v.x * Math.cos(a) - v.y * Math.sin(a)) * k, y: (v.x * Math.sin(a) + v.y * Math.cos(a)) * k };
+    return screenToStage(v, this.angle, k);
   }
 
   /**

@@ -3,14 +3,17 @@
  * dice on the stage centre's pad instead of a roll button.
  *
  * Checked with real mouse strokes: a flick in four directions throws the dice that way (one stroke
- * ends outside the pad: still a throw), a release without a swipe is a weak toss forward that
- * still leaves home, the result is always the engine's dice (the throw never decides it), the dice
- * never leave the stage nor overlap the banner / round line, a throw settles within 1.6 s at speed
- * 1, nothing runs after it (0 clock callbacks), the keyboard rolls, a cancelled press only stops
- * the shake, the Settings switch brings the roll button back and it works, reduced motion rolls
- * in place, and the "throw me" wobble plays once (and once more after 5 s) for humans only.
- * Positions are sampled on the DOM path (`?dice=dom`, the Android default); the canvas path (the
- * web default) is checked for its size and clean-up.
+ * ends outside the pad: still a throw) across the SCREEN (over the board and the panels, in the
+ * `.dice-fly` layer, never off the viewport), a slow and a fast flick the same way: the fast one
+ * launches faster, gets farther from home, takes longer and reaches the screen's edge (both render
+ * paths), a turned seat's flick toward a screen edge goes to that physical edge, a release without
+ * a swipe is a weak toss forward that stays in the dice area, the result is always the engine's
+ * dice (the throw never decides it), a throw settles within its planned time, nothing runs after
+ * it (0 clock callbacks, no flight layer), the keyboard rolls, a cancelled press only stops the
+ * shake, the Settings switch brings the roll button back and it works, reduced motion rolls in
+ * place, and the "throw me" wobble plays once (and once more after 5 s) for humans only. Positions are sampled on the DOM path (`?dice=dom`, the
+ * Android default); the canvas path (the web default) is checked by its canvas and the throw's
+ * screen box.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { reduceMotion } from './motion';
@@ -27,7 +30,21 @@ interface Rec {
   bounces: number[];
   clacks: number;
   travel: number;
+  view: Box | null;
+  screen: Box | null;
+  homes: { x: number; y: number }[] | null;
+  speed: number;
+  pathLen: number;
 }
+
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+const VIEW = { w: 1600, h: 1000 };
 
 function watchConsole(page: Page): string[] {
   const out: string[] = [];
@@ -47,20 +64,23 @@ async function boot(page: Page, query = ''): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
 }
 
-/** Player 0 (seat S, a human) about to roll `dice` from the start; player 1 a human too. */
-async function craft(page: Page, dice: [number, number]): Promise<void> {
-  await page.evaluate((dice) => {
+/**
+ * Player `current` (a human) about to roll `dice` from the start: of 2 humans (S, N) by default, or
+ * of `n` humans (4: seats S, E, N, W) — the table view, the Stage turned toward that seat.
+ */
+async function craft(page: Page, dice: [number, number], o: { n?: number; current?: number } = {}): Promise<void> {
+  await page.evaluate(({ dice, n, current }) => {
     const h = window.__lotAndRoll!;
     h.setPromptTimer(0);
     h.dice().clear();
-    const st = h.demoSettings(2, false);
+    const st = h.demoSettings(n, false);
     h.startGame(st as never, 7);
     const s = h.getState()!;
-    s.current = 0;
-    s.phase = { kind: 'preRoll', playerId: 0, rollAgain: false };
+    s.current = current;
+    s.phase = { kind: 'preRoll', playerId: current, rollAgain: false };
     s.testHooks = { diceQueue: [dice] };
     h.loadState(s);
-  }, dice);
+  }, { dice, n: o.n ?? 2, current: o.current ?? 0 });
   await expect(page.locator('.roll-pad:not(:disabled)')).toBeVisible({ timeout: 30_000 });
   // The prompt has come in and the stage stands still.
   await page.waitForTimeout(500);
@@ -90,7 +110,8 @@ async function startSampling(page: Page): Promise<void> {
     w.__diceDone = false;
     const t0 = performance.now();
     const tick = (): void => {
-      const dice = [...document.querySelectorAll('.st-dice .die')].map((d) => {
+      // The dice are in the flight layer while a flick flies (stand-ins hold their places).
+      const dice = [...document.querySelectorAll('.dice-fly .die, .st-dice .die:not(.die-ph)')].map((d) => {
         const r = d.getBoundingClientRect();
         return { x: r.x, y: r.y, w: r.width, h: r.height };
       });
@@ -126,6 +147,49 @@ async function stroke(page: Page, from: { x: number; y: number }, dx: number, dy
   await page.mouse.up();
 }
 
+/**
+ * A flick at a known release speed (px/s), dispatched on the pad in the page: the press, a hold,
+ * then the moves at ~16 ms steps (a busy wait) and the release, so the measured release speed does
+ * not depend on how loaded the machine is (real mouse moves from here can be 100+ ms apart under
+ * load: a fast stroke would read as a slow one, or a toss). The real-mouse path, pointer capture
+ * included, is the four-direction test's "down" stroke.
+ */
+async function flick(page: Page, from: { x: number; y: number }, dx: number, dy: number, speed: number, holdMs = 300): Promise<void> {
+  await page.mouse.move(from.x, from.y);
+  await page.evaluate((from) => {
+    document.querySelector('.roll-pad')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: from.x, clientY: from.y, buttons: 1 }));
+  }, from);
+  await page.waitForTimeout(holdMs);
+  await page.evaluate(
+    ({ from, dx, dy, speed }) => {
+      const pad = document.querySelector('.roll-pad')!;
+      const len = Math.hypot(dx, dy);
+      const spin = (ms: number): void => {
+        const end = performance.now() + ms;
+        while (performance.now() < end) {
+          /* busy wait */
+        }
+      };
+      const ev = (type: string, x: number, y: number): PointerEvent =>
+        new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 });
+      // Each move is placed where the finger would be at the moment it is sent (the event's own
+      // timestamp), so even a preempted step keeps the speed exact.
+      const t0 = performance.now();
+      let x = from.x;
+      let y = from.y;
+      for (let i = 0; i < 6; i++) {
+        spin(16);
+        const k = (speed * (performance.now() - t0)) / 1000;
+        x = from.x + (dx / len) * k;
+        y = from.y + (dy / len) * k;
+        pad.dispatchEvent(ev('pointermove', x, y));
+      }
+      pad.dispatchEvent(ev('pointerup', x, y));
+    },
+    { from, dx, dy, speed },
+  );
+}
+
 /** After a roll: the engine's dice, the DOM dice showing them, the total badge. */
 async function checkResult(page: Page, dice: [number, number], ctx: string): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.lastDice), { message: ctx }).toEqual(dice);
@@ -140,6 +204,25 @@ async function checkResult(page: Page, dice: [number, number], ctx: string): Pro
     }),
   );
   expect(shown, ctx).toEqual(dice);
+}
+
+/** Every sampled die stays on the screen, inside the flight's margin (a flick flies over everything). */
+function checkOnScreen(s: { r: { x: number; y: number; w: number; h: number }[] }[], ctx: string): void {
+  for (const f of s) {
+    for (const r of f.r) {
+      expect(r.x, `${ctx}: left`).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.w, `${ctx}: right`).toBeLessThanOrEqual(VIEW.w);
+      expect(r.y, `${ctx}: top`).toBeGreaterThanOrEqual(0);
+      expect(r.y + r.h, `${ctx}: bottom`).toBeLessThanOrEqual(VIEW.h);
+    }
+  }
+}
+
+/** After a throw: no flight layer, no stand-in, the dice back in the pair. */
+async function checkLanded(page: Page, ctx: string): Promise<void> {
+  await expect(page.locator('.dice-fly'), ctx).toHaveCount(0);
+  await expect(page.locator('.die-ph'), ctx).toHaveCount(0);
+  await expect(page.locator('.st-dice .dice-pair > .die'), ctx).toHaveCount(2);
 }
 
 /** Every sampled die stays on the stage, below the round line (the banner above it). */
@@ -177,12 +260,21 @@ test.describe('dice throw', () => {
       const home = await page.evaluate(() => [...document.querySelectorAll('.st-dice .die')].map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
       await startSampling(page);
       const c = await pairCentre(page);
-      await stroke(page, c, d.dx, d.dy, 350, d.name.startsWith('down') ? 8 : 5);
+      // A real stroke for the one that ends off the pad (pointer capture); exact-speed flicks else.
+      if (d.name.startsWith('down')) await stroke(page, c, d.dx, d.dy, 350, 8);
+      else await flick(page, c, d.dx, d.dy, 1500);
       const s = await samples(page);
       await checkResult(page, d.dice, d.name);
       const rec = (await lastRec(page))!;
       expect(rec.mode, d.name).toBe('throw');
       expect(rec.path, d.name).toBe('dom');
+      if (d.name.startsWith('down') && rec.kind === 'toss') {
+        // A real stroke: on a loaded machine its moves can arrive too far apart for a flick
+        // (releaseVelocity: the release within 0.1 s of the last move). Still a throw, not a cancel.
+        console.log(`[dice-throw] ${d.name}: real mouse moves too slow here for a flick: tossed (still thrown)`);
+        await checkLanded(page, d.name);
+        continue;
+      }
       expect(rec.kind, d.name).toBe('flick');
       // Aimed the stroke's way (the stage faces S: its frame is the screen's).
       const len = Math.hypot(rec.aim!.x, rec.aim!.y);
@@ -193,16 +285,23 @@ test.describe('dice throw', () => {
       const ahead = Math.max(...s.flatMap((f) => f.r.map((r, i) => (centreOf(r).x - home[i]!.x) * ux + (centreOf(r).y - home[i]!.y) * uy)));
       const ds = s[0]!.r[0]!.w;
       expect(ahead, `${d.name}: flew the stroke's way`).toBeGreaterThan(ds);
-      expect(rec.bounces.reduce((a, b) => a + b, 0), `${d.name}: wall bounces`).toBeGreaterThanOrEqual(2);
-      expect(rec.clacks, `${d.name}: clacks`).toBeLessThanOrEqual(3);
-      await checkInside(page, s, d.name);
-      // Settled within 1.6 s (plus a frame of slack), back home.
-      expect(rec.endedAt! - rec.startedAt, `${d.name}: settle time`).toBeLessThanOrEqual(1600 + 70);
-      // Lands home: no jump between the last flying frame and the DOM dice at rest.
+      expect(rec.clacks, `${d.name}: clacks`).toBeLessThanOrEqual(4);
+      checkOnScreen(s, d.name);
+      // Settled within its planned time (≤ 1.96 s at speed 1) plus 200 ms (the throw ends on the first
+      // clock frame after its time; the old absolute bound, 1.6 s + 70 ms for plans ≤ 1.54 s, allowed
+      // 130–470 ms), back home.
+      expect(rec.planMs, `${d.name}: planned`).toBeLessThanOrEqual(1960);
+      expect(rec.endedAt! - rec.startedAt, `${d.name}: settle time`).toBeLessThanOrEqual(rec.planMs + 200);
+      await checkLanded(page, d.name);
+      // Lands home: the DOM dice at rest stand where the flight planned their homes (the frame
+      // measured at the start: the dice area may change scale meanwhile, as the roll card goes),
+      // and the last flying frame (if one was sampled within ~40 ms of the end: a loaded machine
+      // samples sparsely) is there too.
       const before = [...s].reverse().find((f) => f.t < rec.endedAt! - 1);
       const after = s.find((f) => f.t > rec.endedAt! + 1);
-      if (before && after) for (const i of [0, 1]) expect(Math.hypot(centreOf(after.r[i]!).x - centreOf(before.r[i]!).x, centreOf(after.r[i]!).y - centreOf(before.r[i]!).y), `${d.name}: die ${i} lands home`).toBeLessThan(4);
-      console.log(`[dice-throw] ${d.name}: ${Math.round(rec.endedAt! - rec.startedAt)} ms (plan ${Math.round(rec.planMs)}), bounces ${rec.bounces}, clacks ${rec.clacks}, ahead ${Math.round(ahead)} px`);
+      if (after) for (const i of [0, 1]) expect(Math.hypot(centreOf(after.r[i]!).x - rec.homes![i]!.x, centreOf(after.r[i]!).y - rec.homes![i]!.y), `${d.name}: die ${i} lands home`).toBeLessThan(2);
+      if (before && after && rec.endedAt! - before.t < 40) for (const i of [0, 1]) expect(Math.hypot(centreOf(after.r[i]!).x - centreOf(before.r[i]!).x, centreOf(after.r[i]!).y - centreOf(before.r[i]!).y), `${d.name}: die ${i} no jump at the landing`).toBeLessThan(4);
+      console.log(`[dice-throw] ${d.name}: aim ${Math.round(Math.hypot(rec.aim!.x, rec.aim!.y))} px/s, ${Math.round(rec.endedAt! - rec.startedAt)} ms (plan ${Math.round(rec.planMs)}), bounces ${rec.bounces}, clacks ${rec.clacks}, ahead ${Math.round(ahead)} px`);
     }
     // After the last throw the game goes on to the next decision and then rests: nothing runs.
     await page.evaluate(() => window.__lotAndRoll!.whenIdle());
@@ -228,7 +327,9 @@ test.describe('dice throw', () => {
     expect(up, 'tossed forward').toBeGreaterThan(ds * 0.4);
     expect(rec.bounces.every((b) => b <= 1), 'at most one soft wall touch').toBe(true);
     await checkInside(page, s, 'tap');
+    expect(rec.view, 'a toss stays in the dice area').toBeNull();
     expect(rec.endedAt! - rec.startedAt).toBeLessThanOrEqual(1300);
+    expect(await page.locator('.dice-fly').count()).toBe(0);
 
     // Keyboard: the pad is focused when the roll comes up; Enter rolls (a toss).
     await craft(page, [1, 2]);
@@ -260,24 +361,27 @@ test.describe('dice throw', () => {
     const c = await pairCentre(page);
     const seen = page.evaluate(
       () =>
-        new Promise<{ n: number; w: number; h: number; x: number; y: number }>((resolve) => {
+        new Promise<{ n: number; w: number; h: number; x: number; y: number; inFly: boolean }>((resolve) => {
           const t0 = performance.now();
           const tick = (): void => {
             const cv = document.querySelectorAll('canvas.dice-canvas');
             if (cv.length) {
               const r = cv[0]!.getBoundingClientRect();
-              resolve({ n: cv.length, w: r.width, h: r.height, x: r.x, y: r.y });
+              resolve({ n: cv.length, w: r.width, h: r.height, x: r.x, y: r.y, inFly: !!cv[0]!.closest('.dice-fly') });
             } else if (performance.now() - t0 < 5000) requestAnimationFrame(tick);
-            else resolve({ n: 0, w: 0, h: 0, x: 0, y: 0 });
+            else resolve({ n: 0, w: 0, h: 0, x: 0, y: 0, inFly: false });
           };
           tick();
         }),
     );
-    await stroke(page, c, 160, -60);
+    await flick(page, c, 160, -60, 1500);
     const cv = await seen;
     expect(cv.n, 'one canvas').toBe(1);
-    const stage = (await page.locator('.stage').boundingBox())!;
-    expect(cv.w * cv.h, 'smaller than the stage').toBeLessThan(stage.width * stage.height);
+    expect(cv.inFly, 'drawn in the flight layer, over the board and the panels').toBe(true);
+    // Sized to the throw's box (not the whole screen), on the screen.
+    expect(cv.w * cv.h, 'smaller than the screen').toBeLessThan(VIEW.w * VIEW.h);
+    expect(cv.x).toBeGreaterThanOrEqual(-1);
+    expect(cv.y).toBeGreaterThanOrEqual(-1);
     await checkResult(page, [4, 4], 'canvas');
     const rec = (await lastRec(page))!;
     expect(rec.path).toBe('canvas');
@@ -285,6 +389,7 @@ test.describe('dice throw', () => {
     // Doubles keep the gold treatment.
     await expect(page.locator('.st-dice .dice')).toHaveClass(/is-doubles/);
     await expect(page.locator('canvas.dice-canvas')).toHaveCount(0);
+    await checkLanded(page, 'canvas');
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
@@ -304,7 +409,7 @@ test.describe('dice throw', () => {
     await checkResult(page, [2, 3], 'button');
     // The pad still works beside it.
     await craft(page, [5, 6]);
-    await stroke(page, await pairCentre(page), -150, -40);
+    await flick(page, await pairCentre(page), -150, -40, 1500);
     await checkResult(page, [5, 6], 'pad beside the button');
     expect((await lastRec(page))!.kind).toBe('flick');
     expect(logs, logs.join('\n')).toEqual([]);
@@ -358,6 +463,102 @@ test.describe('dice throw', () => {
     await expect(page.locator('.roll-pad')).toBeDisabled();
     expect(await page.evaluate(() => document.querySelector('.st-dice .dice')!.classList.contains('is-inviting'))).toBe(false);
     await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(false));
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  for (const path of ['dom', 'canvas'] as const) {
+    test(`a fast flick flies faster, farther and longer than a slow one, off the screen's edge (${path} path)`, async ({ page }) => {
+      test.setTimeout(120_000);
+      const logs = watchConsole(page);
+      await boot(page, `&dice=${path}`);
+      const runs: { name: string; rec: Rec; reach: number; far: number; ms: number }[] = [];
+      // Slow: 450 px/s (a gentle push); fast: 6000 px/s (beyond the strongest, clamped to it).
+      for (const [name, speed, dice] of [
+        ['slow', 450, [2, 3]],
+        ['fast', 6000, [5, 1]],
+      ] as const) {
+        await craft(page, [dice[0], dice[1]]);
+        const home = await page.evaluate(() => [...document.querySelectorAll('.st-dice .die')].map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width }; }));
+        if (path === 'dom') await startSampling(page);
+        await flick(page, await pairCentre(page), 1, 0, speed);
+        const s = path === 'dom' ? await samples(page) : [];
+        await checkResult(page, [dice[0], dice[1]], `${name} ${path}`);
+        const rec = (await lastRec(page))!;
+        expect(rec.kind, name).toBe('flick');
+        expect(rec.path, name).toBe(path);
+        expect(rec.view, `${name}: walls are the screen`).not.toBeNull();
+        // How far right on the screen (a die's right edge), and how far from home.
+        let reach: number;
+        let far: number;
+        if (path === 'dom') {
+          checkOnScreen(s, `${name} ${path}`);
+          // The plan's screen box (die centres) for the reach: rAF samples can miss the frame at the wall.
+          reach = Math.max(rec.screen!.right + home[0]!.w / 2, ...s.flatMap((f) => f.r.map((r) => r.x + r.w)));
+          far = Math.max(...s.flatMap((f) => f.r.map((r, i) => Math.hypot(centreOf(r).x - home[i]!.x, centreOf(r).y - home[i]!.y))));
+        } else {
+          // The throw's screen box (die centres) lies inside the screen walls.
+          const sc = rec.screen!;
+          const v = rec.view!;
+          expect(sc.left, name).toBeGreaterThanOrEqual(v.left - 1);
+          expect(sc.right, name).toBeLessThanOrEqual(v.right + 1);
+          expect(sc.top, name).toBeGreaterThanOrEqual(v.top - 1);
+          expect(sc.bottom, name).toBeLessThanOrEqual(v.bottom + 1);
+          reach = sc.right + home[0]!.w / 2;
+          far = Math.max(sc.right - home[1]!.x, home[0]!.x - sc.left);
+        }
+        const ms = rec.endedAt! - rec.startedAt;
+        expect(ms, `${name}: settled in its time`).toBeLessThanOrEqual(rec.planMs + 200);
+        await checkLanded(page, `${name} ${path}`);
+        await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.activeTicks()), { timeout: 8000 }).toBe(0);
+        runs.push({ name, rec, reach, far, ms });
+        console.log(`[dice-throw] ${path} ${name}: release ${Math.round(Math.hypot(rec.aim!.x, rec.aim!.y))} px/s → launch ${Math.round(rec.speed)} px/s, plan ${Math.round(rec.planMs)} ms (took ${Math.round(ms)}), bounces ${rec.bounces}, clacks ${rec.clacks}, farthest ${Math.round(far)} px, right edge at ${Math.round(reach)} px`);
+      }
+      const [slow, fast] = runs as [(typeof runs)[0], (typeof runs)[0]];
+      expect(fast.rec.speed, 'launches faster').toBeGreaterThan(slow.rec.speed * 1.5);
+      expect(fast.far, 'travels farther').toBeGreaterThan(slow.far * 1.5);
+      expect(fast.rec.planMs, 'lasts longer (plan)').toBeGreaterThan(slow.rec.planMs + 300);
+      expect(fast.ms, 'lasts longer (seen)').toBeGreaterThan(slow.ms + 200);
+      // The fast one reaches the screen's right edge (within 10 %); the slow one stays short.
+      expect(fast.reach, 'reaches the screen edge').toBeGreaterThan(VIEW.w * 0.9);
+      expect(fast.reach, 'never off the screen').toBeLessThanOrEqual(VIEW.w);
+      expect(slow.reach, 'the slow one stays short').toBeLessThan(VIEW.w * 0.8);
+      expect(fast.rec.clacks, 'off the wall').toBeGreaterThanOrEqual(1);
+      expect(fast.rec.clacks).toBeLessThanOrEqual(4);
+      await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+      await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.activeTicks()), { timeout: 8000 }).toBe(0);
+      expect(logs, logs.join('\n')).toEqual([]);
+    });
+  }
+
+  test('table view: a turned seat\'s flick toward a screen edge goes to that physical edge', async ({ page }) => {
+    test.setTimeout(120_000);
+    const logs = watchConsole(page);
+    await boot(page, '&dice=dom');
+    // 4 humans (S E N W): the Stage turns toward whoever rolls.
+    for (const [seat, current, dx, dy] of [
+      ['E', 1, 440, 0],
+      ['N', 2, 0, -440],
+      ['W', 3, 0, 440],
+    ] as const) {
+      await craft(page, [4, 6], { n: 4, current });
+      expect(await page.evaluate(() => (document.querySelector('.stage') as HTMLElement).dataset.seat)).toBe(seat);
+      await startSampling(page);
+      const c = await pairCentre(page);
+      await flick(page, c, dx, dy, 6000);
+      const s = await samples(page);
+      await checkResult(page, [4, 6], seat);
+      const rec = (await lastRec(page))!;
+      expect(rec.kind, seat).toBe('flick');
+      checkOnScreen(s, seat);
+      // How close to that edge the dice got: the throw's screen box (die centres, from the plan:
+      // sampling from rAF can miss the frame at the wall on a loaded machine) plus half a die.
+      const half = s[0]!.r[0]!.w / 2;
+      const sc = rec.screen!;
+      const reach = dx > 0 ? (sc.right + half) / VIEW.w : dy < 0 ? 1 - (sc.top - half) / VIEW.h : (sc.bottom + half) / VIEW.h;
+      console.log(`[dice-throw] seat ${seat}: stroke ${dx},${dy} → reach ${reach.toFixed(3)} of the screen toward that edge, bounces ${rec.bounces}`);
+      expect(reach, `${seat}: reaches the edge the finger pointed at`).toBeGreaterThan(0.9);
+      await checkLanded(page, seat);
+    }
     expect(logs, logs.join('\n')).toEqual([]);
   });
 });

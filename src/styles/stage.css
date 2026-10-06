@@ -153,7 +153,17 @@
    default), moves the DOM dice themselves: one layer per die only while they fly. */
 .dice-canvas { position: absolute; pointer-events: none; }
 .dice.is-canvas .die { visibility: hidden; }
-.dice.is-flying .die { will-change: transform; }
+.dice.is-flying .die:not(.die-ph) { will-change: transform; }
+/* A flick flies over the whole screen (Dice.openFlight): the dice go up into this layer, above
+   the board and the panels (z 5), under the effects layer (40) and the money stage (45), inside
+   the safe area, pointer-transparent; it exists only while they fly. The frame is turned and
+   scaled like the Stage, so the dice keep drawing in their own pair px. On the DOM path an
+   invisible stand-in (.die-ph) keeps each die's place in the pair meanwhile. */
+.dice-fly { position: absolute; top: var(--safe-t); right: var(--safe-r); bottom: var(--safe-b); left: var(--safe-l); z-index: 38; pointer-events: none; }
+body > .dice-fly { position: fixed; }
+.dice-fly-frame { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.dice-fly .die { position: absolute; will-change: transform; }
+.die-ph { visibility: hidden; }
 /* "Throw me" wobble (Dice.invite): the pair is its own layer while a human's roll is up, so the
    wobbles are compositor-only (no repaint when the second one starts 5 s later). */
 .dice.is-inviting .dice-pair { will-change: transform; }
