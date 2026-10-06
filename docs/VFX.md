@@ -1014,7 +1014,7 @@ dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·
 | 구 파티클 | `src/ui/fx/particles.ts` 삭제 | 통과 샤워 → `passStart`, 통행료 호 → `tollPay`, 승리 색종이 → `victory`, 결과 화면 색종이 → 새 프리셋 `confettiRain`(결과 화면 전용 엔진 인스턴스) |
 | 스킵 | `controller.ts` | 탭 → `skip()` + `vfx.skip()`(대기 cue 즉시) + `stage.hurry()` |
 | dev 훅 | `devhook.ts` | `fx()`, `playFx(name, params)`, `activeTicks()`, `manualClock(on)`, `stepFrames(n)` |
-| 연출 미리보기 | `src/ui/game/fxdemo.ts`, `Game.ts` | **`npm run dev` → `/?dev=1&fxdemo=1`**: 사람 4명 게임 + 좌측 패널(좌석 선택, 속도 ×1/×0.5/×0.25, 순간 버튼 35개, 건너뛰기, 원래대로). 합성 이벤트를 **실제 시퀀서**(`playEvents`)로 재생 — 상태 스왑·스탬프·클로즈업·사운드까지 실전과 동일, 게임 상태는 안 바뀜. `import.meta.env.DEV` 뒤라 프로덕션 번들에 없음 |
+| 연출 미리보기 | (2026-10-06 삭제) | 개발 서버 전용 `?fxdemo=1` 패널이 있었다. 지금은 `e2e/vfx.spec.ts`·`e2e/money-events.spec.ts`의 실제 게임 필름스트립이 같은 일을 한다 |
 
 ### 14.2 이벤트별 재생 (`fxmap.ts`, 단위 테스트 `src/ui/fx/__tests__/fxmap.test.ts`)
 
