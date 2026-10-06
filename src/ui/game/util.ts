@@ -122,11 +122,6 @@ export function chip(o: { text?: string; icon?: string; tone?: ChipTone; label?:
 export const TINT: { ink?: string; ink3?: string } = {};
 
 /**
- * Build the icon atlas for a game: all space art, the players' tokens in their colors, and the
- * buildings in the player / theme colors they are shown in. The legacy `iconPx` hint is retained
- * for callers; the atlas now uses a fixed 1024px texture independent of viewport size and DPR.
- */
-/**
  * Read the ink tokens the icon tints use (once per session). Call it before a big subtree is
  * inserted: `getComputedStyle` right after the game screen was appended forced its whole first
  * layout synchronously inside the mount (docs/PERFORMANCE.md "라운드 2").
@@ -138,7 +133,12 @@ export function primeIconTints(): void {
   TINT.ink3 = root.getPropertyValue('--ink-3').trim() || undefined;
 }
 
-export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, iconPx: number, board?: readonly SpaceDef[]): Promise<void> {
+/**
+ * Build the icon atlas for a game: all space art, the players' tokens in their colors, and the
+ * buildings in the player / theme colors they are shown in (one fixed 1024px texture, whatever the
+ * viewport size and DPR).
+ */
+export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' | 'colorId'>>, board?: readonly SpaceDef[]): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();
   primeIconTints();
   const entries: AtlasEntry[] = [];
@@ -147,8 +147,7 @@ export function prepareGameIcons(players: ReadonlyArray<Pick<Player, 'tokenId' |
   const tints = [TINT.ink, TINT.ink3, ...players.map((p) => playerColor(p.colorId).hex)].filter((c): c is string => !!c);
   for (const p of players) entries.push({ id: p.tokenId, tint: playerColor(p.colorId).hex });
   for (const b of ['villa', 'building', 'hotel', 'landmark']) for (const c of tints) entries.push({ id: b, tint: c });
-  const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
-  return prepareIconAtlas(entries, iconPx * dpr);
+  return prepareIconAtlas(entries);
 }
 
 /** A circular token badge tinted with the player color. */

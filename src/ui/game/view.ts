@@ -309,7 +309,7 @@ export class GameView {
     const fill = (): void => {
       for (const p of this.panels.values()) p.fillIcons();
     };
-    void prepareGameIcons(this.state.players, (L.board.w / 32) * 2.8, getBoard((this.state.settings.spacesPerSide ?? 7) as SpacesPerSide)).then(fill, fill);
+    void prepareGameIcons(this.state.players, getBoard((this.state.settings.spacesPerSide ?? 7) as SpacesPerSide)).then(fill, fill);
     for (const p of this.state.players) {
       const box = L.seats[this.orient.seat(p.seat)];
       const panel = this.panels.get(p.id)!;

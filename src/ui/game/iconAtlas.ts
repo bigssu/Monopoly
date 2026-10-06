@@ -176,13 +176,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Make sure the atlas holds `entries`. `cellPx` remains part of the caller API but does not resize
- * a game's atlas: a fixed 1024px atlas is prepared once, before board/card icons are rendered.
+ * Make sure the atlas holds `entries`: a fixed 1024px atlas, prepared once before board / card
+ * icons are rendered.
  * A newly requested icon may rebuild it; the old atlas stays in use until the new one is decoded.
  * Resolves when done; never rejects (on failure icons keep using the sprite).
  */
-export function prepareIconAtlas(entries: readonly AtlasEntry[], cellPx: number): Promise<void> {
-  void cellPx;
+export function prepareIconAtlas(entries: readonly AtlasEntry[]): Promise<void> {
   for (const e of entries) {
     if (!ICON_IDS.includes(e.id)) continue;
     if (TINTED.has(e.id) && !e.tint) continue;

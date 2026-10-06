@@ -39,8 +39,8 @@ describe('icon atlas queue', () => {
   it('rasterizes concurrent identical requests once', async () => {
     const { atlasSvg, prepareIconAtlas } = await import('../iconAtlas');
     await Promise.all([
-      prepareIconAtlas([{ id: 'city-manila' }], 64),
-      prepareIconAtlas([{ id: 'city-manila' }], 64),
+      prepareIconAtlas([{ id: 'city-manila' }]),
+      prepareIconAtlas([{ id: 'city-manila' }]),
     ]);
 
     expect(drawImage).toHaveBeenCalledTimes(1);
@@ -50,19 +50,19 @@ describe('icon atlas queue', () => {
   it('keeps concurrent requests together in the fixed game atlas', async () => {
     const { iconAtlasInfo, prepareIconAtlas } = await import('../iconAtlas');
     await Promise.all([
-      prepareIconAtlas([{ id: 'city-manila' }], 48),
-      prepareIconAtlas([{ id: 'city-hanoi' }], 96),
+      prepareIconAtlas([{ id: 'city-manila' }]),
+      prepareIconAtlas([{ id: 'city-hanoi' }]),
     ]);
 
     expect(drawImage).toHaveBeenCalledTimes(1);
     expect(iconAtlasInfo()).toMatchObject({ cell: 128, cols: 8, rows: 8, width: 1024, height: 1024, icons: 2 });
   });
 
-  it('does not rebuild or retain PNGs when the same game set is prepared across viewport sizes', async () => {
+  it('does not rebuild or retain PNGs when the same game set is prepared again (every relayout)', async () => {
     const { iconAtlasInfo, prepareIconAtlas } = await import('../iconAtlas');
     const entries = [{ id: 'city-manila' }, { id: 'city-hanoi' }, { id: 'coin' }];
 
-    for (const cellPx of [32, 64, 128, 192, 256]) await prepareIconAtlas(entries, cellPx);
+    for (let i = 0; i < 5; i++) await prepareIconAtlas(entries);
 
     expect(drawImage).toHaveBeenCalledTimes(1);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
@@ -77,7 +77,7 @@ describe('icon atlas queue', () => {
     ]);
     const entries = [7, 8, 9].flatMap((side) => getBoard(side as 7 | 8 | 9).map((space) => ({ id: spaceIcon(space) })));
 
-    await Promise.all([prepareIconAtlas(entries, 64), prepareIconAtlas(entries, 256)]);
+    await Promise.all([prepareIconAtlas(entries), prepareIconAtlas(entries)]);
 
     expect(drawImage).toHaveBeenCalledTimes(1);
     expect(iconAtlasInfo()).toMatchObject({ width: 1024, height: 1024 });
@@ -89,23 +89,23 @@ describe('icon atlas queue', () => {
       import('../iconAtlas'),
     ]);
     const entries = ICON_IDS.map((id) => ({ id, tint: '#fff' }));
-    await prepareIconAtlas(entries, 256);
+    await prepareIconAtlas(entries);
     const info = iconAtlasInfo()!;
 
     expect([512, 1024]).toContain(info.width);
     expect([512, 1024]).toContain(info.height);
     expect(info.width).toBeLessThanOrEqual(1024);
     expect(info.height).toBeLessThanOrEqual(1024);
-    await prepareIconAtlas(entries, 256);
+    await prepareIconAtlas(entries);
     expect(drawImage).toHaveBeenCalledTimes(1);
   });
 
   it('releases a retired game atlas without affecting the next game', async () => {
     const { disposeIconAtlas, iconAtlasInfo, prepareIconAtlas } = await import('../iconAtlas');
-    await prepareIconAtlas([{ id: 'city-manila' }], 64);
+    await prepareIconAtlas([{ id: 'city-manila' }]);
     disposeIconAtlas();
     await Promise.resolve();
-    await prepareIconAtlas([{ id: 'city-hanoi' }], 64);
+    await prepareIconAtlas([{ id: 'city-hanoi' }]);
 
     expect(iconAtlasInfo()).toMatchObject({ icons: 1 });
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:atlas-2');
@@ -115,7 +115,7 @@ describe('icon atlas queue', () => {
   it('cannot publish an atlas after its game is disposed mid-decode', async () => {
     const { disposeIconAtlas, iconAtlasInfo, prepareIconAtlas } = await import('../iconAtlas');
     holdDecodes = true;
-    const build = prepareIconAtlas([{ id: 'city-manila' }], 64);
+    const build = prepareIconAtlas([{ id: 'city-manila' }]);
     await vi.waitFor(() => expect(decodeResolvers).toHaveLength(1));
     decodeResolvers.shift()!();
     await vi.waitFor(() => expect(decodeResolvers).toHaveLength(1));
