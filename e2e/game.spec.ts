@@ -5,6 +5,7 @@
  *    a normal-speed animation frame, and the result screen → e2e/__screenshots__/game-*.png
  */
 import { expect, test, type Page } from '@playwright/test';
+import { boot, watchConsole } from './helpers';
 import { OWNED_SAMPLE, checkOwnedBoard, craftOwned } from './owned-board';
 
 const VIEWPORTS = [
@@ -14,28 +15,6 @@ const VIEWPORTS = [
   { w: 800, h: 450 },
 ] as const;
 const SHOTS = 'e2e/__screenshots__';
-
-function watchErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error') return;
-    // The browser's own favicon probe is not an app error.
-    if (/favicon/.test(m.location().url) || (/Failed to load resource/.test(m.text()) && /favicon/.test(m.location().url ?? ''))) return;
-    if (/Failed to load resource/.test(m.text()) && !m.location().url) return;
-    errors.push(`${m.text()} @ ${m.location().url}`);
-  });
-  page.on('pageerror', (e) => errors.push(String(e)));
-  return errors;
-}
-
-async function boot(page: Page, w: number, h: number): Promise<void> {
-  await page.setViewportSize({ width: w, height: h });
-  await page.goto('/?dev=1');
-  await page.waitForFunction(() => !!window.__lotAndRoll && !!document.getElementById('app')?.dataset.screen, null, {
-    timeout: 20_000,
-  });
-  await page.evaluate(() => document.fonts.ready);
-}
 
 /** Start a seeded game (all CPU or all human) at the given animation speed. */
 async function start(page: Page, opts: { seed: number; cpu: boolean; players?: number; speed: number }): Promise<void> {
@@ -75,8 +54,8 @@ async function settle(page: Page): Promise<void> {
 test.describe('game screen', () => {
   test('a seeded 4-CPU game plays to the end without errors', async ({ page }) => {
     test.setTimeout(180_000);
-    const errors = watchErrors(page);
-    await boot(page, 1600, 1000);
+    const errors = watchConsole(page);
+    await boot(page, { w: 1600, h: 1000 });
     await start(page, { seed: 4242, cpu: true, speed: 0 });
     await page.waitForFunction(() => window.__lotAndRoll!.getState()?.phase.kind === 'gameOver' || window.__lotAndRoll!.screen() === 'result', null, {
       timeout: 150_000,
@@ -96,8 +75,8 @@ test.describe('game screen', () => {
   for (const v of VIEWPORTS) {
     test(`mid-game layout ${v.w}x${v.h}`, async ({ page }) => {
       test.setTimeout(120_000);
-      const errors = watchErrors(page);
-      await boot(page, v.w, v.h);
+      const errors = watchConsole(page);
+      await boot(page, { w: v.w, h: v.h });
       await start(page, { seed: 31, cpu: false, speed: 0 });
       // ~30 turns in, stop on a human prompt that is not a plain roll if possible.
       await driveUntil(page, 'return s.turn >= 30 && s.phase.kind !== "preRoll";', null, 400);
@@ -122,8 +101,8 @@ test.describe('game screen', () => {
 
   for (const v of [VIEWPORTS[0], VIEWPORTS[3]]) {
     test(`owned spaces ${v.w}x${v.h}: owner-color cards, pop-out buildings on every side`, async ({ page }) => {
-      const errors = watchErrors(page);
-      await boot(page, v.w, v.h);
+      const errors = watchConsole(page);
+      await boot(page, { w: v.w, h: v.h });
       await start(page, { seed: 31, cpu: false, speed: 0 });
       await craftOwned(page, OWNED_SAMPLE);
       const owned = await checkOwnedBoard(page);
@@ -153,9 +132,9 @@ test.describe('game screen', () => {
 
   test('stage faces each acting seat (S/E/N/W)', async ({ page }) => {
     test.setTimeout(150_000);
-    const errors = watchErrors(page);
+    const errors = watchConsole(page);
     for (const v of [VIEWPORTS[0], VIEWPORTS[3]]) {
-      await boot(page, v.w, v.h);
+      await boot(page, { w: v.w, h: v.h });
       await start(page, { seed: 77, cpu: false, speed: 0 });
       for (const seat of ['S', 'E', 'N', 'W']) {
         const ok = await driveUntil(
@@ -177,8 +156,8 @@ test.describe('game screen', () => {
 
   test('normal-speed animations run cleanly', async ({ page }) => {
     test.setTimeout(90_000);
-    const errors = watchErrors(page);
-    await boot(page, 1600, 1000);
+    const errors = watchConsole(page);
+    await boot(page, { w: 1600, h: 1000 });
     await start(page, { seed: 9, cpu: true, speed: 1.5 });
     await page.waitForTimeout(9000);
     await page.screenshot({ path: `${SHOTS}/game-anim-1600x1000.png` });

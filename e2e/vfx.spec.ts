@@ -14,30 +14,12 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { boot, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
 
 const SHOTS = 'e2e/__screenshots__';
 const STRIPS = 'docs/assets/vfx-ingame';
 const EVERY = 2;
-
-function watchErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error') return;
-    if (/favicon/.test(m.location().url ?? '')) return;
-    if (/Failed to load resource/.test(m.text()) && !m.location().url) return;
-    errors.push(`${m.text()} @ ${m.location().url}`);
-  });
-  page.on('pageerror', (e) => errors.push(String(e)));
-  return errors;
-}
-
-async function boot(page: Page, w: number, h: number): Promise<void> {
-  await page.setViewportSize({ width: w, height: h });
-  await page.goto('/?dev=1');
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
-  await page.evaluate(() => document.fonts.ready);
-}
 
 /** A fresh 4-human game (seed 7), patched by `patch(s)` and resumed; real clock; waits until idle with the atlas loaded. */
 async function craft(page: Page, patch: string): Promise<void> {
@@ -230,8 +212,8 @@ test.describe('in-game VFX', () => {
   for (const size of SIZES) {
     test(`scripted sequence ${size.w}x${size.h}: effects play, anchored, zero idle after`, async ({ page }) => {
       test.setTimeout(420_000);
-      const errors = watchErrors(page);
-      await boot(page, size.w, size.h);
+      const errors = watchConsole(page);
+      await boot(page, { w: size.w, h: size.h });
       mkdirSync(STRIPS, { recursive: true });
       const report: string[] = [];
       let prevOk = false;
@@ -267,9 +249,9 @@ test.describe('in-game VFX', () => {
   }
 
   test('reduced motion: no canvas, static highlight, state still applied', async ({ page }) => {
-    const errors = watchErrors(page);
+    const errors = watchConsole(page);
     await reduceMotion(page);
-    await boot(page, 1600, 1000);
+    await boot(page, { w: 1600, h: 1000 });
     await craft(page, BEATS[0]!.patch!);
     await page.evaluate(() => void window.__lotAndRoll!.dispatch({ type: 'Buy', playerId: 0 }));
     // The colour-group highlight follows the purchase cut-in (≥ 3 s on screen, MONEY-EVENTS §12).
@@ -282,8 +264,8 @@ test.describe('in-game VFX', () => {
   });
 
   test('prompts stay clickable through a running effect (pointer-events: none)', async ({ page }) => {
-    const errors = watchErrors(page);
-    await boot(page, 1600, 1000);
+    const errors = watchConsole(page);
+    await boot(page, { w: 1600, h: 1000 });
     // Player 1 (E) at the build prompt for London (22).
     await craft(page, `${ME(1)} s.players[1].position = 22; s.properties[22] = { owner: 1, level: 0 }; s.phase = { kind: 'build', playerId: 1, spaceIndex: 22, toLevel: 1, cost: 240 };`);
     // A landmark effect (close-up card + stage veil) running…
@@ -299,8 +281,8 @@ test.describe('in-game VFX', () => {
   });
 
   test('tap skips the finale: the engine is idle within 500 ms', async ({ page }) => {
-    const errors = watchErrors(page);
-    await boot(page, 1600, 1000);
+    const errors = watchConsole(page);
+    await boot(page, { w: 1600, h: 1000 });
     await craft(page, BEATS[BEATS.length - 1]!.patch!);
     await page.evaluate(() => void window.__lotAndRoll!.dispatch({ type: 'Buy', playerId: 3 }));
     await page.waitForFunction(() => window.__lotAndRoll!.fx()?.effects.includes('victory'), null, { timeout: 10_000 });

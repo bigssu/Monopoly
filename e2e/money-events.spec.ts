@@ -11,6 +11,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { boot, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
 
 interface LogEntry {
@@ -22,22 +23,6 @@ interface LogEntry {
   keep: boolean;
   events: string[];
   wallets: Record<string, string>;
-}
-
-function watchConsole(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
-  });
-  page.on('pageerror', (e) => errors.push(String(e)));
-  return errors;
-}
-
-async function boot(page: Page, w: number, h: number, query = ''): Promise<void> {
-  await page.setViewportSize({ width: w, height: h });
-  await page.goto(`/?dev=1${query}`);
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, { timeout: 20_000 });
-  await page.evaluate(() => document.fonts.ready);
 }
 
 /**
@@ -135,7 +120,7 @@ test.describe('money cut-ins (normal speed, real controls)', () => {
   test('buy + build, toll + takeover, collect-from-all card, tax', async ({ page }) => {
     test.setTimeout(240_000);
     const errors = watchConsole(page);
-    await boot(page, 1600, 1000);
+    await boot(page, { w: 1600, h: 1000 });
 
     // 1. Buy Cairo, then build a villa on it.
     await craft(page, 'S', `s.players[me].position = 0; s.testHooks = { diceQueue: [[1, 3]] };`);
@@ -230,7 +215,7 @@ test.describe('money cut-ins follow the time policy (fx/time.ts)', () => {
   test('pause freezes the scene clock, resume finishes it; a skip tap plays it ×5', async ({ page }) => {
     test.setTimeout(150_000);
     const errors = watchConsole(page);
-    await boot(page, 1280, 800);
+    await boot(page, { w: 1280, h: 800 });
     // Normal speed, for reference.
     await craft(page, 'S', TOLL);
     const normal = await timeToll(page);
@@ -267,7 +252,7 @@ test.describe('money cut-ins follow the time policy (fx/time.ts)', () => {
 
   test('headless (speed 0): no cut-in, the state is applied at once', async ({ page }) => {
     const errors = watchConsole(page);
-    await boot(page, 1280, 800);
+    await boot(page, { w: 1280, h: 800 });
     await craft(page, 'S', TOLL);
     const res = await page.evaluate(async () => {
       const h = window.__lotAndRoll!;
@@ -293,7 +278,7 @@ test.describe('money cut-ins follow the time policy (fx/time.ts)', () => {
     test.setTimeout(90_000);
     const errors = watchConsole(page);
     await reduceMotion(page);
-    await boot(page, 1280, 800);
+    await boot(page, { w: 1280, h: 800 });
     await craft(page, 'S', TOLL);
     const r = await timeToll(page);
     await page.evaluate(() => window.__lotAndRoll!.whenIdle());
@@ -311,7 +296,7 @@ test.describe('money cut-ins follow the time policy (fx/time.ts)', () => {
 test('CPU buy: the hand presses and leaves, then the cut-in plays (no overlap)', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = watchConsole(page);
-  await boot(page, 1600, 1000);
+  await boot(page, { w: 1600, h: 1000 });
   // Seat N is a CPU at the buy prompt for Cairo.
   await page.evaluate(() => {
     const hook = window.__lotAndRoll!;
@@ -369,7 +354,7 @@ test.describe('render tiers (MONEY-EVENTS §13)', () => {
     test(`tier ${tier}: the cut-in plays at its render scale and parks`, async ({ page }) => {
       test.setTimeout(90_000);
       const errors = watchConsole(page);
-      await boot(page, 1600, 1000, `&mres=${tier}`);
+      await boot(page, { w: 1600, h: 1000, query: `&mres=${tier}` });
       await craft(page, 'S', TOLL);
       const info = await page.evaluate(() => window.__lotAndRoll!.money()!);
       expect(info.tier).toBe(tier);
@@ -388,7 +373,7 @@ test.describe('render tiers (MONEY-EVENTS §13)', () => {
     const rects: Record<string, unknown> = {};
     for (const tier of ['high', 'low'] as const) {
       // 3D off on both: the high tier would tilt the hero (a different box), this compares resolution only.
-      await boot(page, 1600, 1000, `&mres=${tier}&m3d=0`);
+      await boot(page, { w: 1600, h: 1000, query: `&mres=${tier}&m3d=0` });
       await craft(page, 'S', TOLL, true);
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;
@@ -527,7 +512,7 @@ for (const size of [{ w: 1600, h: 1000 }, { w: 800, h: 450 }]) {
       // Six cut-ins of 4–6.5 s (EVENT_EXTEND), screenshot every 2 ticks: ~100 s each on this VM.
       test.setTimeout(720_000);
       const errors = watchConsole(page);
-      await boot(page, size.w, size.h);
+      await boot(page, { w: size.w, h: size.h });
       mkdirSync(STRIPS, { recursive: true });
       for (const sc of SCENARIOS) {
         await craft(page, seat, sc.patch, true);
@@ -563,7 +548,7 @@ test.describe('a cut-in cut short (review round 1)', () => {
   for (const how of ['resize', 'orientationchange'] as const) {
     test(`${how} 300 ms into a cut-in: the scene finishes at once, the game reaches the next prompt`, async ({ page }) => {
       const errors = watchConsole(page);
-      await boot(page, 1600, 1000);
+      await boot(page, { w: 1600, h: 1000 });
       await craft(page, 'S', TAX);
       await page.locator('.stage [data-action="Roll"]:not(:disabled)').click();
       await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.money()?.t ?? 0), { timeout: 20_000, intervals: [16] }).toBeGreaterThan(300);

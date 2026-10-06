@@ -4,6 +4,7 @@
  * starting a game reaches the game screen.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { boot as bootApp, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
 
 const VIEWPORTS = [
@@ -13,21 +14,10 @@ const VIEWPORTS = [
 
 const SHOTS = 'e2e/__screenshots__';
 
-function watchErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(msg.text());
-  });
-  page.on('pageerror', (err) => errors.push(String(err)));
-  return errors;
-}
-
 async function boot(page: Page): Promise<void> {
   await reduceMotion(page);
-  await page.goto('/?dev=1');
-  await expect(page.locator('#app[data-screen="title"]')).toBeVisible();
+  await bootApp(page);
   await expect(page.locator('#splash')).toHaveCount(0);
-  await page.evaluate(() => document.fonts.ready);
 }
 
 async function shot(page: Page, name: string, vp: { width: number; height: number }): Promise<void> {
@@ -40,7 +30,7 @@ for (const vp of VIEWPORTS) {
     test.use({ viewport: vp });
 
     test('title, setup, rules, settings screenshots', async ({ page }) => {
-      const errors = watchErrors(page);
+      const errors = watchConsole(page);
       await boot(page);
       await shot(page, 'title', vp);
 
@@ -107,7 +97,7 @@ test.describe('start a game', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
   test('adds an AI player and starts its turn', async ({ page }) => {
-    const errors = watchErrors(page);
+    const errors = watchConsole(page);
     await boot(page);
     await page.click('[data-action="new"]');
 
@@ -145,7 +135,7 @@ test.describe('start a game', () => {
   });
 
   test('setup → game screen', async ({ page }) => {
-    const errors = watchErrors(page);
+    const errors = watchConsole(page);
     await boot(page);
     await page.click('[data-action="new"]');
     await page.click('[data-action="start"]');
@@ -160,7 +150,7 @@ test.describe('start a game', () => {
   });
 
   test('language switch to English', async ({ page }) => {
-    const errors = watchErrors(page);
+    const errors = watchConsole(page);
     await boot(page);
     await page.click('[data-action="settings"]');
     await page.getByRole('radio', { name: 'English' }).click();

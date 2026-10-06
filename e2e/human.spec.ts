@@ -11,6 +11,7 @@
  * Screenshots → e2e/__screenshots__/human-*.png
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { boot, watchConsole } from './helpers';
 import type { Action, GameState, Seat } from '../src/engine/types';
 import { reduceMotion } from './motion';
 import { checkOwnedBoard } from './owned-board';
@@ -22,28 +23,6 @@ const FAST = 10;
 // ---------------------------------------------------------------------------
 // Harness
 // ---------------------------------------------------------------------------
-
-function watchConsole(page: Page): string[] {
-  const out: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() !== 'error' && m.type() !== 'warning') return;
-    const url = m.location().url ?? '';
-    if (/favicon/.test(url)) return;
-    if (/Failed to load resource/.test(m.text()) && !url) return;
-    out.push(`${m.type()}: ${m.text()} @ ${url}`);
-  });
-  page.on('pageerror', (e) => out.push(`pageerror: ${String(e)}`));
-  return out;
-}
-
-async function boot(page: Page, w = 1600, h = 1000): Promise<void> {
-  await page.setViewportSize({ width: w, height: h });
-  await page.goto('/?dev=1');
-  await page.waitForFunction(() => !!window.__lotAndRoll && document.getElementById('app')?.dataset.screen === 'title', null, {
-    timeout: 20_000,
-  });
-  await page.evaluate(() => document.fonts.ready);
-}
 
 async function screen(page: Page): Promise<string | undefined> {
   return page.evaluate(() => window.__lotAndRoll!.screen());
@@ -188,8 +167,8 @@ test.describe('human play (clicking real controls)', () => {
   test.use({ actionTimeout: 10_000 });
   test('4 humans via the Setup screen: 60+ turns, menu, info popover, save & resume', async ({ page }) => {
     test.setTimeout(600_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate((x) => {
       window.__lotAndRoll!.setAnimSpeed(x);
       window.__lotAndRoll!.setPromptTimer(0);
@@ -257,8 +236,8 @@ test.describe('human play (clicking real controls)', () => {
 
   test('debt: sell assets by tapping the sell buttons until the toll is paid', async ({ page }) => {
     test.setTimeout(120_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(2);
       window.__lotAndRoll!.setPromptTimer(0);
@@ -306,8 +285,8 @@ test.describe('human play (clicking real controls)', () => {
 
   test('bankruptcy (elimination mode) greys the panel; game over → result buttons', async ({ page }) => {
     test.setTimeout(150_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(1);
       window.__lotAndRoll!.setPromptTimer(0);
@@ -393,8 +372,8 @@ test.describe('human play (clicking real controls)', () => {
 
   test('result screen: the ↻ pill turns the card to every seat (README shot faces S)', async ({ page }) => {
     test.setTimeout(150_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate(() => {
       const hook = window.__lotAndRoll!;
       hook.setAnimSpeed(0);
@@ -421,8 +400,8 @@ test.describe('human play (clicking real controls)', () => {
 
   test('auction, festival, travel (board tap) and the event card tap', async ({ page }) => {
     test.setTimeout(150_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(3);
       window.__lotAndRoll!.setPromptTimer(0);
@@ -516,8 +495,8 @@ test.describe('human play (clicking real controls)', () => {
 
   test('toll moment: money cut-in + receiver panel flash; soft timer auto-pass is announced', async ({ page }) => {
     test.setTimeout(90_000);
-    const logs = watchConsole(page);
-    await boot(page);
+    const logs = watchConsole(page, { warnings: true });
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(1);
       window.__lotAndRoll!.setPromptTimer(0);
@@ -558,9 +537,9 @@ test.describe('human play (clicking real controls)', () => {
 
   test('soft timer pauses: hidden app, rules overlay + Escape; a held roll button stops shaking', async ({ page }) => {
     test.setTimeout(90_000);
-    const logs = watchConsole(page);
+    const logs = watchConsole(page, { warnings: true });
     await reduceMotion(page);
-    await boot(page);
+    await boot(page, { w: 1600, h: 1000 });
     await page.evaluate(() => {
       window.__lotAndRoll!.setAnimSpeed(0);
       // Leave ample time for loadState and the first prompt to settle before simulating pause.
@@ -613,8 +592,8 @@ test.describe('human play (clicking real controls)', () => {
   ]) {
     test(`English text fits on the game screen at ${vp.w}x${vp.h}`, async ({ page }) => {
       test.setTimeout(240_000);
-      const logs = watchConsole(page);
-      await boot(page, vp.w, vp.h);
+      const logs = watchConsole(page, { warnings: true });
+      await boot(page, { w: vp.w, h: vp.h });
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;
         hook.setLang('en');
