@@ -25,8 +25,8 @@ import { FRAME_MS, newSample, sampleParticle } from './particles';
 import { PF } from './pool';
 import { Presenter, type PresentStats } from './present';
 import { buildPreset, type PresetEnv, type PresetName, type PresetParams } from './presets';
-import { extendRate, Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
-import { eventStretch } from '../time';
+import { extendBlock, extendRate, Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
+import { EVENT_EXTEND, eventStretch } from '../time';
 import { ACCENT_Q, ADAPTIVE_DEFAULTS, AdaptiveQuality, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
 
 /** The user setting (Settings → 연출 품질 / Effects). 'auto' adapts to the device (VFX.md §15.4). */
@@ -137,7 +137,8 @@ export interface FxStats {
 export interface FxHandle {
   /**
    * `extend`: the effect is an event presentation (fx/time.ts EVENT_EXTEND): its timeline and
-   * particles play slower in proportion, lasting `EVENT_EXTEND.motionMs` longer (block and cues too).
+   * particles play slower in proportion, lasting `EVENT_EXTEND.motionMs` longer (cues later in
+   * proportion; the block, what the sequencer awaits, exactly `motionMs` later).
    * A number: stretch by exactly that factor (an effect timed to a DOM animation stretched by it).
    */
   play<N extends PresetName>(name: N, params: PresetParams<N>, o?: { seed?: number; extend?: boolean | number }): FxPlay;
@@ -727,7 +728,7 @@ export function createFx(o: FxOptions): FxHandle {
     ...(o.highlight ? { highlight: o.highlight } : {}),
   });
 
-  function start(tl: Timeline, seed?: number, rate = 1): FxPlay {
+  function start(tl: Timeline, seed?: number, rate = 1, block = tl.block): FxPlay {
     let effect: Effect | null = null;
     let cancelled = false;
     const generation = startGeneration;
@@ -753,6 +754,7 @@ export function createFx(o: FxOptions): FxHandle {
         quiet: accent,
         lite: tierNow() === 'low',
         rate,
+        block,
       });
       arm();
       return effect;
@@ -794,7 +796,11 @@ export function createFx(o: FxOptions): FxHandle {
         return noopPlay(tl.name, tl.tier);
       }
       const ext = opt?.extend;
-      return start(tl, opt?.seed, typeof ext === 'number' ? 1 / ext : ext ? extendRate(tl, eventStretch) : 1);
+      if (typeof ext === 'number') return start(tl, opt?.seed, 1 / ext);
+      if (!ext) return start(tl, opt?.seed);
+      // An event: slower in proportion, and its block holds the sequence motionMs longer.
+      const rate = extendRate(tl, eventStretch);
+      return start(tl, opt?.seed, rate, extendBlock(tl, rate, (EVENT_EXTEND.motionMs * 30) / 1000));
     },
     run(tl, opt) {
       if (disposed) return noopPlay(tl.name, tl.tier);

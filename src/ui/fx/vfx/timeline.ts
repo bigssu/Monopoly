@@ -203,6 +203,8 @@ export class Effect {
     readonly lite = false,
     /** Timeline frames per FX frame: < 1 = stretched in proportion (EVENT_EXTEND, `extendRate`). */
     readonly rate = 1,
+    /** Timeline frame at which `block` resolves (default: the timeline's block frame). */
+    readonly blockAt = tl.block,
   ) {
     this.cap = TIER_CAP[tl.tier];
     this.block = new Promise((r) => (this.resolveBlock = r));
@@ -282,6 +284,8 @@ export interface StartOptions {
   lite?: boolean;
   /** Timeline frames per FX frame (< 1: the whole effect plays slower in proportion; `extendRate`). */
   rate?: number;
+  /** Timeline frame at which play() resolves instead of the timeline's block frame (`extendBlock`). */
+  block?: number;
 }
 
 /** Log of executed side effects (tests / determinism checks). */
@@ -322,7 +326,7 @@ export class Runner {
     const rng = mulberry32(o.seed ?? mixSeed(this.baseSeed, id));
     const quiet = this.skipping || !!o.quiet;
     const q = (o.quality ?? 1) * (quiet ? 0.5 : 1);
-    const e = new Effect(id, tl, this, rng, o.u, q, quiet, !!o.lite, o.rate ?? 1);
+    const e = new Effect(id, tl, this, rng, o.u, q, quiet, !!o.lite, o.rate ?? 1, o.block ?? tl.block);
     this.effects.push(e);
     return e;
   }
@@ -361,7 +365,7 @@ export class Runner {
   private runFrame(e: Effect): void {
     const ops = e.tl.ops;
     while (e.idx < ops.length && ops[e.idx]!.f <= e.f) this.exec(e, ops[e.idx++]!);
-    if (e.blocked && e.f >= e.tl.block) {
+    if (e.blocked && e.f >= e.blockAt) {
       e.blocked = false;
       e.resolveBlock();
     }
@@ -485,6 +489,17 @@ export function timelineFrames(tl: Timeline, u = 30): number {
  */
 export function extendRate(tl: Timeline, stretch: (ms: number) => number, u = 30): number {
   return 1 / stretch((timelineFrames(tl, u) * 1000) / 30);
+}
+
+/**
+ * Block frame (timeline frames) of an effect stretched by `rate` such that whoever awaits it waits
+ * exactly `frames` FX frames longer than for the unstretched effect (EVENT_EXTEND.motionMs: an
+ * event's effect holds the sequence that much longer, its tail keeps playing after). A timeline
+ * without a block (fire and forget) keeps none.
+ */
+export function extendBlock(tl: Timeline, rate: number, frames: number): number {
+  if (tl.block <= 0) return tl.block;
+  return Math.min(timelineFrames(tl), (tl.block + frames) * rate);
 }
 
 /**
