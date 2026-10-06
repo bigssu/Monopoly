@@ -86,11 +86,16 @@ export interface PSpec {
   hammer?: readonly [number, number, number];
 }
 
-/** Write a spec into slot `i`. `unit` = u / 30 (sprite size factor). */
-export function writeParticle(pool: ParticlePool, i: number, p: PSpec, unit: number): void {
+/**
+ * Write a spec into slot `i`. `unit` = u / 30 (sprite size factor). `rate` < 1 plays the particle
+ * slower in proportion (an event's stretched effect): it ages `rate` frames per FX frame, so its
+ * life, delay, fades, path, scale curve, spin and sprite frames all take 1/rate as long.
+ */
+export function writeParticle(pool: ParticlePool, i: number, p: PSpec, unit: number, rate = 1): void {
   const meta = FX_ANIMS[p.anim];
   pool.anim[i] = ANIM_INDEX[p.anim];
   pool.life[i] = Math.max(1, p.life);
+  pool.rate[i] = rate;
   pool.age[i] = -(p.delay ?? 0);
   pool.x[i] = p.x ?? 0;
   pool.y[i] = p.y ?? 0;
@@ -155,27 +160,29 @@ export function writeParticle(pool: ParticlePool, i: number, p: PSpec, unit: num
   pool.layer[i] = p.layer ?? 1;
 }
 
-/** Advance every live particle by one fixed 30 fps step; frees the finished ones. */
+/** Advance every live particle by one fixed 30 fps step (× its `rate`); frees the finished ones. */
 export function stepParticles(pool: ParticlePool): void {
-  const { flags, age, life } = pool;
+  const { flags, age, life, rate } = pool;
   for (let i = 0; i < pool.cap; i++) {
     const fl = flags[i]!;
     if (!(fl & PF.Alive)) continue;
-    const a = age[i]! + 1;
+    const r = rate[i]!;
+    const a = age[i]! + r;
     age[i] = a;
     if (a >= life[i]!) {
       pool.free(i);
       continue;
     }
     if (a <= 0 || fl & PF.Path) continue;
-    // Ballistic (semi-implicit Euler).
-    const d = pool.drag[i]!;
-    const vx = (pool.vx[i]! + pool.ax[i]! * DT) * d;
-    const vy = (pool.vy[i]! + pool.ay[i]! * DT) * d;
+    // Ballistic (semi-implicit Euler); a slowed particle takes a shorter step (drag per step ^ r).
+    const dt = r === 1 ? DT : DT * r;
+    const d = r === 1 ? pool.drag[i]! : pool.drag[i]! ** r;
+    const vx = (pool.vx[i]! + pool.ax[i]! * dt) * d;
+    const vy = (pool.vy[i]! + pool.ay[i]! * dt) * d;
     pool.vx[i] = vx;
     pool.vy[i] = vy;
-    pool.x[i] = pool.x[i]! + vx * DT;
-    pool.y[i] = pool.y[i]! + vy * DT;
+    pool.x[i] = pool.x[i]! + vx * dt;
+    pool.y[i] = pool.y[i]! + vy * dt;
   }
 }
 

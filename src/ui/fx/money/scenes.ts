@@ -17,7 +17,7 @@ import type { Seat } from '@/engine';
 import { iconMarkup } from '@/content/icons';
 import { bank, dirtPlot, plotSign, vault } from '@/content/fx/sprites-money';
 import { fmtMoney, t } from '@/i18n';
-import { headless } from '../time';
+import { EVENT_EXTEND, headless } from '../time';
 import { f, type MoneyClock } from './clock';
 import type { Pt } from './coins';
 import {
@@ -131,6 +131,8 @@ export function runScene(st: MoneyStage, kind: string, tier: Tier, _opts: SceneO
       return;
     }
     const c = st.clock!;
+    // EVENT_EXTEND: the motion runs slower (finish() trues it up to exactly motionMs).
+    c.stretch = MOTION_STRETCH;
     const ctx: Ctx = { st, c, kind, tier, T: TIER[tier], cues, at: (fr) => c.until(f(fr)), coin: Math.round(st.geom.coin * 1.25) };
     cues.fire('start');
     try {
@@ -149,7 +151,7 @@ export function runScene(st: MoneyStage, kind: string, tier: Tier, _opts: SceneO
 
 /**
  * The beat grammar of every cut-in (docs/MONEY-EVENTS.md §12 "비트와 12원칙"), pose to pose, in 30 fps
- * frames at the default game pace:
+ * SCENE frames at the default game pace (on screen they are longer: EVENT_EXTEND below):
  *
  *   INTRO  ≥ 0.5 s  the stage dims, hero and wallets come in and SETTLE; the coins that will leave
  *                   lift and shimmer (anticipation) — the first coin leaves at ≈ f18
@@ -163,8 +165,34 @@ export function runScene(st: MoneyStage, kind: string, tier: Tier, _opts: SceneO
  * event plays at 0.7×: the still hold grows to make up the difference.
  */
 export const BEATS_F = { intro: 18, lift: 8, result: 15, plaque: 9, still: 30, out: 9 } as const;
-/** Floor of a cut-in on screen at the default pace (ms). */
-export const MIN_SCENE_MS = 3100;
+/**
+ * EVENT_EXTEND (fx/time.ts) on a cut-in: its motion lasts `motionMs` longer and its still hold
+ * `holdMs` longer, so it is on screen `motionMs + holdMs` longer than these scene frames say.
+ *
+ * Motion: the scene clock runs MOTION_STRETCH× slower from the first frame (every pose, coin arc,
+ * count-up and coin sound in the same proportion). MOTION_REF_F is the motion of a typical cut-in
+ * (scene frames from stage-in to the still, plus the out; the median of beats.test.ts), the one
+ * this rate stretches by exactly `motionMs`. `finish()` then trues it up: the result → plaque →
+ * out beats take whatever is left of `motionMs` (a shorter cut-in moves them a little slower, a
+ * longer one not at all), so every cut-in moves `motionMs` longer (a very long one: slightly more).
+ * Still: `BEATS_F.still` + `holdMs`, at the normal rate.
+ */
+export const MOTION_REF_F = 100;
+export const MOTION_STRETCH = 1 + EVENT_EXTEND.motionMs / f(MOTION_REF_F);
+/** Floor of a cut-in on screen at the default pace (ms): 3.1 s before EVENT_EXTEND, plus it. */
+export const MIN_SCENE_MS = 3100 + EVENT_EXTEND.motionMs + EVENT_EXTEND.holdMs;
+/** Most a true-up may slow a beat (×): a cut-in far shorter than MOTION_REF_F stays lively. */
+const MAX_TRUE_UP = 2;
+
+/**
+ * Stretch for the next `sceneMs` of motion so the cut-in's added motion reaches
+ * `EVENT_EXTEND.motionMs` at its end (1 when it already has).
+ */
+function trueUp(c: MoneyClock, sceneMs: number): number {
+  const left = EVENT_EXTEND.motionMs - c.extraMs;
+  if (sceneMs <= 0 || left <= 0) return 1;
+  return 1 + Math.min(MAX_TRUE_UP - 1, left / (c.factor * sceneMs));
+}
 
 const easeOutBack = (u: number, s = 1.70158): number => {
   const c3 = s + 1;
@@ -408,26 +436,38 @@ interface FinishOpts {
 }
 
 /**
- * RESULT (≥ 0.5 s) → plaque → STILL (≥ 1.0 s; longer when the cut-in would end before MIN_SCENE_MS)
- * → 'settle' → OUT (0.3 s: the hero flies to its tile, wallets sink, the stage fades) → down.
+ * RESULT (≥ 0.5 s) → plaque → STILL (≥ 1.0 s + holdMs; longer when the cut-in would end before
+ * MIN_SCENE_MS) → 'settle' → OUT (0.3 s: the hero flies to its tile, wallets sink, the stage fades)
+ * → down. Scene frames; EVENT_EXTEND stretches the moving beats (see MOTION_STRETCH).
  */
 async function finish(x: Ctx, o: FinishOpts): Promise<void> {
   x.cues.fire('arrive');
-  const r0 = x.c.t;
+  const c = x.c;
+  const out = o.keep ? 0 : f(BEATS_F.out);
+  // The moving beats left (result, plaque, out) take what the motion extension still lacks.
+  c.stretch = trueUp(c, f(BEATS_F.result + BEATS_F.plaque) + out);
+  const r0 = c.t;
   await o.result?.();
-  await x.c.until(r0 + f(BEATS_F.result));
+  await c.until(r0 + f(BEATS_F.result));
   await o.plaque?.();
   // The numbers are final before the still hold.
   for (const s of SEATS) if (x.st.wallets[s].visible) x.st.wallets[s].settleCount();
   x.cues.fire('result');
-  // STILL: at least 1 s, and long enough that the whole cut-in is ≥ MIN_SCENE_MS on screen (a
-  // repeated event at 0.7× included: scene time runs 1/factor faster).
-  const out = o.keep ? 0 : f(BEATS_F.out);
-  const still = Math.max(f(BEATS_F.still), MIN_SCENE_MS / x.c.factor - x.c.t - out);
+  // The out takes exactly what is left of the motion extension.
+  const outStretch = trueUp(c, out);
+  // STILL (normal rate): BEATS_F.still + holdMs, and long enough that the whole cut-in is
+  // ≥ MIN_SCENE_MS on screen. In ms at the default pace: scene time × factor (a repeated event at
+  // 0.7× runs 1/factor faster) + what the stretch added.
+  const F = c.factor;
+  const elapsed = F * c.t + c.extraMs;
+  const outMs = F * out * outStretch;
+  const still = Math.max(F * f(BEATS_F.still) + EVENT_EXTEND.holdMs, MIN_SCENE_MS - elapsed - outMs) / F;
+  c.stretch = 1;
   idleGlints(x, still, o.seat ?? 'S');
   o.idle?.(still);
-  await x.c.after(still);
+  await c.after(still);
   x.cues.fire('settle');
+  c.stretch = outStretch;
   if (o.keep) {
     await x.st.close(x.tier, true);
     return;

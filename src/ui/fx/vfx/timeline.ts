@@ -175,7 +175,7 @@ interface CueWait {
 }
 
 export class Effect {
-  /** Next FX frame to run. */
+  /** Next FX frame to run (fractional when the effect is stretched, `rate` < 1). */
   f = 0;
   idx = 0;
   blocked = true;
@@ -201,6 +201,8 @@ export class Effect {
     readonly quiet: boolean,
     /** Quality 'low': no `glow` sprites (the big soft additive ones), no shake. */
     readonly lite = false,
+    /** Timeline frames per FX frame: < 1 = stretched in proportion (EVENT_EXTEND, `extendRate`). */
+    readonly rate = 1,
   ) {
     this.cap = TIER_CAP[tl.tier];
     this.block = new Promise((r) => (this.resolveBlock = r));
@@ -212,7 +214,7 @@ export class Effect {
       if (lite && p.anim === 'glow') return false;
       const i = pool.alloc(tl.priority, id);
       if (i < 0) return false;
-      writeParticle(pool, i, p, unit);
+      writeParticle(pool, i, p, unit, rate);
       this.stats.spawned++;
       return true;
     };
@@ -278,6 +280,8 @@ export interface StartOptions {
   quiet?: boolean;
   /** Quality 'low' (VFX.md §15.4): no soft additive glows (incl. flashes), no shake. */
   lite?: boolean;
+  /** Timeline frames per FX frame (< 1: the whole effect plays slower in proportion; `extendRate`). */
+  rate?: number;
 }
 
 /** Log of executed side effects (tests / determinism checks). */
@@ -318,7 +322,7 @@ export class Runner {
     const rng = mulberry32(o.seed ?? mixSeed(this.baseSeed, id));
     const quiet = this.skipping || !!o.quiet;
     const q = (o.quality ?? 1) * (quiet ? 0.5 : 1);
-    const e = new Effect(id, tl, this, rng, o.u, q, quiet, !!o.lite);
+    const e = new Effect(id, tl, this, rng, o.u, q, quiet, !!o.lite, o.rate ?? 1);
     this.effects.push(e);
     return e;
   }
@@ -361,7 +365,7 @@ export class Runner {
       e.blocked = false;
       e.resolveBlock();
     }
-    e.f++;
+    e.f += e.rate;
   }
 
   private reap(): void {
@@ -389,7 +393,7 @@ export class Runner {
       case 'shake':
         if (e.quiet || e.lite || this.skipping) return;
         this.note(e, 'shake', `${a.px}/${a.ms}`);
-        h.shake?.(a.px, a.ms);
+        h.shake?.(a.px, a.ms / e.rate);
         return;
       case 'hitStop':
         if (e.quiet || this.skipping) return;
@@ -442,6 +446,45 @@ export class Runner {
         return;
     }
   }
+}
+
+/**
+ * Frames an effect lasts: its last op, or the last particle of a spawn (delay + life), whichever is
+ * later. The spawns are dry-run against a recording context (no pool, a throwaway RNG); the presets'
+ * spawn functions only emit.
+ */
+export function timelineFrames(tl: Timeline, u = 30): number {
+  let end = tl.end;
+  let at = 0;
+  const see = (p: PSpec): boolean => {
+    end = Math.max(end, at + (p.delay ?? 0) + p.life);
+    return true;
+  };
+  const rng = mulberry32(1);
+  const ctx: EmitCtx = {
+    rng,
+    u,
+    q: 1,
+    emit: see,
+    burst: (n, make) => {
+      for (let k = 0; k < n; k++) see(make(k, n, ctx));
+      return n;
+    },
+  };
+  for (const o of tl.ops) {
+    at = o.f;
+    if (o.a.k === 'spawn') o.a.fn(ctx);
+    else if (o.a.k === 'flash') end = Math.max(end, at + o.a.frames + 1);
+  }
+  return end;
+}
+
+/**
+ * Rate (timeline frames per FX frame) that stretches an event's effect in proportion so it lasts
+ * `EVENT_EXTEND.motionMs` longer (`stretch` = fx/time.ts `eventStretch(effect ms)`).
+ */
+export function extendRate(tl: Timeline, stretch: (ms: number) => number, u = 30): number {
+  return 1 / stretch((timelineFrames(tl, u) * 1000) / 30);
 }
 
 /**

@@ -20,6 +20,12 @@
  * at the scene's 'settle' cue (the board / panels change as the cut-in hands back), and the old
  * canvas money presets, panel floats and the toll card do not play for them.
  *
+ * Event presentations (fx/time.ts EVENT_EXTEND, 2026-10-06): the money cut-ins stretch themselves
+ * (scenes.ts); here the non-money events in `EXTENDED` play their presets stretched (`fire(…, true)`),
+ * their toasts / stamps / card with `event` (slower motion, +holdMs read), and an event whose
+ * presentation has no hold of its own (an effect, a stamp, a beat) gets `eventHold()` after it.
+ * Not extended: the dice, token moves, turn / round banners, accents nothing waits for.
+ *
  * Speed: every duration goes through `fx/time` — `setAnimSpeed(0)` makes the whole queue
  * instant and plays no effect (tests), a "skip" tap accelerates it ×5 (and fires pending fx cues
  * now), reduced motion keeps every beat but holds still (presets: sound + a static highlight,
@@ -35,13 +41,14 @@ import { isDevHook, money, spaceIcon } from '@/ui/game/util';
 import { iconMarkup } from '@/content/icons';
 import { edgeToast } from './floats';
 import { groupFx, planFx, type FxCtx, type FxStep } from './fxmap';
-import { animSpeed, headless, sleep, turnRest, wait, whenRunning } from './time';
+import { animSpeed, eventHold, headless, sleep, turnRest, wait, whenRunning } from './time';
 import { BEAT } from './motion';
 import { playMusic } from '@/ui/audio/music';
 import type { FxPlay } from './vfx';
 import { applyMoneyState, planMoney, type MoneyGroup, type MoneyScene } from './moneymap';
 import * as M from './money';
 import { festivalMultiplier, type Level as EngineLevel } from '@/engine';
+import { CARD_STRETCH } from '@/ui/stage/Stage';
 
 type Alive = () => boolean;
 const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide ?? 7).board;
@@ -53,6 +60,18 @@ const MARK = typeof window !== 'undefined' && isDevHook();
 const CHANGE_BEATS: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
   'CardKept', 'CardUsed', 'ExpressGranted', 'Escaped',
   'FestivalSet', 'TravelDeclined', 'AuctionBid', 'AuctionDropped',
+]);
+
+/**
+ * Non-money events that are event presentations (EVENT_EXTEND): what a landing / a turn leads to and
+ * the sequencer waits for. Out: dice, moves, turn / round banners and the running commentary of an
+ * auction or a card being kept / used (accents the sequencer does not wait on). The monopoly moment
+ * (`groupMoment`) and the money cut-ins are extended where they play.
+ */
+const EXTENDED: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
+  'CardDrawn', 'CardNoEffect', 'SentToIsland', 'IslandStay', 'Escaped', 'TravelGranted', 'FestivalSet',
+  'Demolished', 'TakeoverBlocked', 'OneAway', 'CannotAfford', 'DebtStarted', 'DebtSettled',
+  'AuctionStarted', 'AuctionEnded', 'GameOver',
 ]);
 
 /** Per-batch state shared between events (previous event). */
@@ -138,7 +157,11 @@ export async function playEvents(
       // Pacing: a held beat after a change whose own animation is not awaited, so one thing
       // happens at a time and each can be seen (holds follow the game pace).
       // Not before a finale: it has its own beats, and a tap must skip it from the first frame.
-      if (!fast && CHANGE_BEATS.has(ev.type) && next.phase.kind !== 'gameOver') await sleep(BEAT.change);
+      if (!fast && CHANGE_BEATS.has(ev.type) && next.phase.kind !== 'gameOver') {
+        await sleep(BEAT.change);
+        // An event's change (festival set, escaped) is held EVENT_EXTEND.holdMs longer.
+        if (EXTENDED.has(ev.type)) await eventHold();
+      }
     } catch (e) {
       // An animation must never break the game loop.
       console.error('[animate]', ev.type, e);
@@ -176,9 +199,10 @@ const NOOP: FxPlay = (() => {
 /** Effects run unless the animation speed is 0 (tests); reduced motion is handled by the engine. */
 const fxOn = (): boolean => animSpeed() > 0;
 
-function play(view: GameView, s: FxStep): FxPlay {
+/** `extend`: an event presentation (EVENT_EXTEND; a number = that exact stretch). */
+function play(view: GameView, s: FxStep, extend: boolean | number = false): FxPlay {
   if (!fxOn()) return NOOP;
-  return view.vfx.play(s.preset as never, s.params as never);
+  return view.vfx.play(s.preset as never, s.params as never, extend ? { extend } : undefined);
 }
 
 /**
@@ -204,9 +228,9 @@ async function runSteps(view: GameView, steps: readonly FxStep[], apply?: () => 
   return hs;
 }
 
-/** Start the steps without waiting (the caller awaits handles itself). */
-function fire(view: GameView, steps: readonly FxStep[]): FxPlay[] {
-  return steps.filter((s) => s.hop === undefined).map((s) => play(view, s));
+/** Start the steps without waiting (the caller awaits handles itself). `extend`: see `play`. */
+function fire(view: GameView, steps: readonly FxStep[], extend: boolean | number = false): FxPlay[] {
+  return steps.filter((s) => s.hop === undefined).map((s) => play(view, s, extend));
 }
 
 function ctxFor(view: GameView, vs: GameState): FxCtx {
@@ -221,16 +245,20 @@ function ctxFor(view: GameView, vs: GameState): FxCtx {
 async function groupMoment(view: GameView, vs: GameState, pid: PlayerId, i: number, fast: boolean): Promise<void> {
   const steps = groupFx(vs, pid, i);
   if (!steps.length || !fxOn()) return;
-  const [h] = fire(view, steps);
+  // An event presentation: the chain and its stamp stretched, the lit group held (EVENT_EXTEND).
+  const [h] = fire(view, steps, true);
   const g = groupOf(i, vs.settings.spacesPerSide ?? 7);
-  if (!fast && g) void h!.cue('stamp').then(() => view.stage.stamp(t('g.monopoly.done', { name: loc(GROUP_NAMES[g]) }), 'gold'));
+  if (!fast && g) void h!.cue('stamp').then(() => view.stage.stamp(t('g.monopoly.done', { name: loc(GROUP_NAMES[g]) }), 'gold', true));
   void h!.cue('badge').then(() => view.panel(pid)?.bump());
   await h;
+  if (!fast) await eventHold();
 }
 
 async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean, batch: Batch): Promise<void> {
   const { board, stage } = view;
   const ctx = ctxFor(view, vs);
+  // An event presentation (EVENT_EXTEND): its presets stretched, its toasts with `event`.
+  const ext = EXTENDED.has(ev.type);
   switch (ev.type) {
     case 'RoundStarted': {
       vs.round = ev.round;
@@ -336,29 +364,31 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       render(view, vs);
       return;
     case 'CannotAfford':
-      fire(view, planFx(ev, ctx));
-      if (!fast) await stage.toast(t('g.cannotAfford'), 700, 'bad', 'coin');
+      fire(view, planFx(ev, ctx), ext);
+      if (!fast) await stage.toast(t('g.cannotAfford'), 700, 'bad', 'coin', ext);
       return;
     case 'Demolished': {
       vs.properties[ev.spaceIndex]!.level = ev.level;
       render(view, vs);
-      const hs = fire(view, planFx(ev, ctx));
+      // A typhoon is an event (EVENT_EXTEND); a building sold for debt is part of the sale's cut-in.
+      const typhoon = ev.cause === 'typhoon';
+      const hs = fire(view, planFx(ev, ctx), typhoon);
       if (fast) return;
-      if (ev.cause === 'typhoon') {
+      if (typhoon) {
         view.playSfx('warning');
         await Promise.all([
           ...hs,
           board.pulseSpace(ev.spaceIndex, 'shake'),
-          stage.toast(t('g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!)),
+          stage.toast(t('g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!), true),
         ]);
       } else await board.pulseSpace(ev.spaceIndex, 'shake');
       return;
     }
     case 'TakeoverBlocked':
-      fire(view, planFx(ev, ctx));
+      fire(view, planFx(ev, ctx), ext);
       if (!fast) {
         view.playSfx('warning');
-        await stage.toast(t('g.takeover.blocked'), 900, 'bad', 'cards-shield');
+        await stage.toast(t('g.takeover.blocked'), 900, 'bad', 'cards-shield', ext);
       }
       return;
     case 'CardDrawn': {
@@ -366,10 +396,11 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         fire(view, planFx(ev, ctx));
         return;
       }
-      // Glints around the card at the flip apex (the card rises 320 ms, flips 230 ms).
+      // Glints around the card at the flip apex (the card rises 320 ms, flips 230 ms), both
+      // stretched by the card's EVENT_EXTEND factor so they stay in step.
       const shown = stage.showCard(ev.cardId);
-      await wait(430);
-      fire(view, planFx(ev, ctx));
+      await wait(430 * CARD_STRETCH);
+      fire(view, planFx(ev, ctx), CARD_STRETCH);
       await shown;
       return;
     }
@@ -393,39 +424,39 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       fire(view, planFx(ev, ctx));
       return;
     case 'CardNoEffect':
-      fire(view, planFx(ev, ctx));
-      if (!fast) await stage.toast(t('g.card.noEffect', { card: loc(getCard(ev.cardId).title) }), 700, 'info');
+      fire(view, planFx(ev, ctx), ext);
+      if (!fast) await stage.toast(t('g.card.noEffect', { card: loc(getCard(ev.cardId).title) }), 700, 'info', undefined, ext);
       return;
     case 'SentToIsland': {
       vs.players[ev.playerId]!.islandTurns = 3;
       render(view, vs);
-      const hs = fire(view, planFx(ev, ctx));
+      const hs = fire(view, planFx(ev, ctx), ext);
       // The splash preset plays the island sound + haptic.
-      if (!fast) await Promise.all([...hs, stage.toast(t('g.island.stuck'), 600, 'bad', 'corner-island')]);
+      if (!fast) await Promise.all([...hs, stage.toast(t('g.island.stuck'), 600, 'bad', 'corner-island', ext)]);
       return;
     }
     case 'IslandStay':
       vs.players[ev.playerId]!.islandTurns = ev.turnsLeft;
       render(view, vs);
-      fire(view, planFx(ev, ctx));
-      if (!fast && ev.turnsLeft > 0) await stage.toast(t('g.island.stay', { n: ev.turnsLeft }), 650, 'info', 'corner-island');
+      fire(view, planFx(ev, ctx), ext);
+      if (!fast && ev.turnsLeft > 0) await stage.toast(t('g.island.stay', { n: ev.turnsLeft }), 650, 'info', 'corner-island', ext);
       return;
     case 'Escaped':
       vs.players[ev.playerId]!.islandTurns = 0;
       render(view, vs);
-      fire(view, planFx(ev, ctx));
+      fire(view, planFx(ev, ctx), ext);
       if (!fast) {
         view.playSfx('escape');
-        void stage.toast(t('g.escaped'), 600, 'good', 'corner-island');
+        void stage.toast(t('g.escaped'), 600, 'good', 'corner-island', ext);
       }
       return;
     case 'FestivalSet': {
       vs.festival = ev.spaceIndex;
       render(view, vs);
-      const hs = fire(view, planFx(ev, ctx));
+      const hs = fire(view, planFx(ev, ctx), ext);
       if (!fast && ev.spaceIndex !== null) {
         // The burst preset plays the festival sound + haptic and pops the flags.
-        void stage.toast(t('g.festival.set', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 700, 'gold', 'festival-marker');
+        void stage.toast(t('g.festival.set', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 700, 'gold', 'festival-marker', ext);
         await Promise.all(hs);
       }
       return;
@@ -433,10 +464,10 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
     case 'TravelGranted':
       vs.players[ev.playerId]!.travelPending = true;
       render(view, vs);
-      fire(view, planFx(ev, ctx));
+      fire(view, planFx(ev, ctx), ext);
       if (!fast) {
         view.playSfx('travel');
-        await stage.toast(t('g.travel.granted'), 700, 'gold', 'corner-tour');
+        await stage.toast(t('g.travel.granted'), 700, 'gold', 'corner-tour', ext);
       }
       return;
     case 'FinalRoundCalled':
@@ -450,19 +481,19 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       if (!fast) void stage.toast(t('g.travel.declined'), 600, 'info', 'corner-tour');
       return;
     case 'DebtStarted':
-      fire(view, planFx(ev, ctx));
+      fire(view, planFx(ev, ctx), ext);
       if (!fast) {
         view.playSfx('warning');
-        await stage.toast(t('g.debt.started', { amount: money(ev.shortfall) }), 900, 'bad', 'pot');
+        await stage.toast(t('g.debt.started', { amount: money(ev.shortfall) }), 900, 'bad', 'pot', ext);
       }
       return;
     case 'DebtSettled':
-      fire(view, planFx(ev, ctx));
-      if (!fast) await stage.toast(t('g.debt.settled'), 600, 'good', 'check');
+      fire(view, planFx(ev, ctx), ext);
+      if (!fast) await stage.toast(t('g.debt.settled'), 600, 'good', 'check', ext);
       return;
     case 'AuctionStarted':
-      fire(view, planFx(ev, ctx));
-      if (!fast) await stage.toast(t('g.auction.started'), 700, 'gold', spaceIcon(boardOf(vs)[ev.spaceIndex]!));
+      fire(view, planFx(ev, ctx), ext);
+      if (!fast) await stage.toast(t('g.auction.started'), 700, 'gold', spaceIcon(boardOf(vs)[ev.spaceIndex]!), ext);
       return;
     case 'AuctionBid':
       fire(view, planFx(ev, ctx));
@@ -476,11 +507,11 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       return;
     case 'AuctionEnded':
       if (fast) return;
-      if (ev.winnerId === null) await stage.toast(t('g.auction.noWinner'), 600, 'info');
-      else await stage.toast(t('g.auction.won', { name: vs.players[ev.winnerId]!.name, amount: money(ev.price) }), 800, 'good', spaceIcon(boardOf(vs)[ev.spaceIndex]!));
+      if (ev.winnerId === null) await stage.toast(t('g.auction.noWinner'), 600, 'info', undefined, ext);
+      else await stage.toast(t('g.auction.won', { name: vs.players[ev.winnerId]!.name, amount: money(ev.price) }), 800, 'good', spaceIcon(boardOf(vs)[ev.spaceIndex]!), ext);
       return;
     case 'OneAway': {
-      fire(view, planFx(ev, ctx));
+      fire(view, planFx(ev, ctx), ext);
       if (fast) return;
       // The preset plays the warning sound + haptic.
       const p = vs.players[ev.playerId]!;
@@ -488,6 +519,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       board.zoomPunch(ev.missing, 1.18);
       void edgeToast(board.overlay, view.orient.readers(vs.players.map((q) => q.seat)), p, spaceIcon(boardOf(vs)[ev.missing]!), playerColor(p.colorId).hex);
       await sleep(BEAT.oneAway);
+      await eventHold();
       return;
     }
     case 'PromptOpened':
@@ -500,9 +532,10 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       stage.clearPrompt();
       // A first bankruptcy ends the game: a beat of silence between the crack and the finale (§7.4).
       if (batch.prev === 'Bankrupt') await sleep(BEAT.bankruptSilence);
-      const hs = fire(view, planFx(ev, ctx));
-      await Promise.all([...hs, stage.stamp(t('g.gameOver'), 'gold')]);
+      const hs = fire(view, planFx(ev, ctx), ext);
+      await Promise.all([...hs, stage.stamp(t('g.gameOver'), 'gold', ext)]);
       await sleep(BEAT.finale);
+      await eventHold();
       return;
     }
   }

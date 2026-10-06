@@ -85,6 +85,8 @@ export class ParticlePool {
   /** Age in frames (negative while delayed). */
   readonly age: Float32Array;
   readonly life: Float32Array;
+  /** Age frames per FX frame: 1, or < 1 for an event's stretched effect (fx/time.ts EVENT_EXTEND). */
+  readonly rate: Float32Array;
   // Sprite
   readonly anim: Uint8Array;
   readonly frame0: Float32Array;
@@ -160,6 +162,7 @@ export class ParticlePool {
     this.fout = f();
     this.age = f();
     this.life = f();
+    this.rate = f();
     this.anim = b();
     this.frame0 = f();
     this.fps = f();
@@ -301,6 +304,7 @@ export class ParticlePool {
     this.fin[i] = this.fout[i] = 0;
     this.age[i] = 0;
     this.life[i] = 1;
+    this.rate[i] = 1;
     this.anim[i] = 0;
     this.frame0[i] = 0;
     this.fps[i] = 0;

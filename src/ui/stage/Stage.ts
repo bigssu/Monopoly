@@ -8,7 +8,7 @@ import type { GameState, Player, Seat } from '@/engine';
 import { lateTollMultiplier, ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
+import { anim, eventHoldMs, eventStretch, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 import { screenToStage, type Box, type Vec } from './throw';
@@ -18,6 +18,23 @@ export type Tone = 'info' | 'good' | 'bad' | 'gold';
 
 /** Level → building icon (0 = empty lot: shown as the villa). */
 const BUILDING_ICONS = ['villa', 'villa', 'building', 'hotel', 'landmark'] as const;
+
+/** Toast motion (ms): pop in, fade out. */
+const TOAST_IN = 260;
+const TOAST_OUT = 200;
+/** Stamp motion (ms, one keyframe set: slam in, settle, lift off). */
+const STAMP_MS = 900;
+/** Event card motion (ms): rise, flip to the edge, flip to the face, leave. */
+const CARD_RISE = 320;
+const CARD_FLIP1 = 230;
+const CARD_FLIP2 = 320;
+const CARD_LEAVE = 220;
+/**
+ * The event card is always an event presentation (fx/time.ts EVENT_EXTEND): its motion runs this
+ * much slower (+motionMs in all) and its read hold is +holdMs. The sequencer times the card glints
+ * (cardReveal at the flip apex) with the same factor.
+ */
+export const CARD_STRETCH = eventStretch(CARD_RISE + CARD_FLIP1 + CARD_FLIP2 + CARD_LEAVE);
 
 export class Stage {
   readonly el: HTMLElement;
@@ -355,19 +372,23 @@ export class Stage {
   // Transient overlays
   // -------------------------------------------------------------------------
 
-  /** A short toast in the middle of the stage (faces the acting player). */
-  async toast(content: string | Node, ms = 900, tone: Tone = 'info', iconId?: string): Promise<void> {
+  /**
+   * A short toast in the middle of the stage (faces the acting player). `event`: it presents a game
+   * event (fx/time.ts EVENT_EXTEND): its pop and fade run slower (+motionMs) and it is read +holdMs.
+   */
+  async toast(content: string | Node, ms = 900, tone: Tone = 'info', iconId?: string, event = false): Promise<void> {
     if (headless()) return;
+    const k = event ? eventStretch(TOAST_IN + TOAST_OUT) : 1;
     const el = h('div', { class: `st-toast tone-${tone}` });
     if (iconId) el.append(iconEl(iconId, 'ico st-toast-ico'));
     el.append(typeof content === 'string' ? h('span', { text: content }) : content);
     this.toastLayer.append(el);
     await anim(el, [{ transform: 'scale(.5)', opacity: 0 }, { transform: 'scale(1.06)', opacity: 1, offset: 0.7 }, { transform: 'scale(1)', opacity: 1 }], {
-      duration: 260,
+      duration: TOAST_IN * k,
       easing: EASE.overshoot,
     });
-    await sleep(ms);
-    await anim(el, [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-20%)' }], { duration: 200 });
+    await sleep(ms + (event ? eventHoldMs() : 0));
+    await anim(el, [{ opacity: 1 }, { opacity: 0, transform: 'translateY(-20%)' }], { duration: TOAST_OUT * k });
     el.remove();
   }
 
@@ -406,8 +427,8 @@ export class Stage {
     el.remove();
   }
 
-  /** Big stamp text ("더블!", "인수!"). */
-  async stamp(text: string, tone: Tone = 'gold'): Promise<void> {
+  /** Big stamp text ("더블!", "인수!"). `event`: an event's stamp (EVENT_EXTEND: +motionMs, slower). */
+  async stamp(text: string, tone: Tone = 'gold', event = false): Promise<void> {
     if (headless()) return;
     const el = h('div', { class: `st-stamp tone-${tone}`, text });
     this.toastLayer.append(el);
@@ -419,12 +440,15 @@ export class Stage {
         { transform: 'scale(1) rotate(-8deg)', opacity: 1, offset: 0.8 },
         { transform: 'scale(1.1) rotate(-8deg)', opacity: 0 },
       ],
-      { duration: 900, easing: EASE.settle },
+      { duration: STAMP_MS * (event ? eventStretch(STAMP_MS) : 1), easing: EASE.settle },
     );
     el.remove();
   }
 
-  /** Flip an event card; resolves after a read delay or a tap. */
+  /**
+   * Flip an event card; resolves after a read delay (+ EVENT_EXTEND.holdMs) or a tap. The motion runs
+   * `CARD_STRETCH` slower (EVENT_EXTEND.motionMs).
+   */
   async showCard(id: CardId, readMs = 1400): Promise<void> {
     if (headless()) return;
     const c = getCard(id);
@@ -443,15 +467,16 @@ export class Stage {
     sfx.play('card');
     haptic('light');
     const inner = card.firstElementChild as HTMLElement;
+    const k = CARD_STRETCH;
     await anim(card, [{ transform: 'translateY(60%) scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
-      duration: 320,
+      duration: CARD_RISE * k,
       easing: EASE.settle,
     });
     // Two-step flip (0→90°, swap faces, −90→0°): never relies on backface culling.
-    await anim(inner, [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }], { duration: 230, easing: 'cubic-bezier(.5,0,1,1)' });
+    await anim(inner, [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }], { duration: CARD_FLIP1 * k, easing: 'cubic-bezier(.5,0,1,1)' });
     inner.classList.add('is-flipped');
     await anim(inner, [{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }], {
-      duration: 320,
+      duration: CARD_FLIP2 * k,
       easing: 'cubic-bezier(.2,1.4,.5,1)',
     });
     await new Promise<void>((resolve) => {
@@ -464,9 +489,9 @@ export class Stage {
       };
       this.cardDone = finish;
       card.addEventListener('pointerdown', finish, { once: true });
-      void sleep(readMs).then(finish);
+      void sleep(readMs + eventHoldMs()).then(finish);
     });
-    await anim(card, [{ opacity: 1 }, { opacity: 0, transform: 'scale(.85)' }], { duration: 220 });
+    await anim(card, [{ opacity: 1 }, { opacity: 0, transform: 'scale(.85)' }], { duration: CARD_LEAVE * k });
     card.remove();
   }
 

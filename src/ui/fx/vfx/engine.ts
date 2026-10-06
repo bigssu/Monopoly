@@ -25,7 +25,8 @@ import { FRAME_MS, newSample, sampleParticle } from './particles';
 import { PF } from './pool';
 import { Presenter, type PresentStats } from './present';
 import { buildPreset, type PresetEnv, type PresetName, type PresetParams } from './presets';
-import { Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
+import { extendRate, Runner, runReduced, type Effect, type FxDom, type HighlightTarget, type Tier, type Timeline } from './timeline';
+import { eventStretch } from '../time';
 import { ACCENT_Q, ADAPTIVE_DEFAULTS, AdaptiveQuality, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
 
 /** The user setting (Settings → 연출 품질 / Effects). 'auto' adapts to the device (VFX.md §15.4). */
@@ -134,7 +135,12 @@ export interface FxStats {
 }
 
 export interface FxHandle {
-  play<N extends PresetName>(name: N, params: PresetParams<N>, o?: { seed?: number }): FxPlay;
+  /**
+   * `extend`: the effect is an event presentation (fx/time.ts EVENT_EXTEND): its timeline and
+   * particles play slower in proportion, lasting `EVENT_EXTEND.motionMs` longer (block and cues too).
+   * A number: stretch by exactly that factor (an effect timed to a DOM animation stretched by it).
+   */
+  play<N extends PresetName>(name: N, params: PresetParams<N>, o?: { seed?: number; extend?: boolean | number }): FxPlay;
   /** Run a hand-built timeline. */
   run(tl: Timeline, o?: { seed?: number }): FxPlay;
   /** Skip tap: ×5 for running effects, pending cues fire now. */
@@ -721,7 +727,7 @@ export function createFx(o: FxOptions): FxHandle {
     ...(o.highlight ? { highlight: o.highlight } : {}),
   });
 
-  function start(tl: Timeline, seed?: number): FxPlay {
+  function start(tl: Timeline, seed?: number, rate = 1): FxPlay {
     let effect: Effect | null = null;
     let cancelled = false;
     const generation = startGeneration;
@@ -746,6 +752,7 @@ export function createFx(o: FxOptions): FxHandle {
         quality: (tierNow() === 'low' ? 0.5 : 1) * (accent ? ACCENT_Q / 0.5 : 1),
         quiet: accent,
         lite: tierNow() === 'low',
+        rate,
       });
       arm();
       return effect;
@@ -786,7 +793,8 @@ export function createFx(o: FxOptions): FxHandle {
         runReduced(tl, reducedHooks());
         return noopPlay(tl.name, tl.tier);
       }
-      return start(tl, opt?.seed);
+      const ext = opt?.extend;
+      return start(tl, opt?.seed, typeof ext === 'number' ? 1 / ext : ext ? extendRate(tl, eventStretch) : 1);
     },
     run(tl, opt) {
       if (disposed) return noopPlay(tl.name, tl.tier);

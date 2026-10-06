@@ -13,6 +13,23 @@
  *
  * | the dice throw (stage/Dice.ts, throw.ts) | normal: thrown, 1.1–1.9 s by the flick's strength / ~1.06 s (a toss) ÷ speed, ×5 on skip | reduced motion: no trajectory, the in-place roll (~1 s: the roll is the key reveal, it keeps its time) | headless: 0 | paused: finishes (own clock steps) | the "throw me" wobble and hint blink: decorations (skipped under `noMotion()`; its rattles still play) |
  *
+ * | an event presentation (`EVENT_EXTEND`) | motion stretched by `eventStretch()` (+`motionMs`), final pose held `eventHold()` longer (+`holdMs`) | reduced motion: the same added time, no movement | headless: 0 | skip: ÷5 like the rest |
+ *
+ * EVENT_EXTEND (product owner, 2026-10-06: "still too fast"): every event presentation the player
+ * watches as the consequence of a landing / a turn lasts `motionMs + holdMs` longer than its base
+ * timing: its MOTION is stretched in proportion (the same poses, slower) by `motionMs`, and its
+ * FINAL POSE stays `holdMs` longer before the next thing happens. Both are ms at the default game
+ * pace (`DEFAULT_PACE`); the pace scales them like the rest of the event. Where it applies:
+ * - money cut-ins (fx/money/scenes.ts): the scene clock runs `eventStretch`-slower through the
+ *   motion beats (intro, coins, result, plaque, out; the sounds ride the same clock) and the still
+ *   hold grows by `holdMs`; the floor `MIN_SCENE_MS` includes both.
+ * - VFX presets of an event (fx/animate.ts `EXTENDED`): the timeline and its particles run slower
+ *   (vfx `extend`), then `eventHold()` before the next event.
+ * - the event card, event toasts and stamps (stage/Stage.ts): tweens × `eventStretch`, read hold
+ *   + `holdMs`.
+ * Not events: the dice, token moves, the turn / round banner, the CPU hand, prompts and buttons,
+ * panel number pops. Tune here, in one place.
+ *
  * - Reduced motion removes MOVEMENT, never TIME: a turn takes as long and shows the same things.
  *   It is the app's own setting (Settings → 애니메이션). The device's `prefers-reduced-motion` is
  *   deliberately NOT read: Windows turns it on for every Remote Desktop session and Android for
@@ -77,6 +94,34 @@ export function setPace(x: number): void {
 }
 export function gamePace(): number {
   return pace;
+}
+
+/** The game pace the Settings default to ("보통"); `EVENT_EXTEND` is written for it. */
+export const DEFAULT_PACE = 2;
+
+/**
+ * Every event presentation lasts this much longer than its base timing (see THE TIME POLICY at the
+ * top): `motionMs` of slower motion (proportional stretch), `holdMs` more on its final pose. In ms
+ * at the default game pace. The one place to tune "events are too fast / too slow".
+ */
+export const EVENT_EXTEND = { motionMs: 500, holdMs: 500 } as const;
+
+/**
+ * Factor that stretches an event's motion of `ms` (its own base length) to `ms + motionMs`.
+ * Multiply tween durations / timeline frames by it; 1 for a zero-length motion.
+ */
+export function eventStretch(ms: number): number {
+  return ms > 0 ? (ms + EVENT_EXTEND.motionMs) / ms : 1;
+}
+
+/** `EVENT_EXTEND.holdMs` as a `sleep()` argument (sleep multiplies by the pace). */
+export function eventHoldMs(): number {
+  return EVENT_EXTEND.holdMs / DEFAULT_PACE;
+}
+
+/** The extra hold on an event's final pose before the next thing happens (pace, skip, headless). */
+export function eventHold(): Promise<void> {
+  return sleep(eventHoldMs());
 }
 
 /**

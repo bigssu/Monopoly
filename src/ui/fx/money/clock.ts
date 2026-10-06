@@ -6,7 +6,9 @@
  * - paused (`setHeld`) → scene time stands still;
  * - the manual clock (`setManualClock` / `stepClock`) steps it one 33 ms frame per step;
  * - the game pace (Settings "게임 속도", 1–3, default 2) stretches a scene mildly: × sqrt(pace / 2);
- * - `factor` < 1 shortens one scene (a repeated event type in the same turn plays at 0.7×).
+ * - `factor` < 1 shortens one scene (a repeated event type in the same turn plays at 0.7×);
+ * - `stretch` > 1 slows the scene's motion (fx/time.ts `EVENT_EXTEND`, set by scenes.ts per beat);
+ *   `extraMs` counts what it has added so far, in ms at the default pace.
  *
  * The clock registers ONE frame step while something waits on it and unregisters itself when idle
  * (zero idle cost). Headless (speed 0) scenes never start a clock: they resolve at once.
@@ -40,6 +42,12 @@ export class MoneyClock {
   t = 0;
   /** Duration multiplier of this scene (0.7 = turbo). */
   factor = 1;
+  /** Motion stretch (EVENT_EXTEND): scene time runs `stretch`× slower; 1 during the still hold. */
+  stretch = 1;
+  /** Time the stretch has added so far (ms at the default pace and speed 1, × factor). */
+  extraMs = 0;
+  /** Scene ms the last frame step advanced. */
+  private ds = FRAME;
   /** Frame health (render.ts MoneyHealth): JS ms of each step and real ms since the previous one. */
   monitor: ((stepMs: number, gapMs: number) => void) | null = null;
   private last = NaN;
@@ -53,13 +61,24 @@ export class MoneyClock {
   rate(): number {
     if (isHeld()) return 0;
     const pace = Math.sqrt(Math.max(0.5, gamePace()) / 2);
-    return (animSpeed() * (isSkipping() ? SKIP_RATE : 1)) / (pace * this.factor);
+    return (animSpeed() * (isSkipping() ? SKIP_RATE : 1)) / (pace * this.factor * this.stretch);
+  }
+
+  /**
+   * How close (scene ms) a wait counts as reached. At 1× scene time steps in whole frames and every
+   * beat (written in frames) ends exactly on one: float slack only. Stretched, a frame steps a
+   * fraction of a scene frame, so a wait ends on the NEAREST frame instead of the next one:
+   * otherwise each of a cut-in's chained beats would end up to a frame late and add whole frames
+   * beyond the stretch. (A repeated event at 0.7× never lands on frames: next frame, as before.)
+   */
+  get snap(): number {
+    return this.stretch === 1 || this.factor !== 1 ? EPS : this.ds / 2;
   }
 
   /** Resolves when scene time reaches `ms` (at once when it already has). */
   until(ms: number): Promise<void> {
     // Headless (speed 0, set even mid-scene by tests): no time passes — resolve now.
-    if (this.disposed || this.t >= ms - EPS || animSpeed() === 0) return Promise.resolve();
+    if (this.disposed || this.t >= ms - this.snap || animSpeed() === 0) return Promise.resolve();
     return new Promise((resolve) => {
       this.waits.push({ at: ms, resolve });
       this.arm();
@@ -159,7 +178,12 @@ export class MoneyClock {
     this.last = now;
     // Headless mid-scene: jump to the end of everything that is waiting.
     if (animSpeed() === 0) this.t += 1e7;
-    else this.t += dt * this.rate();
+    else {
+      const ds = dt * this.rate();
+      this.ds = ds;
+      this.t += ds;
+      this.extraMs += ds * this.factor * (this.stretch - 1);
+    }
     for (const fn of [...this.ticks]) {
       let keep: boolean | void;
       try {
@@ -171,9 +195,10 @@ export class MoneyClock {
       if (keep === false) this.ticks.delete(fn);
     }
     if (this.waits.length) {
-      const due = this.waits.filter((w) => w.at <= this.t + EPS);
+      const snap = this.snap;
+      const due = this.waits.filter((w) => w.at <= this.t + snap);
       if (due.length) {
-        this.waits = this.waits.filter((w) => w.at > this.t + EPS);
+        this.waits = this.waits.filter((w) => w.at > this.t + snap);
         due.forEach((w) => w.resolve());
       }
     }
