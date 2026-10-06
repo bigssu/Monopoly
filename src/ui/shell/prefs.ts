@@ -43,9 +43,9 @@ export interface Prefs {
   /** Money cut-in 3D (hero tilt + board camera): auto by device tier, or forced on / off. */
   money3d: Money3dPref;
   /**
-   * Which defaults revision the stored prefs have seen. 2 (2026-10-06): the setup defaults became
-   * 30 rounds / 30 s; a store from before that still holding the OLD defaults (15 / 15) is moved to
-   * the new ones once, while any other value the player chose is kept.
+   * Which defaults revision the stored prefs have seen (see `migrateDefaults`): a store from before
+   * a revision that still holds the OLD defaults is moved to the new ones once; any other value the
+   * player chose is kept.
    */
   defaultsRev: number;
   /** Show the roll button beside the throw pad (off: press, hold and flick the dice). */
@@ -106,15 +106,31 @@ function detectLang(): Lang {
   }
 }
 
-const DEFAULTS_REV = 2;
+const DEFAULTS_REV = 3;
 
-/** Once per store: values still at the pre-revision-2 defaults (15 rounds, 15 s) move to 30 / 30. */
+/**
+ * Once per store, values still at an older revision's DEFAULTS move to the new defaults; anything
+ * the player chose is kept.
+ * - rev 2: 15 rounds / 15 s → 30 / 30.
+ * - rev 3: the untouched two-seat default (S and N on, N a person with no custom name) → N is an
+ *   AI on normal.
+ */
 export function migrateDefaults(p: Prefs, rev: unknown): Prefs {
-  if (typeof rev === 'number' && rev >= DEFAULTS_REV) return p;
-  const promptTimer = p.promptTimer === 15 ? 30 : p.promptTimer;
-  const lastSetup = p.lastSetup
-    ? { ...p.lastSetup, roundLimit: p.lastSetup.roundLimit === 15 ? 30 : p.lastSetup.roundLimit, promptTimer: p.lastSetup.promptTimer === 15 ? 30 : p.lastSetup.promptTimer }
-    : null;
+  const r = typeof rev === 'number' ? rev : 0;
+  if (r >= DEFAULTS_REV) return p;
+  let { promptTimer, lastSetup } = p;
+  if (r < 2) {
+    promptTimer = promptTimer === 15 ? 30 : promptTimer;
+    if (lastSetup) {
+      lastSetup = { ...lastSetup, roundLimit: lastSetup.roundLimit === 15 ? 30 : lastSetup.roundLimit, promptTimer: lastSetup.promptTimer === 15 ? 30 : lastSetup.promptTimer };
+    }
+  }
+  if (r < 3 && lastSetup) {
+    const { S, E, N, W } = lastSetup.seats;
+    if (S.on && N.on && !E.on && !W.on && N.controller === 'human' && N.name === null) {
+      lastSetup = { ...lastSetup, seats: { ...lastSetup.seats, N: { ...N, controller: 'normal' } } };
+    }
+  }
   return { ...p, promptTimer, lastSetup, defaultsRev: DEFAULTS_REV };
 }
 

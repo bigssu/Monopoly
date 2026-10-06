@@ -111,6 +111,8 @@ test.describe('start a game', () => {
     await boot(page);
     await page.click('[data-action="new"]');
 
+    // Player 2 (N, across the table) is an AI on normal by default.
+    await expect(page.locator('.seat-anchor[data-seat="N"] .seat-ctrl')).toHaveText('AI 보통');
     const addAi = page.locator('[data-action="add-ai"]');
     await expect(addAi).toBeEnabled();
     await addAi.click();
@@ -134,9 +136,11 @@ test.describe('start a game', () => {
       return {
         currentIsAi: state.players[state.current]!.isCpu,
         east: state.players.find((player) => player.seat === 'E'),
+        north: state.players.find((player) => player.seat === 'N'),
         turn: state.turn,
       };
-    })).toMatchObject({ currentIsAi: false, east: { isCpu: true, cpuLevel: 'easy' }, turn: 2 });
+      // Start offset 1 (random 0.4): E (AI easy), N (AI normal), then W, the first person.
+    }), { timeout: 30000 }).toMatchObject({ currentIsAi: false, east: { isCpu: true, cpuLevel: 'easy' }, north: { isCpu: true, cpuLevel: 'normal' }, turn: 3 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 

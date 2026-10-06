@@ -64,7 +64,9 @@ export function defaultDraft(): SetupDraft {
   const base = defaultSettings({ roundLimit: SETUP_DEFAULT_ROUNDS, promptTimer: SETUP_DEFAULT_TIMER });
   const seat = (s: Seat, on: boolean): SeatDraft => ({ on, name: null, ...SEAT_DEFAULTS[s], controller: 'human' });
   return {
-    seats: { S: seat('S', true), E: seat('E', false), N: seat('N', true), W: seat('W', false) },
+    // Player 2 (across the table) is an AI on normal by default (owner, 2026-10-06): a fresh
+    // setup starts one person against the CPU; tap the seat to make it a person.
+    seats: { S: seat('S', true), E: seat('E', false), N: { ...seat('N', true), controller: 'normal' }, W: seat('W', false) },
     spacesPerSide: base.spacesPerSide ?? 7,
     roundLimit: base.roundLimit,
     startCash: base.startCash,

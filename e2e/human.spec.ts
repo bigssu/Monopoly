@@ -195,9 +195,13 @@ test.describe('human play (clicking real controls)', () => {
       window.__lotAndRoll!.setPromptTimer(0);
     }, FAST);
 
-    // Title → Setup → 4 human seats → start.
+    // Title → Setup → 4 human seats → start. Player 2 (N) is an AI by default: make it a person.
     await page.click('[data-action="new"]');
     await expect(page.locator('#app[data-screen="setup"]')).toBeVisible();
+    await expect(page.locator('.seat-anchor[data-seat="N"] .seat-ctrl')).toHaveText('AI 보통');
+    await page.locator('.seat-anchor[data-seat="N"] .seat-player').click();
+    await page.locator('.seat-editor .se-ctrl .seg-opt').nth(0).click();
+    await page.locator('.seat-editor .se-done').click();
     for (const seat of ['E', 'W']) {
       if (!(await page.locator(`.seat-anchor[data-seat="${seat}"].is-on`).count())) await page.click(`.seat-anchor[data-seat="${seat}"] .seat-join`);
     }
