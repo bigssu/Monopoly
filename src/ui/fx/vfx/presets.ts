@@ -42,15 +42,15 @@ export const GOLD = '#F2B633';
 export const GOLD_HI = '#FFD45C';
 export const WHITE = '#FFFFFF';
 /** "White" sparkles on the cream board: a warm near-white that still reads on #EEE3CD. */
-export const SPARK_WHITE = '#FFF4C8';
+const SPARK_WHITE = '#FFF4C8';
 export const GREEN = '#7BE0A4';
-export const GIFT = '#9BE7B4';
+const GIFT = '#9BE7B4';
 export const SKY = '#6EC6F0';
-export const RED = '#E8564F';
-export const GREY = '#8E97A6';
-export const DUST = '#E8DCC6';
-export const SMOKE = '#DDE2EA';
-export const CONFETTI = ['#E8564F', '#4A6CF7', '#3DBB6E', '#F2B633', '#9B6BF2', '#F5844A', '#2EC4B6', '#F272A8'] as const;
+const RED = '#E8564F';
+const GREY = '#8E97A6';
+const DUST = '#E8DCC6';
+const SMOKE = '#DDE2EA';
+const CONFETTI = ['#E8564F', '#4A6CF7', '#3DBB6E', '#F2B633', '#9B6BF2', '#F5844A', '#2EC4B6', '#F272A8'] as const;
 const CONFETTI_SHAPES: readonly FxAnimName[] = ['confetti_rect', 'confetti_streamer', 'confetti_dot', 'confetti_tri', 'confetti_diamond'];
 
 export interface PresetEnv {
@@ -608,7 +608,7 @@ function starToPanel(b: B, from: Pt, player: PlayerId, n: number, f: number): nu
 
 // Presets -------------------------------------------------------------------------------------
 
-export interface PlotClaimParams {
+interface PlotClaimParams {
   space: number;
   player: PlayerId;
   price: number;
@@ -678,7 +678,7 @@ export function plotClaim(p: PlotClaimParams, env: PresetEnv): Timeline {
   return b.build('plotClaim', big ? 2 : 1, PRIORITY.buy, { space: p.space });
 }
 
-export interface CoinInParams {
+interface CoinInParams {
   from: Anchor;
   to: Anchor;
   n?: number;
@@ -695,7 +695,7 @@ export function coinIn(p: CoinInParams, env: PresetEnv): Timeline {
   return b.build('coinIn', 1, PRIORITY.misc, 'space' in p.to ? { space: p.to.space } : undefined);
 }
 
-export interface BuildParams {
+interface BuildParams {
   space: number;
   player: PlayerId;
   level: 1 | 2 | 3 | 4;
@@ -789,7 +789,7 @@ export function buildSeq(p: BuildParams, env: PresetEnv): Timeline {
   return b.build(`buildSeq${lv}`, lv === 3 ? 2 : 1, PRIORITY.build, { space: p.space });
 }
 
-export interface LandmarkParams {
+interface LandmarkParams {
   space: number;
   player: PlayerId;
   /** Free upgrade to a landmark: the coins + hammer are replaced by a gift comet (§7.2b.6 k=4). */
@@ -971,7 +971,7 @@ export function freeUpgrade(p: BuildParams, env: PresetEnv): Timeline {
   return b.build(`freeUpgrade${lv}`, lv === 3 ? 2 : 1, PRIORITY.build, { space: p.space });
 }
 
-export interface FrameSwapParams {
+interface FrameSwapParams {
   space: number;
   from: PlayerId;
   to: PlayerId;
@@ -1003,7 +1003,7 @@ export function frameSwap(p: FrameSwapParams, env: PresetEnv): Timeline {
   return b.build('frameSwap', 1, PRIORITY.takeover, { space: p.space });
 }
 
-export interface TakeoverParams {
+interface TakeoverParams {
   space: number;
   buyer: PlayerId;
   seller: PlayerId;
@@ -1051,7 +1051,7 @@ export function takeoverStamp(p: TakeoverParams, env: PresetEnv): Timeline {
   return b.build('takeoverStamp', 3, PRIORITY.takeover, { space: p.space });
 }
 
-export interface GroupParams {
+interface GroupParams {
   spaces: readonly number[];
   player: PlayerId;
   /** Group colour (hex). */
@@ -1117,7 +1117,7 @@ export function groupFinale(p: GroupParams, env: PresetEnv): Timeline {
   return b.build('groupFinale', 3, PRIORITY.monopoly, { spaces: p.spaces });
 }
 
-export interface TollParams {
+interface TollParams {
   payer: PlayerId;
   receiver: PlayerId;
   amount: number;
@@ -1198,7 +1198,7 @@ export function tollPay(p: TollParams, env: PresetEnv): Timeline {
   return b.build('tollPay', tier >= 3 ? 3 : tier >= 1 ? 2 : 1, PRIORITY.toll, { panel: p.payer });
 }
 
-export interface PassStartParams {
+interface PassStartParams {
   player: PlayerId;
   /** Landed exactly on Start (pot / double salary): I3. */
   landed?: boolean;
@@ -1266,7 +1266,7 @@ export function passStart(p: PassStartParams, env: PresetEnv): Timeline {
 export type CardTone = 'good' | 'bad' | 'move' | 'keep';
 const TONE: Record<CardTone, string> = { good: GOLD, bad: '#C96A6A', move: SKY, keep: '#B08AF5' };
 
-export interface CardRevealParams {
+interface CardRevealParams {
   tone: CardTone;
   /** Card centre (client px); default stage centre. */
   at?: Pt;
@@ -1296,7 +1296,7 @@ export function cardReveal(p: CardRevealParams, env: PresetEnv): Timeline {
   return b.build('cardReveal', 1, PRIORITY.card, { stage: true });
 }
 
-export interface IslandParams {
+interface IslandParams {
   space: number;
   player: PlayerId;
   cause?: 'space' | 'doubles' | 'card';
@@ -1342,7 +1342,7 @@ export function islandSiren(p: IslandParams, env: PresetEnv): Timeline {
   return b.build('islandSiren', 2, PRIORITY.island, { space: p.space });
 }
 
-export interface FestivalParams {
+interface FestivalParams {
   space: number;
   player: PlayerId;
   previous?: number | null;
@@ -1375,7 +1375,7 @@ export function festivalBurst(p: FestivalParams, env: PresetEnv): Timeline {
   return b.build('festivalBurst', 2, PRIORITY.festival, { space: p.space });
 }
 
-export interface BankruptParams {
+interface BankruptParams {
   player: PlayerId;
 }
 
@@ -1418,7 +1418,7 @@ export function bankruptcy(p: BankruptParams, env: PresetEnv): Timeline {
 
 export type VictoryKind = 'triple' | 'line' | 'hubs' | 'bankruptcy' | 'lastStanding' | 'roundLimit';
 
-export interface VictoryParams {
+interface VictoryParams {
   winner: PlayerId;
   kind: VictoryKind;
   /** triple: one space per completed group (3); line: the side's spaces; hubs: the 4 hubs. */
@@ -1529,7 +1529,7 @@ export function victory(p: VictoryParams, env: PresetEnv): Timeline {
   return tl;
 }
 
-export interface OneAwayParams {
+interface OneAwayParams {
   space: number;
   player: PlayerId;
 }
@@ -1547,7 +1547,7 @@ export function oneAway(p: OneAwayParams, env: PresetEnv): Timeline {
   return b.build('oneAway', 1, PRIORITY.misc, { space: p.space });
 }
 
-export interface DoublesParams {
+interface DoublesParams {
   /** Third double in a row: red siren sweep (goes to the island). */
   triple?: boolean;
   at?: Pt;
@@ -1578,7 +1578,7 @@ export function doublesFlash(p: DoublesParams, env: PresetEnv): Timeline {
   return b.build('doublesFlash', 2, PRIORITY.misc, { stage: true });
 }
 
-export interface DiceLandParams {
+interface DiceLandParams {
   /** Die centres (client px); default two points around the stage centre. */
   points?: readonly Pt[];
 }
@@ -1596,7 +1596,7 @@ export function diceLand(p: DiceLandParams, env: PresetEnv): Timeline {
   return b.build('diceLand', 0, PRIORITY.misc);
 }
 
-export interface HopParams {
+interface HopParams {
   space: number;
   /** Long move (≥ 6 steps): speed lines behind the token. */
   long?: boolean;
@@ -1614,7 +1614,7 @@ export function hopDust(p: HopParams, env: PresetEnv): Timeline {
   return b.build('hopDust', 0, PRIORITY.misc);
 }
 
-export interface TapParams {
+interface TapParams {
   /** Client px. */
   x: number;
   y: number;
@@ -1631,7 +1631,7 @@ export function tap(p: TapParams, env: PresetEnv): Timeline {
   return b.build('tap', 0, PRIORITY.misc);
 }
 
-export interface PulseParams {
+interface PulseParams {
   at: Anchor;
   /** Ring / sparkle colour (default gold); `player` sets the owner colour. */
   color?: string;
@@ -1661,7 +1661,7 @@ export function ringPulse(p: PulseParams, env: PresetEnv): Timeline {
   return b.build('ringPulse', total <= 8 ? 0 : 1, PRIORITY.misc, 'space' in p.at ? { space: p.at.space } : 'panel' in p.at ? { panel: p.at.panel } : undefined);
 }
 
-export interface PuffParams {
+interface PuffParams {
   at: Anchor;
   /** Dust colour (default grey: loss / no effect). */
   color?: string;
@@ -1695,7 +1695,7 @@ export function puff(p: PuffParams, env: PresetEnv): Timeline {
   return b.build('puff', total <= 8 ? 0 : 1, PRIORITY.misc, 'space' in p.at ? { space: p.at.space } : undefined);
 }
 
-export interface CometJumpParams {
+interface CometJumpParams {
   from: number;
   to: number;
   player: PlayerId;
@@ -1715,7 +1715,7 @@ export function cometJump(p: CometJumpParams, env: PresetEnv): Timeline {
   return b.build('cometJump', 1, PRIORITY.misc, { space: p.to });
 }
 
-export interface BillRainParams {
+interface BillRainParams {
   player: PlayerId;
   /** Number of bills (≤ 10). */
   n?: number;
@@ -1743,7 +1743,7 @@ export function billRain(p: BillRainParams, env: PresetEnv): Timeline {
   return b.build('billRain', 1, PRIORITY.misc, { panel: p.player });
 }
 
-export interface ConfettiRainParams {
+interface ConfettiRainParams {
   /** Pieces (≤ 90). */
   n?: number;
 }

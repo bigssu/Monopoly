@@ -13,7 +13,7 @@
 import { MONEY_ANIMS, MONEY_FILES, MONEY_TILES, type MoneyAnimName } from '@/content/fx/money-manifest';
 import type { Metal } from './denom';
 
-export interface MoneyFrame {
+interface MoneyFrame {
   x: number;
   y: number;
   w: number;
@@ -65,7 +65,7 @@ export function setMoneyAtlas(j: MoneyAtlasJson | null): void {
   loading = j ? Promise.resolve(true) : null;
 }
 
-export interface FrameBox {
+interface FrameBox {
   /** Element box relative to the sprite's nominal box top-left (CSS px at `scale`). */
   left: number;
   top: number;

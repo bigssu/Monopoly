@@ -51,7 +51,7 @@ export type MoneyScene =
       receivers: Array<{ id: PlayerId; amount: number }>;
     };
 
-export type MoneySceneKind = MoneyScene['kind'];
+type MoneySceneKind = MoneyScene['kind'];
 
 /** One asset sold to the bank: a building (the level it had before the sale) or the land itself (null). */
 export interface SellItem {

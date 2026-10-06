@@ -56,14 +56,14 @@ export interface CoordSource {
   getStageRect?(): RectLike;
 }
 
-export interface SpaceAnchor extends Pt {
+interface SpaceAnchor extends Pt {
   /** Half of the smaller side of the space (px). */
   r: number;
   w: number;
   h: number;
 }
 
-export interface PanelAnchor extends Pt {
+interface PanelAnchor extends Pt {
   /** Centre of the panel. */
   cx: number;
   cy: number;

@@ -12,7 +12,7 @@ import type { LocalizedName } from './board';
 /** Cards a player can keep in hand. */
 export type KeepableCardId = 'escape' | 'toll-pass' | 'shield';
 
-export type CardEffect =
+type CardEffect =
   /** Walk forward to a space (passing Start pays salary) and resolve the landing. */
   | { readonly kind: 'moveTo'; readonly target: number }
   /** Jump straight to the Island (no salary). */

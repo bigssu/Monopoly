@@ -53,7 +53,7 @@ export function nextBuildCost(state: GameState, index: number): number | null {
 }
 
 /** The news flash headline in force this round (rules version 2), if it is `id`. */
-export function newsActive(state: GameState, id: NewsId): boolean {
+function newsActive(state: GameState, id: NewsId): boolean {
   return state.news?.id === id && state.news.round === state.round && ruleFlags(state.settings).newsFlash;
 }
 
@@ -89,7 +89,7 @@ export function completedGroups(state: GameState, pid: PlayerId): GroupId[] {
   return GROUP_IDS.filter((g) => ownsGroup(state, pid, g));
 }
 
-export function ownsSide(state: GameState, pid: PlayerId, side: SideId): boolean {
+function ownsSide(state: GameState, pid: PlayerId, side: SideId): boolean {
   return citiesOnSide(side, state.settings.spacesPerSide ?? 7).every((i) => state.properties[i]?.owner === pid);
 }
 
@@ -192,7 +192,7 @@ export function liquidationValue(state: GameState, pid: PlayerId): number {
   return ownedProperties(state, pid).reduce((sum, i) => sum + sellPropertyValue(state, i), 0);
 }
 
-export function propertyAssets(state: GameState, pid: PlayerId): number {
+function propertyAssets(state: GameState, pid: PlayerId): number {
   return ownedProperties(state, pid).reduce((sum, i) => sum + propertyValue(state, i), 0);
 }
 
@@ -203,11 +203,11 @@ export function totalAssets(state: GameState, pid: PlayerId): number {
   return p.cash + propertyAssets(state, pid);
 }
 
-export function solventPlayers(state: GameState): PlayerId[] {
+function solventPlayers(state: GameState): PlayerId[] {
   return state.players.filter((p) => !p.bankrupt).map((p) => p.id);
 }
 
-export interface SetVictory {
+interface SetVictory {
   victory: Exclude<VictoryKind, 'lastStanding' | 'bankruptcy' | 'roundLimit'>;
   groups?: GroupId[];
   side?: SideId;

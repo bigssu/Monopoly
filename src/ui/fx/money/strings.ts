@@ -1,7 +1,7 @@
 /** Money-stage captions (registered on import; Korean first, short). */
 import { registerStrings } from '@/i18n';
 
-export const MONEY_STRINGS = {
+const MONEY_STRINGS = {
   ko: {
     'm.toll': '통행료',
     'm.toll.festival': '축제 통행료',

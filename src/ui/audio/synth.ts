@@ -65,7 +65,7 @@ export const THROTTLE: Partial<Record<SfxName, number>> = {
   'coin-break': 0.06,
   sob: 0.5,
 };
-export const DEFAULT_THROTTLE = 0.04;
+const DEFAULT_THROTTLE = 0.04;
 
 // Note frequencies.
 const N = {

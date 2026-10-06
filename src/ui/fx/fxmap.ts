@@ -71,7 +71,7 @@ function step<N extends PresetName>(preset: N, params: PresetParams<N>, o: { wai
 }
 
 /** Card tone for the reveal glow: good = gold, bad = red-grey, move = sky, keep = purple. */
-export function cardTone(id: CardId): CardTone {
+function cardTone(id: CardId): CardTone {
   const e = getCard(id).effect;
   switch (e.kind) {
     case 'moveTo':
@@ -106,12 +106,12 @@ function dirDeg(a: number, b: number, s: GameState): number {
 }
 
 /** Bills for a card win: 4 / 6 / 10 by amount. */
-export function billCount(delta: number): number {
+function billCount(delta: number): number {
   return delta >= 300 ? 10 : delta >= 100 ? 6 : 4;
 }
 
 /** Group colour + member cities when `pid` owns i's whole colour group in `vs` (derived GroupCompleted). */
-export function completedGroup(vs: GameState, pid: PlayerId, i: number): { group: GroupId; spaces: number[]; color: string } | null {
+function completedGroup(vs: GameState, pid: PlayerId, i: number): { group: GroupId; spaces: number[]; color: string } | null {
   const size = vs.settings.spacesPerSide ?? 7;
   const g = groupOf(i, size);
   if (!g || !ownsGroup(vs, pid, g)) return null;

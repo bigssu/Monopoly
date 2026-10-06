@@ -319,7 +319,7 @@ export function gridTimeout(fn: () => void, ms: number): () => void {
   };
 }
 
-export type AnimOptions = KeyframeAnimationOptions & {
+type AnimOptions = KeyframeAnimationOptions & {
   duration: number;
   /** Keep this animation at the display rate even when the frame budget is 30 Hz. */
   smooth?: boolean;
@@ -461,7 +461,7 @@ export function setFrameRate(hz: FrameRate): void {
 }
 
 /** A JS-driven animation step; return `false` to unregister. */
-export type FrameTick = (now: number) => boolean | void;
+type FrameTick = (now: number) => boolean | void;
 const ticks = new Set<FrameTick>();
 let clockRaf = 0;
 let lastSlot = -Infinity;

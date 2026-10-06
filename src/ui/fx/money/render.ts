@@ -27,7 +27,7 @@
  */
 
 export type MoneyTier = 'high' | 'mid' | 'low';
-export const MONEY_TIERS: readonly MoneyTier[] = ['high', 'mid', 'low'];
+const MONEY_TIERS: readonly MoneyTier[] = ['high', 'mid', 'low'];
 
 export const TIER_SCALE: Record<MoneyTier, number> = { high: 1, mid: 0.75, low: 0.5 };
 /** Peak layer memory a cut-in may reach on this tier (MB; scripts/perf.mjs gates on it). */
@@ -37,16 +37,16 @@ export const TIER_BUDGET_MB: Record<MoneyTier, number> = { high: 250, mid: 150, 
  * measured (4×, CPU demo game, §12.3): 1280×800 DPR 1.5 53.8 MB, but 1600×1000 DPR 2 149.2 MB (0.8 MB
  * under the 150 MB budget, 21 layers) and 2560×1600 DPR 2 377.7 MB.
  */
-export const P_MID_3D = 4.1e6;
+const P_MID_3D = 4.1e6;
 export function tier3d(tier: MoneyTier, pixels: number): boolean {
   return tier === 'high' || (tier === 'mid' && pixels <= P_MID_3D);
 }
 
 /** Device-pixel limits of the tier table (P = w × h × DPR²). */
-export const P_HIGH = 7.0e6;
-export const P_MID_BIG = 17e6;
+const P_HIGH = 7.0e6;
+const P_MID_BIG = 17e6;
 
-export interface DeviceInfo {
+interface DeviceInfo {
   w: number;
   h: number;
   dpr: number;
@@ -77,7 +77,7 @@ export function currentDevice(): DeviceInfo {
   };
 }
 
-export const lowerTier = (t: MoneyTier): MoneyTier => (t === 'high' ? 'mid' : 'low');
+const lowerTier = (t: MoneyTier): MoneyTier => (t === 'high' ? 'mid' : 'low');
 const rank = (t: MoneyTier): number => MONEY_TIERS.indexOf(t);
 
 /** Settings → 연출 해상도 / 3D 연출. */
@@ -124,7 +124,7 @@ export function resolveRender(o: { auto: MoneyTier; pixels?: number; stepDown?: 
 
 // ------------------------------------------------------------------------------------ safety net
 
-export interface HealthOptions {
+interface HealthOptions {
   /** p95 of the scene clock's JS per step above this → a bad cut-in (ms). */
   stepMs: number;
   /** A step later than this after the previous one is late (30 Hz = 33.3 ms) … */

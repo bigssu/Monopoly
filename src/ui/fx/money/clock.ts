@@ -21,7 +21,7 @@ export const FRAME = 1000 / 30;
 export const f = (n: number): number => n * FRAME;
 
 /** A per-frame step: `t` = scene time (ms). Return false to stop. */
-export type SceneTick = (t: number) => boolean | void;
+type SceneTick = (t: number) => boolean | void;
 
 const SKIP_RATE = 5;
 /** Scene time a disposed clock's steps finish at (far past any scene). */

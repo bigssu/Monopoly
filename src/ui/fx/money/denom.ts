@@ -12,7 +12,7 @@
 export type Metal = 'gold' | 'silver' | 'bronze';
 export const METALS: readonly Metal[] = ['gold', 'silver', 'bronze'];
 /** Value of one coin (만). */
-export const COIN_VALUE: Record<Metal, number> = { gold: 1000, silver: 100, bronze: 10 };
+const COIN_VALUE: Record<Metal, number> = { gold: 1000, silver: 100, bronze: 10 };
 
 /** Coins per column + the invisible remainder (< 10만). */
 export interface Pile {
@@ -58,7 +58,7 @@ export interface Break {
   to: Metal | 'rest';
 }
 
-export interface DrainPlan {
+interface DrainPlan {
   /** Coins leaving, largest first, each preceded by the breaks it needed. */
   coins: Array<{ metal: Metal; breaks: Break[] }>;
   /** Value paid below one bronze (taken from the invisible rest). */
@@ -260,7 +260,7 @@ export function countMs(amount: number): number {
 
 /** Ease-out cubic. */
 /** Pentatonic ladder (semitones) for arriving coins, capped by the tier's top. */
-export const LADDER = [0, 2, 4, 7, 9, 12, 14, 16] as const;
+const LADDER = [0, 2, 4, 7, 9, 12, 14, 16] as const;
 export function ladderStep(i: number, top: number): number {
   const allowed = LADDER.filter((s) => s <= top);
   return allowed[Math.min(i, allowed.length - 1)]!;

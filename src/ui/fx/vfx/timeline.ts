@@ -45,7 +45,7 @@ export interface FxDom {
 /** What the reduced-motion path highlights (static colour frame for ~800 ms). */
 export type HighlightTarget = { space: number } | { panel: PlayerId } | { spaces: readonly number[] } | { stage: true };
 
-export interface EmitCtx {
+interface EmitCtx {
   readonly rng: Rng;
   /** Board unit in px. */
   readonly u: number;
@@ -58,7 +58,7 @@ export interface EmitCtx {
 }
 
 /** Builds the k-th of n particles (the emit context gives the effect's seeded RNG). */
-export type Maker = (k: number, n: number, e: EmitCtx) => PSpec;
+type Maker = (k: number, n: number, e: EmitCtx) => PSpec;
 
 export type Action =
   | { k: 'spawn'; fn: (e: EmitCtx) => void }
@@ -153,14 +153,14 @@ export class Bounds {
   }
 }
 
-export interface RunnerHooks {
+interface RunnerHooks {
   sfx?(name: SfxName, o: { pitch?: number; gain?: number }): void;
   haptic?(kind: HapticKind): void;
   shake?(px: number, ms: number): void;
   dom?: FxDom;
 }
 
-export interface EffectStats {
+interface EffectStats {
   /** Particles requested by the timeline (before quality/budget/cap). */
   requested: number;
   /** Particles actually spawned. */
@@ -273,7 +273,7 @@ export class Effect {
   }
 }
 
-export interface StartOptions {
+interface StartOptions {
   u: number;
   seed?: number;
   /** Count multiplier from the quality setting (1 high, 0.5 low). */
@@ -289,7 +289,7 @@ export interface StartOptions {
 }
 
 /** Log of executed side effects (tests / determinism checks). */
-export interface RunLogEntry {
+interface RunLogEntry {
   frame: number;
   effect: number;
   k: Action['k'];

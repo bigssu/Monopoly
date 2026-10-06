@@ -78,7 +78,7 @@ export type RuleLevel = 'easy' | 'normal' | 'advanced';
 export type NewsId = 'tollFever' | 'quake' | 'buildBoom' | 'takeoverSale' | 'shareDay' | 'vaultBoom';
 
 /** The headline in force (`round` = the round it covers). */
-export interface NewsState {
+interface NewsState {
   id: NewsId;
   round: number;
   /** Quake: the colour group it hit. */
@@ -86,7 +86,7 @@ export interface NewsState {
 }
 
 /** Win-back (rules = advanced): `from` lost the city to `by` in a takeover. */
-export interface TakenFrom {
+interface TakenFrom {
   from: PlayerId;
   by: PlayerId;
 }
@@ -300,7 +300,7 @@ export interface PlayerStats {
   cards: number;
 }
 
-export interface TestHooks {
+interface TestHooks {
   diceQueue?: Array<[number, number]>;
   cardQueue?: CardId[];
   /** Overrides for random picks (random city / typhoon / festival invite): index into the candidate list. */
@@ -389,9 +389,9 @@ export type ActionType = Action['type'];
 // Events
 // ---------------------------------------------------------------------------
 
-export type Counterpart = PlayerId | 'bank' | 'pot';
+type Counterpart = PlayerId | 'bank' | 'pot';
 
-export type MoveCause = 'roll' | 'card' | 'travel' | 'island';
+type MoveCause = 'roll' | 'card' | 'travel' | 'island';
 
 export type GameEvent =
   | { type: 'RoundStarted'; round: number }

@@ -6,7 +6,7 @@ import type { CpuLevel, PlayerSetup, RuleLevel, Seat, Settings } from './types';
 import { BOARD_SIDE_OPTIONS } from '../content/board';
 
 /** Default seats by player count (DESIGN §2.1). */
-export function defaultSeats(n: number): Seat[] {
+function defaultSeats(n: number): Seat[] {
   switch (n) {
     case 2:
       return ['S', 'N'];

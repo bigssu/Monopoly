@@ -11,7 +11,7 @@ import type { FxAtlasId, FxAtlasJson, FxFrame } from '@/content/fx/types';
 
 type Img = ImageBitmap | HTMLImageElement | HTMLCanvasElement | OffscreenCanvas;
 
-export interface DrawOpts {
+interface DrawOpts {
   /** Display scale: 1 = the sprite's nominal CSS px size. */
   scale?: number;
   /** Extra non-uniform factors (squash / flip). */
@@ -79,9 +79,9 @@ export interface FxAtlas extends FxAtlasMeta {
 }
 
 /** LRU cap of the tint cache (bytes). */
-export const TINT_CACHE_BYTES = 8 * 1024 * 1024;
+const TINT_CACHE_BYTES = 8 * 1024 * 1024;
 
-export class TintCache {
+class TintCache {
   private map = new Map<string, { c: HTMLCanvasElement | OffscreenCanvas; bytes: number }>();
   bytes = 0;
   constructor(

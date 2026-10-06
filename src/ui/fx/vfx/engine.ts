@@ -30,7 +30,7 @@ import { EVENT_EXTEND, eventStretch } from '../time';
 import { ACCENT_Q, ADAPTIVE_DEFAULTS, AdaptiveQuality, BIG_WAIT_FRAMES, bigBusy, type FxMode, type FxInfo, type RunningFx } from './director';
 
 /** The user setting (Settings → 연출 품질 / Effects). 'auto' adapts to the device (VFX.md §15.4). */
-export type FxQuality = 'auto' | 'high' | 'low' | 'off';
+type FxQuality = 'auto' | 'high' | 'low' | 'off';
 /**
  * What actually plays: 'high' everything; 'low' half the particles, no soft additive glows, no
  * shake, 1× backing, 15 Hz presentation; 'minimal' / 'off' the reduced-motion path (sound, haptics,
@@ -38,7 +38,7 @@ export type FxQuality = 'auto' | 'high' | 'low' | 'off';
  */
 export type FxTier = 'high' | 'low' | 'minimal' | 'off';
 
-export interface FxOptions extends CoordSource {
+interface FxOptions extends CoordSource {
   /** The `.fx-layer` element (the canvas is appended to it). */
   layer: HTMLElement;
   /** Player colour (hex). Default: PLAYER_COLORS by id. */

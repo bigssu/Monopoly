@@ -42,7 +42,7 @@ import type { Dice } from './Dice';
 import type { Stage } from './Stage';
 import { releaseVelocity } from './throw';
 
-export interface PromptCtx {
+interface PromptCtx {
   state: GameState;
   /** CPU is deciding: render read-only. */
   cpu: boolean;
@@ -55,7 +55,7 @@ export interface PromptCtx {
   rollButton: boolean;
 }
 
-export interface PromptResult {
+interface PromptResult {
   el: HTMLElement;
   big?: boolean;
   /** Space the prompt is about (board focus). */

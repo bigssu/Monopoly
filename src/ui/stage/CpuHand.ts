@@ -71,7 +71,7 @@ interface HandDev {
 /** Dev only (`?dev=1`): press log + freeze switch; null in production. */
 export const handDev: HandDev | null = typeof window !== 'undefined' && isDevHook() ? { log: [], freeze: false, release: null } : null;
 
-export interface HandPress {
+interface HandPress {
   state: GameState;
   action: Action;
   /** The CPU's drawn seat (src/ui/orientation.ts): the edge the hand comes from. */

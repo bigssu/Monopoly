@@ -42,7 +42,7 @@ export const SF_CLEAR = 2;
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
-export interface PaintTarget {
+interface PaintTarget {
   readonly canvas: { width: number; height: number };
   readonly ctx: Ctx2D;
 }
@@ -153,12 +153,12 @@ export function paintFrame(
 
 // ------------------------------------------------------------------------------ worker protocol
 
-export interface WorkerInit {
+interface WorkerInit {
   t: 'init';
   urls: { json: string; color: string; mask: string };
   software: boolean;
 }
-export interface WorkerCanvases {
+interface WorkerCanvases {
   t: 'canvases';
   canvases: OffscreenCanvas[];
 }

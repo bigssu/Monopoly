@@ -54,9 +54,9 @@ export interface SpaceArt {
 }
 
 /** Board camera (the wiring binds it to the board): pull back + tilt while a cut-in is up. */
-export type BoardCamera = (state: 'in' | 'out', tier: Tier, ms: number) => void;
+type BoardCamera = (state: 'in' | 'out', tier: Tier, ms: number) => void;
 
-export interface MoneyHost {
+interface MoneyHost {
   /** Element the stage is appended to (the game root; the stage fills it). */
   parent: HTMLElement;
   /** The board's rect (client px): wallets line up on its axes. */
@@ -81,7 +81,7 @@ export interface MoneyHost {
 }
 
 /** Stage geometry for the current scene (stage-local CSS px). */
-export interface StageGeom {
+interface StageGeom {
   W: number;
   H: number;
   /** Short side. */
@@ -97,7 +97,7 @@ export interface StageGeom {
 /** Unit vector from a seat's edge toward the centre ("up" for that seat). */
 
 /** A hero transform (written as one `transform`). */
-export interface HeroPose {
+interface HeroPose {
   x: number;
   y: number;
   s: number;
@@ -108,7 +108,7 @@ export interface HeroPose {
   o: number;
 }
 
-export class Plaque {
+class Plaque {
   readonly el: HTMLElement;
   private tEl: HTMLElement;
   private aEl: HTMLElement;
@@ -197,7 +197,7 @@ export class Plaque {
 
 const N_FX = 8;
 /** Frames the stage holds at its small layout size so its layers rasterize there (render scale < 1). */
-export const RASTER_HOLD_F = 3;
+const RASTER_HOLD_F = 3;
 const N_PLAQUES = 4;
 
 export class MoneyStage implements TweenHost {

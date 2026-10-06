@@ -15,7 +15,7 @@
  */
 
 /** How long decorative loops keep running after the last input (or after they start). */
-export const CALM_MS = 10_000;
+const CALM_MS = 10_000;
 
 /** Infinite animations that are functional (ended by code), not decorative. */
 const EXEMPT = new Set(['lr-shake']);

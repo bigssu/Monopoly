@@ -18,7 +18,7 @@ import { ladderStep } from './denom';
 import { mulberry32 } from '../vfx/rng';
 
 /** Coin bus: concurrent clinks / minimum spacing (ms) / one clink's length (ms). */
-export const COIN_VOICES = 6;
+const COIN_VOICES = 6;
 export const COIN_SPACING = 25;
 const CLINK_MS = 130;
 const CHACHING_SPACING = 150;

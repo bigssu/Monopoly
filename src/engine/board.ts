@@ -15,7 +15,7 @@ export {
 } from '../content/board';
 export type { GroupId, SideId, SpaceDef, SpaceKind, SpacesPerSide } from '../content/board';
 
-export interface BoardInfo {
+interface BoardInfo {
   board: readonly SpaceDef[]; size: number; spacesPerSide: SpacesPerSide;
   startIndex: number; islandIndex: number; festivalIndex: number; travelIndex: number;
   propertyIndices: readonly number[]; cityIndices: readonly number[]; hubIndices: readonly number[]; eventIndices: readonly number[];

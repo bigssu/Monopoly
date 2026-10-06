@@ -139,7 +139,7 @@ function facePoses(rx: number, ry: number): FacePose[] {
 }
 
 /** 2D transform + visibility + shading of every face for the cube orientation (rx, ry). */
-export function cubeFaces(rx: number, ry: number): { n: number; visible: boolean; transform: string; shade: number }[] {
+function cubeFaces(rx: number, ry: number): { n: number; visible: boolean; transform: string; shade: number }[] {
   return facePoses(rx, ry).map((f) => ({
     n: f.n,
     visible: f.visible,
@@ -321,7 +321,7 @@ class Die {
 }
 
 /** How a throw is drawn: one temporary canvas (canvas effects on), or the DOM cubes themselves. */
-export type DicePath = 'canvas' | 'dom';
+type DicePath = 'canvas' | 'dom';
 
 /** Dev/test record of one roll (e2e/dice-throw.spec.ts reads `window.__lotAndRoll.dice()`). */
 export interface ThrowRecord {
@@ -381,7 +381,7 @@ const WOBBLE: [number, number, number][] = [
   [0.75, -3, 0],
   [1, 0, 0],
 ];
-export function wobbleAt(x: number): string {
+function wobbleAt(x: number): string {
   const u = x - Math.floor(x);
   let i = 0;
   while (i < WOBBLE.length - 2 && u > WOBBLE[i + 1]![0]) i++;

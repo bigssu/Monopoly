@@ -39,7 +39,7 @@ export interface Party {
   color: string;
 }
 
-export type Place = 'bank' | 'pot' | 'center';
+type Place = 'bank' | 'pot' | 'center';
 export type End = Party | Place;
 export type MoneyCue = 'start' | 'depart' | 'arrive' | 'result' | 'settle' | 'done';
 export const CUES: readonly MoneyCue[] = ['start', 'depart', 'arrive', 'result', 'settle', 'done'];
@@ -111,7 +111,7 @@ export interface Ctx {
   coin: number;
 }
 
-export interface SceneOpts {
+interface SceneOpts {
   /** Keep the stage up for a follow-up scene (one cut-in). */
   keep?: boolean;
   /** Force a tier. */
@@ -121,7 +121,7 @@ export interface SceneOpts {
 }
 
 /** Run a scene body on the stage (queued); headless → resolved at once. */
-export function runScene(st: MoneyStage, kind: string, tier: Tier, _opts: SceneOpts, body: (x: Ctx) => Promise<void>): MoneyPlay {
+function runScene(st: MoneyStage, kind: string, tier: Tier, _opts: SceneOpts, body: (x: Ctx) => Promise<void>): MoneyPlay {
   const cues = new Cues();
   if (headless()) {
     cues.fireAll();
@@ -494,7 +494,7 @@ function walletOf(x: Ctx, p: Party): Wallet {
 
 // ------------------------------------------------------------------------------- scenes
 
-export interface TransferArgs extends SceneOpts {
+interface TransferArgs extends SceneOpts {
   from: End;
   to: End;
   /** Gather in the centre (plaque + hold) before going on. */
@@ -576,7 +576,7 @@ export function transfer(st: MoneyStage, a: TransferArgs): MoneyPlay {
   });
 }
 
-export interface PurchaseArgs extends SceneOpts {
+interface PurchaseArgs extends SceneOpts {
   seat: Seat;
   cash: number;
   playerColor: string;
@@ -666,7 +666,7 @@ function flagSvg(color: string): string {
   );
 }
 
-export interface BuildArgs extends SceneOpts {
+interface BuildArgs extends SceneOpts {
   seat: Seat;
   cash: number;
   playerColor: string;
@@ -768,7 +768,7 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
   });
 }
 
-export interface TollArgs extends SceneOpts {
+interface TollArgs extends SceneOpts {
   payer: Party;
   owner: Party;
   spaceIndex: number;
@@ -817,7 +817,7 @@ export function toll(st: MoneyStage, a: TollArgs): MoneyPlay {
   });
 }
 
-export interface WaivedArgs extends SceneOpts {
+interface WaivedArgs extends SceneOpts {
   payer: Party;
   owner: Party;
   spaceIndex: number;
@@ -852,7 +852,7 @@ export function tollWaived(st: MoneyStage, a: WaivedArgs): MoneyPlay {
   });
 }
 
-export interface TakeoverArgs extends SceneOpts {
+interface TakeoverArgs extends SceneOpts {
   buyer: Party;
   seller: Party;
   spaceIndex: number;
@@ -931,7 +931,7 @@ export function takeover(st: MoneyStage, a: TakeoverArgs): MoneyPlay {
   });
 }
 
-export interface CollectArgs extends SceneOpts {
+interface CollectArgs extends SceneOpts {
   payers: Array<Party & { amount: number }>;
   receiver: Party;
 }
@@ -993,7 +993,7 @@ export function collectFromAll(st: MoneyStage, a: CollectArgs): MoneyPlay {
   });
 }
 
-export interface PayAllArgs extends SceneOpts {
+interface PayAllArgs extends SceneOpts {
   payer: Party;
   receivers: Array<Party & { amount: number }>;
 }
@@ -1035,7 +1035,7 @@ export function payAll(st: MoneyStage, a: PayAllArgs): MoneyPlay {
   });
 }
 
-export interface ReceiveArgs extends SceneOpts {
+interface ReceiveArgs extends SceneOpts {
   seat: Seat;
   cash: number;
   playerColor: string;
@@ -1083,7 +1083,7 @@ export function receive(st: MoneyStage, a: ReceiveArgs): MoneyPlay {
   });
 }
 
-export interface PayArgs extends SceneOpts {
+interface PayArgs extends SceneOpts {
   seat: Seat;
   cash: number;
   playerColor: string;
@@ -1128,7 +1128,7 @@ export interface SellItem {
   amount: number;
 }
 
-export interface SellArgs extends SceneOpts {
+interface SellArgs extends SceneOpts {
   seat: Seat;
   cash: number;
   playerColor: string;
@@ -1357,7 +1357,7 @@ export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
   });
 }
 
-export interface BankruptcyArgs extends SceneOpts {
+interface BankruptcyArgs extends SceneOpts {
   debtor: Party;
   /** Creditor, or null for the bank. */
   creditor: Party | null;

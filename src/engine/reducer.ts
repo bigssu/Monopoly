@@ -107,7 +107,7 @@ function emit(ctx: Ctx, e: GameEvent): void {
   track(ctx.s, e);
 }
 
-export const emptyStats = (): PlayerStats => ({ tollPaid: 0, tollEarned: 0, biggestToll: 0, takeovers: 0, bought: 0, built: 0, islandVisits: 0, doubles: 0, cards: 0 });
+const emptyStats = (): PlayerStats => ({ tollPaid: 0, tollEarned: 0, biggestToll: 0, takeovers: 0, bought: 0, built: 0, islandVisits: 0, doubles: 0, cards: 0 });
 
 /** Game statistics for the result screen (UI only reads them; no rule depends on them). */
 function track(s: GameState, e: GameEvent): void {

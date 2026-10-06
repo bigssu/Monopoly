@@ -217,7 +217,7 @@ export function cardValue(state: GameState, pid: PlayerId, id: CardId): number {
 }
 
 /** Swap score for taking `took` (and giving our cheapest non-landmark city), or −Infinity if it loses the game. */
-export function swapScore(state: GameState, pid: PlayerId, took: number): number {
+function swapScore(state: GameState, pid: PlayerId, took: number): number {
   const gave = swapGive(state, pid);
   if (gave === null) return -Infinity;
   const owner = state.properties[took]!.owner!;

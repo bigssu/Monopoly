@@ -8,7 +8,7 @@
  * Missing keys return the key itself (and warn once in dev) so nothing ever renders blank.
  */
 export type Lang = 'ko' | 'en';
-export type StringTable = Record<string, string>;
+type StringTable = Record<string, string>;
 
 const tables: Record<Lang, StringTable> = { ko: {}, en: {} };
 let current: Lang = 'ko';

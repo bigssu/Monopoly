@@ -24,7 +24,7 @@
 import type { RectLike } from './coords';
 import { S_FLAGS, S_H, S_S, S_W, S_X, S_Y, SF_CLEAR, SF_SHOWN, SREC } from './paint';
 
-export interface SlotClass {
+interface SlotClass {
   name: string;
   /** Backing px (= the canvas's CSS box; the transform scales it by 1/s onto the layer). */
   w: number;
@@ -249,7 +249,7 @@ export class Clusterer {
   }
 }
 
-export interface Slot {
+interface Slot {
   cls: number;
   /** The canvas element (its pixels belong to the backend: a main-thread context or a worker). */
   el: HTMLCanvasElement;
@@ -285,7 +285,7 @@ export interface PresentStats {
   toggles: number;
 }
 
-export interface PresenterOptions {
+interface PresenterOptions {
   layer: HTMLElement;
   /** Most canvases shown at once (each is a GPU layer). */
   maxShown: number;

@@ -29,13 +29,13 @@ export const POOL_SIZE = 16;
 /** Shadow ellipses (one per concurrent stream). */
 export const SHADOWS = 4;
 /** Default spawn hop / travel (frames). */
-export const HOP_F = 6;
-export const TRAVEL_F = 15;
+const HOP_F = 6;
+const TRAVEL_F = 15;
 const SPIN_MS = 50;
 const SPIN_N = 8;
 const NOMINAL = 48;
 
-export interface FlightSpec {
+interface FlightSpec {
   from: Pt;
   /** Target (re-evaluated every frame, so a growing pile's top can move). */
   to: Pt | (() => Pt);

@@ -4,14 +4,14 @@
  * `popBack(o)` is `easeOutBack` whose overshoot peak equals `o` (8 % → c1 1.5, 10 % → 1.70158,
  * 12 % → 1.9, 15 % → 2.17): the peak of easeOutBack(c1) is 1 + 4·c1³ / (27·(c1 + 1)²).
  */
-export type EaseFn = (t: number) => number;
+type EaseFn = (t: number) => number;
 
 export const inQuad: EaseFn = (t) => t * t;
 export const outQuad: EaseFn = (t) => 1 - (1 - t) * (1 - t);
 export const inOutQuad: EaseFn = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
-export const inCubic: EaseFn = (t) => t * t * t;
+const inCubic: EaseFn = (t) => t * t * t;
 export const outCubic: EaseFn = (t) => 1 - (1 - t) ** 3;
-export const outSine: EaseFn = (t) => Math.sin((t * Math.PI) / 2);
+const outSine: EaseFn = (t) => Math.sin((t * Math.PI) / 2);
 
 /** easeOutBack with overshoot constant c1 (1.70158 = the classic 10 % overshoot). */
 export function outBack(t: number, c1 = 1.70158): number {

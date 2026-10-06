@@ -36,7 +36,7 @@ export const MERGE_FRAMES = 12;
 /** Longest a big (I3+) effect waits for the previous big one (27 frames = 900 ms, ×5 when skipping). */
 export const BIG_WAIT_FRAMES = 27;
 /** Full-strength concurrency per tier (§6.2-4); I3/I4 are serialized by the engine queue. */
-export const TIER_CONCURRENCY: Record<Tier, number> = { 0: Infinity, 1: 4, 2: 2, 3: 1, 4: 1 };
+const TIER_CONCURRENCY: Record<Tier, number> = { 0: Infinity, 1: 4, 2: 2, 3: 1, 4: 1 };
 /** Particle multiplier of an accent. */
 export const ACCENT_Q = 0.4;
 
@@ -48,7 +48,7 @@ function targetKey(h: HighlightTarget | undefined): string {
   return 'stage';
 }
 
-export function sameTarget(a: HighlightTarget | undefined, b: HighlightTarget | undefined): boolean {
+function sameTarget(a: HighlightTarget | undefined, b: HighlightTarget | undefined): boolean {
   return targetKey(a) === targetKey(b);
 }
 
@@ -100,9 +100,9 @@ export class PitchLadder {
 }
 
 /** Quality tiers the adaptive controller moves between (engine.ts FxTier minus 'off'). */
-export type AutoTier = 'high' | 'low' | 'minimal';
+type AutoTier = 'high' | 'low' | 'minimal';
 
-export interface AdaptiveOptions {
+interface AdaptiveOptions {
   /** p95 of the engine's JS per tick over a window above this → a bad window (ms). */
   tickMs: number;
   /** A tick later than this (gap since the previous one, ms; 30 Hz = 33.3) is late … */

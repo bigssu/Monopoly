@@ -114,5 +114,3 @@ export const ECONOMY = {
   /** Win-back: the player who lost a city in a takeover may take it back for this × value. */
   winBackMultiplier: 1,
 } as const;
-
-export type Economy = typeof ECONOMY;

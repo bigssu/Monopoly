@@ -89,7 +89,7 @@ export const THROW = {
 } as const;
 
 /** The landing bounce: [offset, translateY (die sizes), sx, sy] (the tumble's, shared). */
-export const BOUNCE: [number, number, number, number][] = [
+const BOUNCE: [number, number, number, number][] = [
   [0, -1.1, 1.15, 1.15],
   [0.55, 0.08, 1.04, 0.94],
   [0.72, -0.14, 1, 1],
@@ -146,7 +146,7 @@ interface AxisSpin {
   fix: number;
 }
 
-export interface DieTrack {
+interface DieTrack {
   home: Vec;
   /** Where the free roll would have stopped (the tail steers from there to `home`). */
   rest: Vec;
@@ -189,7 +189,7 @@ export interface ThrowPlan {
   path: number;
 }
 
-export interface DieState {
+interface DieState {
   x: number;
   y: number;
   rx: number;
@@ -350,7 +350,7 @@ function fitBox(box: Box, homes: [Vec, Vec]): Box {
 }
 
 /** Flick strength 0..1 of a release speed (px/s): linear from `flickMin` to `flickMax`, clamped. */
-export function flickStrength(speed: number): number {
+function flickStrength(speed: number): number {
   return Math.min(1, Math.max(0, (speed - THROW.flickMin) / (THROW.flickMax - THROW.flickMin)));
 }
 

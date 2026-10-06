@@ -24,7 +24,7 @@ export const FLAP_MS = 120;
 export const ARMS_UP: ReadonlySet<DealerExpr> = new Set<DealerExpr>(['cheer', 'surprised', 'sad', 'thinking', 'point', 'dice', 'trophy']);
 
 /** Frames per cycle: the expression is the last frame of each cycle. */
-export const flapCycle = (expr: DealerExpr): number => (ARMS_UP.has(expr) ? 6 : 3);
+const flapCycle = (expr: DealerExpr): number => (ARMS_UP.has(expr) ? 6 : 3);
 
 /** The sprite `t` ms into the flapping (t ≥ 0). */
 export function flapFrame(t: number, expr: DealerExpr): string {

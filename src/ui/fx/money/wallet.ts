@@ -39,7 +39,7 @@ export interface UprightSlide {
   hide: number;
 }
 
-export interface WalletGeom {
+interface WalletGeom {
   /** Coin width (CSS px). */
   coin: number;
   slice: number;

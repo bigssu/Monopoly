@@ -10,7 +10,7 @@ import { FX_ANIM_NAMES, FX_ANIMS, type FxAnimName } from '@/content/fx/manifest'
 import { bezier2, Ease, ease, outBack, type EaseId } from './ease';
 import { PF, type ParticlePool } from './pool';
 
-export const FPS = 30;
+const FPS = 30;
 export const FRAME_MS = 1000 / FPS;
 const DT = 1 / FPS;
 const DEG = Math.PI / 180;
@@ -23,7 +23,7 @@ export const ANIM_INDEX: Record<FxAnimName, number> = Object.fromEntries(FX_ANIM
 /** Frame count per animation index. */
 const ANIM_N: readonly number[] = FX_ANIM_NAMES.map((n) => FX_ANIMS[n].n);
 
-export type Blend = 'normal' | 'add';
+type Blend = 'normal' | 'add';
 
 /** One particle to spawn (positions in layer px, sizes as multiples of the sprite's nominal size × u/30). */
 export interface PSpec {

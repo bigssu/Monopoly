@@ -39,7 +39,7 @@ const KEYWORDS: Record<string, [number, number, number, number]> = {
 };
 
 /** Parse a CSS easing we can evaluate in JS (linear, keywords, cubic-bezier); otherwise null. */
-export function easingFunction(easing: string | undefined): Ease | null {
+function easingFunction(easing: string | undefined): Ease | null {
   const e = (easing ?? 'linear').trim();
   if (e === 'linear' || e === '') return (x) => x;
   const k = KEYWORDS[e];

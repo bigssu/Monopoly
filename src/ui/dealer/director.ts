@@ -21,10 +21,10 @@ import {
 } from '@/engine';
 import { DEALER_LINES, levelIncludes, SITUATIONS, type DealerLevel, type DealerLine } from './lines';
 
-export type DealerSetting = 'off' | DealerLevel;
+type DealerSetting = 'off' | DealerLevel;
 
 /** Per-game memory the pickers need (first landings, leader, warnings). */
-export interface DealerMemo {
+interface DealerMemo {
   greeted: boolean;
   /** Tolls received in a row (reset when that player pays one). */
   tollStreak: Map<PlayerId, number>;
@@ -231,7 +231,7 @@ export function pickLine(situation: string, setting: DealerSetting, last: Map<st
   return line;
 }
 
-export interface Speaker {
+interface Speaker {
   say(line: DealerLine): void;
   dropBelow?(priority: number): void;
   /** A game event or a new decision: a finished line's pose may go back to idle now. */

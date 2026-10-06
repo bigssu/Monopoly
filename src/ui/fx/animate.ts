@@ -87,7 +87,7 @@ interface Batch {
 }
 
 /** Dev (?dev=1): the money scenes played so far (e2e/money-events.spec.ts reads `__moneyLog`). */
-export interface MoneyLogEntry {
+interface MoneyLogEntry {
   scene: MoneyScene['kind'];
   /** The stage scene that ran (after tier / variant choice). */
   play: string;
