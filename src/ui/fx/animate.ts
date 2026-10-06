@@ -72,7 +72,14 @@ const EXTENDED: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
   'CardDrawn', 'CardNoEffect', 'SentToIsland', 'IslandStay', 'Escaped', 'TravelGranted', 'FestivalSet',
   'Demolished', 'TakeoverBlocked', 'OneAway', 'CannotAfford', 'DebtStarted', 'DebtSettled',
   'AuctionStarted', 'AuctionEnded', 'GameOver',
+  // Rules version 2 (docs/research/08-fun-analysis.md).
+  'NewsFlash', 'BonusCard', 'Gambled', 'CitySwapped',
 ]);
+
+/** News flash headline icons (rules version 2). */
+const NEWS_ICON: Record<string, string> = {
+  tollFever: 'coin', quake: 'villa', buildBoom: 'building', takeoverSale: 'restart', shareDay: 'crown', vaultBoom: 'pot',
+};
 
 /** Per-batch state shared between events (previous event). */
 interface Batch {
@@ -370,8 +377,8 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
     case 'Demolished': {
       vs.properties[ev.spaceIndex]!.level = ev.level;
       render(view, vs);
-      // A typhoon is an event (EVENT_EXTEND); a building sold for debt is part of the sale's cut-in.
-      const typhoon = ev.cause === 'typhoon';
+      // A typhoon / quake is an event (EVENT_EXTEND); a building sold for debt is part of the sale's cut-in.
+      const typhoon = ev.cause !== 'sale';
       const hs = fire(view, planFx(ev, ctx), typhoon);
       if (fast) return;
       if (typhoon) {
@@ -379,9 +386,55 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         await Promise.all([
           ...hs,
           board.pulseSpace(ev.spaceIndex, 'shake'),
-          stage.toast(t('g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!), true),
+          stage.toast(t(ev.cause === 'quake' ? 'g.quake' : 'g.typhoon', { name: loc(boardOf(vs)[ev.spaceIndex]!.short) }), 800, 'bad', spaceIcon(boardOf(vs)[ev.spaceIndex]!), true),
         ]);
       } else await board.pulseSpace(ev.spaceIndex, 'shake');
+      return;
+    }
+    // --- Rules version 2 (docs/research/08-fun-analysis.md) ---------------------------------------
+    case 'NewsFlash': {
+      vs.news = { id: ev.id, round: ev.round, ...(ev.group ? { group: ev.group } : {}) };
+      render(view, vs);
+      const hs = fire(view, planFx(ev, ctx), ext);
+      if (fast) return;
+      // A headline: the stamp (title) first, then what it does, held long enough to read.
+      view.playSfx('festival');
+      await stage.stamp(t(`g.news.title.${ev.id}`), ev.id === 'quake' ? 'bad' : 'gold', ext);
+      const group = ev.group ? loc(GROUP_NAMES[ev.group]) : '';
+      await Promise.all([...hs, stage.toast(`${t('g.news.kicker')} · ${t(`g.news.${ev.id}`, { group })}`, 1400, ev.id === 'quake' ? 'bad' : 'gold', NEWS_ICON[ev.id], ext)]);
+      return;
+    }
+    case 'BonusCard':
+      fire(view, planFx(ev, ctx), ext);
+      if (!fast) {
+        view.playSfx('card');
+        await stage.toast(t('g.bonusCard'), 800, 'gold', 'dice-face-6', ext);
+      }
+      return;
+    case 'Gambled': {
+      if (fast) {
+        fire(view, planFx(ev, ctx));
+        return;
+      }
+      // Suspense: the die shows, then the verdict.
+      view.playSfx('dice-land');
+      await stage.toast(t('g.gamble.roll'), 500, 'info', `dice-face-${ev.die}`, ext);
+      const hs = fire(view, planFx(ev, ctx), ext);
+      await Promise.all([...hs, stage.stamp(t(ev.win ? 'g.gamble.win' : 'g.gamble.lose', { n: ev.die }), ev.win ? 'gold' : 'bad', ext)]);
+      return;
+    }
+    case 'CitySwapped': {
+      const apply = (): void => {
+        vs.properties[ev.took]!.owner = ev.playerId;
+        vs.properties[ev.gave]!.owner = ev.ownerId;
+        render(view, vs);
+      };
+      if (fast) {
+        apply();
+        return;
+      }
+      await runSteps(view, planFx(ev, ctx), apply);
+      await stage.toast(t('g.swapped', { took: loc(boardOf(vs)[ev.took]!.short), gave: loc(boardOf(vs)[ev.gave]!.short) }), 900, 'gold', 'rotate', ext);
       return;
     }
     case 'TakeoverBlocked':
@@ -573,7 +626,7 @@ function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean
     case 'payAll':
       return M.payAll(st, { payer: party(sc.payer), receivers: sc.receivers.map((p) => ({ ...party(p.id), amount: p.amount })), keep, ...(cardTitle(sc.cardId) ? { title: cardTitle(sc.cardId) } : {}) });
     case 'transfer':
-      return M.transfer(st, { from: party(sc.from), to: party(sc.to), via: 'center', amount: sc.amount, keep, title: cardTitle(sc.cardId) ?? t(sc.reason === 'toll' ? 'm.toll' : 'm.payAll') });
+      return M.transfer(st, { from: party(sc.from), to: party(sc.to), via: 'center', amount: sc.amount, keep, title: cardTitle(sc.cardId) ?? t(sc.reason === 'toll' ? 'm.toll' : sc.reason === 'news' ? 'g.news.title.shareDay' : 'm.payAll') });
     case 'receive': {
       const kind = sc.source === 'pot' ? 'pot' : sc.source === 'salary' ? 'salary' : 'bonus';
       const title = sc.source === 'doubleUp' ? t('m.doubleUp.win') : cardTitle(sc.cardId);
@@ -645,6 +698,9 @@ async function playMoney(view: GameView, vs: GameState, events: readonly GameEve
   // The build hero is flying onto the new pop-out building (scenes.ts `finish`): it pops as it lands.
   if (sc.kind === 'build' && !fast) view.board.popIcon(sc.spaceIndex, { from: 0.55, c1: 2.2, frames: 9 });
   if (sc.kind === 'purchase') await groupMoment(view, vs, sc.player, sc.spaceIndex, fast);
-  else if (sc.kind === 'takeover') await groupMoment(view, vs, sc.buyer, sc.spaceIndex, fast);
+  else if (sc.kind === 'takeover') {
+    if (sc.winBack && !fast) await view.stage.stamp(t('g.takeover.winBackDone'), 'gold', true);
+    await groupMoment(view, vs, sc.buyer, sc.spaceIndex, fast);
+  }
   else if (sc.kind === 'bankruptcy' && !fast) await view.panel(sc.debtor)?.breakApart();
 }

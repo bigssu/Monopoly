@@ -34,7 +34,7 @@ export type MoneyScene =
   | { kind: 'build'; player: PlayerId; spaceIndex: number; level: Level; cost: number; free: boolean }
   | { kind: 'toll'; payer: PlayerId; owner: PlayerId; spaceIndex: number; amount: number; festival: boolean; multiplier: number }
   | { kind: 'tollWaived'; payer: PlayerId; owner: PlayerId; spaceIndex: number }
-  | { kind: 'takeover'; buyer: PlayerId; seller: PlayerId; spaceIndex: number; price: number }
+  | { kind: 'takeover'; buyer: PlayerId; seller: PlayerId; spaceIndex: number; price: number; winBack?: boolean }
   | { kind: 'collectFromAll'; receiver: PlayerId; payers: Array<{ id: PlayerId; amount: number }>; cardId: CardId | null }
   | { kind: 'payAll'; payer: PlayerId; receivers: Array<{ id: PlayerId; amount: number }>; cardId: CardId | null }
   | { kind: 'transfer'; from: PlayerId; to: PlayerId; amount: number; reason: MoneyReason; cardId: CardId | null }
@@ -77,6 +77,7 @@ export const REASON_SCENES: { readonly [R in MoneyReason]: readonly MoneySceneKi
   sale: ['sale'],
   auction: ['purchase'],
   bankruptcy: ['bankruptcy'],
+  news: ['transfer'],
 };
 
 /** Event types a money group can consume (besides MoneyChanged). */
@@ -140,7 +141,7 @@ export function planMoney(events: readonly GameEvent[]): MoneyGroup[] {
       case 'TakenOver': {
         const a = find(i, (x) => isMC(x, 'takeover') && x.playerId === e.buyerId);
         const b = find(i, (x) => isMC(x, 'takeover') && x.playerId === e.sellerId);
-        add({ kind: 'takeover', buyer: e.buyerId, seller: e.sellerId, spaceIndex: e.spaceIndex, price: e.price }, [i, a, b]);
+        add({ kind: 'takeover', buyer: e.buyerId, seller: e.sellerId, spaceIndex: e.spaceIndex, price: e.price, ...(e.winBack ? { winBack: true } : {}) }, [i, a, b]);
         break;
       }
       case 'PassedStart': {

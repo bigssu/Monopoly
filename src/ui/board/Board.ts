@@ -136,7 +136,7 @@ function textLines(
 interface SpaceView {
   owner: PlayerId | null;
   level: number;
-  /** Festival multiplier on this space (0 = no festival): ×2, or the olympics ×3 / ×5. */
+  /** Festival multiplier on this space (0 = no festival): ×2, or the grand festival ×3 / ×5. */
   festival: number;
   /** Hub growth step (1 = none). */
   boost: number;

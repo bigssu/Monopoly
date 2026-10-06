@@ -201,9 +201,11 @@ export class Stage {
     this.banner.append(tokenBadge(p, 'tok-badge st-banner-tok'), h('span', { class: 'st-banner-name', text: t('g.turn', { name: p.name }) }));
     const limit = state.settings.roundLimit;
     const late = lateTollMultiplier(state);
-    const tail = state.endsAfterRound ? ` · ${t('g.finalRound')}` : late > 1 ? ` · ${t('g.lateToll', { m: late })}` : '';
+    // News flash (rules version 2): the headline in force this round.
+    const news = state.news && state.news.round === state.round && ['tollFever', 'buildBoom', 'takeoverSale'].includes(state.news.id) ? state.news.id : null;
+    const tail = (state.endsAfterRound ? ` · ${t('g.finalRound')}` : late > 1 ? ` · ${t('g.lateToll', { m: late })}` : '') + (news ? ` · ${t(`g.news.tail.${news}`)}` : '');
     this.round.textContent = (limit ? t('g.round.of', { n: state.round, max: limit }) : t('g.round', { n: state.round })) + tail;
-    this.round.classList.toggle('is-late', late > 1 || !!state.endsAfterRound);
+    this.round.classList.toggle('is-late', late > 1 || !!state.endsAfterRound || news !== null);
     this.setRanking(state);
   }
 

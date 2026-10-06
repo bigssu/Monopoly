@@ -1,5 +1,5 @@
 /**
- * Illustrated, swipeable rules (6 pages). Also usable as an overlay from the game menu:
+ * Illustrated, swipeable rules (8 pages). Also usable as an overlay from the game menu:
  *   import { openRulesOverlay } from '@/ui/screens/Rules';  openRulesOverlay();
  */
 import { GROUP_COLORS } from '@/content/board';
@@ -194,7 +194,7 @@ const PAGES: Page[] = [
         ['timer', 'late', 'normal'],
         ['space-event', 'cards', 'normal'],
         ['cards-shield', 'keep', 'normal'],
-        ['festival-marker', 'olympics', 'normal'],
+        ['festival-marker', 'grand', 'normal'],
         ['corner-festival', 'target', 'normal'],
         ['pot', 'finish', 'normal'],
         ['hub-rail', 'hubs', 'advanced'],
@@ -231,6 +231,48 @@ const PAGES: Page[] = [
     },
   },
   {
+    // Rules version 2 (docs/research/08-fun-analysis.md): the events that shake the board.
+    id: 'fun',
+    build: () => {
+      const items: [string, string, 'normal' | 'advanced'][] = [
+        ['pot', 'vault', 'normal'],
+        ['timer', 'news', 'normal'],
+        ['crown', 'comeback', 'normal'],
+        ['dice-face-6', 'bonus', 'normal'],
+        ['space-tax', 'gamble', 'normal'],
+        ['restart', 'winback', 'advanced'],
+      ];
+      return h(
+        'div',
+        { class: 'rp-card is-grid' },
+        h(
+          'div',
+          { class: 'rp-grid-head' },
+          h('span', { class: 'rp-num num' }, '7'),
+          h('h2', { class: 'rp-title' }, t('rules.fun.title')),
+          h('p', { class: 'rp-grid-sub' }, t('rules.fun.body')),
+        ),
+        h(
+          'div',
+          { class: 'rp-grid g3' },
+          items.map(([iconId, key, level], i) =>
+            h(
+              'div',
+              { class: `rp-tile is-level is-${level}`, '--i': String(i) },
+              svgIcon(iconId, 'rp-tile-ico'),
+              h(
+                'div',
+                { class: 'rp-tile-text' },
+                h('h3', { class: 'rp-tile-title' }, t(`rules.fun.${key}`), h('em', { class: 'rp-level' }, t(`rules.levels.${level}`))),
+                h('p', { class: 'rp-tile-desc' }, t(`rules.fun.${key}.d`)),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  },
+  {
     id: 'win',
     build: () => {
       const chips = (colors: string[], cls: string) =>
@@ -249,7 +291,7 @@ const PAGES: Page[] = [
         h(
           'div',
           { class: 'rp-grid-head' },
-          h('span', { class: 'rp-num num' }, '7'),
+          h('span', { class: 'rp-num num' }, '8'),
           h('h2', { class: 'rp-title' }, t('rules.win.title')),
           h('p', { class: 'rp-grid-sub' }, t('rules.win.body')),
         ),

@@ -28,6 +28,8 @@ const ICON_ALIASES: Record<string, string> = {
   'card-heart': 'space-donation',
   'card-express': 'hub-rail',
   'card-scale': 'space-tax',
+  'card-swap': 'rotate',
+  'card-raid': 'crown',
   'card-build': 'building',
   'card-storm': 'villa',
   'card-festival': 'festival-marker',

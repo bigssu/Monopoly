@@ -88,6 +88,8 @@ export function cardTone(id: CardId): CardTone {
     case 'payEach':
     case 'typhoon':
       return 'bad';
+    case 'swap':
+      return 'move';
     default:
       return 'good';
   }
@@ -173,7 +175,7 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
     return [step('buildSeq', { space: ev.spaceIndex, player: ev.playerId, level: lv, free: ev.free, ...(from ? { from } : {}) }, { applyAt: 'swap', wait: 'block' })];
   },
   Demolished: (ev) =>
-    ev.cause === 'typhoon'
+    ev.cause !== 'sale'
       ? [step('puff', { at: { space: ev.spaceIndex }, smoke: 3, bricks: 8, scale: 1.2 }, { wait: 'block' })]
       : [step('puff', { at: { space: ev.spaceIndex }, bricks: 3 })],
   TollPaid: (ev, c) => [
@@ -197,6 +199,20 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   TakenOver: (ev) => [step('takeoverStamp', { space: ev.spaceIndex, buyer: ev.buyerId, seller: ev.sellerId }, { applyAt: 'frame', wait: 'block' })],
   TakeoverBlocked: (ev) => [step('ringPulse', { at: { space: ev.spaceIndex }, color: SKY, double: true, sparkles: 8 })],
   CardsOffered: () => [],
+  // Rules version 2 (docs/research/08-fun-analysis.md).
+  BonusCard: (ev) => [step('ringPulse', { at: { panel: ev.playerId }, color: PURPLE, double: true, sparkles: 6 })],
+  NewsFlash: () => [step('ringPulse', { at: { stage: true }, color: AMBER, double: true, sparkles: 8 })],
+  Gambled: (ev, c) => {
+    const tax = getBoardInfo(c.vs.settings.spacesPerSide ?? 7).board.find((sp) => sp.kind === 'tax')!.index;
+    return ev.win
+      ? [step('ringPulse', { at: { space: tax }, color: GREEN, double: true, sparkles: 10 })]
+      : [step('puff', { at: { space: tax }, smoke: 2, scale: 1.1 })];
+  },
+  // The swap: both cities change frame colour (the state is applied at the first one's 'frame' cue).
+  CitySwapped: (ev) => [
+    step('frameSwap', { space: ev.took, from: ev.ownerId, to: ev.playerId }, { applyAt: 'frame', wait: 'block' }),
+    step('frameSwap', { space: ev.gave, from: ev.playerId, to: ev.ownerId }, { wait: 'block' }),
+  ],
   DoubleUpOffered: () => [],
   DoubleUpRolled: () => [],
   FinalRoundCalled: () => [],

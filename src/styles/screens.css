@@ -1117,6 +1117,7 @@
 .rp-grid-sub { font-size: 1.02em; color: var(--ink-2); }
 .rp-grid { display: grid; gap: .6em; min-height: 0; }
 .rp-grid.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+.rp-grid.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
 .rp-grid.g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .rp-tile {
   display: flex;

@@ -26,7 +26,7 @@ export type HandTarget =
 
 /** Phases whose prompt shows a "Pass" (or decline / stop / pay) button. */
 const PASS_BUTTON: ReadonlySet<Phase['kind']> = new Set<Phase['kind']>([
-  'buy', 'build', 'takeover', 'festival', 'freeUpgrade', 'travel', 'auction', 'doubleUp', 'useCard',
+  'buy', 'build', 'takeover', 'festival', 'freeUpgrade', 'travel', 'auction', 'doubleUp', 'useCard', 'gamble',
 ]);
 
 /** Board-pick actions: the hand taps the space on the board. */
@@ -50,6 +50,7 @@ const OFFERED_IN: Record<ActionType, ReadonlyArray<Phase['kind']>> = {
   UseCard: ['useCard'],
   DoubleUpGuess: ['doubleUp'],
   ChooseTarget: ['target'],
+  Gamble: ['gamble'],
   Pass: [...PASS_BUTTON],
 };
 
@@ -70,7 +71,9 @@ function phaseSpace(ph: Phase): number | null {
 export function cpuHandTarget(state: GameState, a: Action): HandTarget {
   const ph = state.phase;
   if (ph.kind === 'gameOver') return { kind: 'none', reason: 'game over' };
-  if (!OFFERED_IN[a.type].includes(ph.kind)) return { kind: 'none', reason: `${a.type} has no control in the ${ph.kind} prompt` };
+  // The land swap's target prompt (rules version 2) has a "keep mine" Pass; the typhoon's has none.
+  const swapPass = a.type === 'Pass' && ph.kind === 'target' && ph.card === 'swap';
+  if (!OFFERED_IN[a.type].includes(ph.kind) && !swapPass) return { kind: 'none', reason: `${a.type} has no control in the ${ph.kind} prompt` };
   // The turn's roll: the pad (the roll button, when shown in Settings, is not what the hand uses).
   if (a.type === 'Roll' && ph.kind === 'preRoll') return { kind: 'pad', selector: '.roll-pad' };
   // Build anywhere (preRoll): humans pick the city on the board; there is no button for it.

@@ -22,6 +22,7 @@ import {
   ruleFlags,
   saleOptions,
   sameAction,
+  swapGive,
   tollAtLevel,
   tollOf,
   type Action,
@@ -441,6 +442,7 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
     h('div', { class: 'pc-row' }, tokenBadge(owner, 'tok-badge pc-owner-tok'), h('span', { class: 'pc-sub', text: t('g.takeover.owner', { name: owner.name }) })),
     h('div', { class: 'pc-kvs' }, kv(t('g.value'), money(propertyValue(state, i))), kv(t('g.toll'), money(tollOf(state, i)))),
   ];
+  if (ph.winBack) body.push(tag(t('g.takeover.winBack'), 'gold', 'restart'));
   if (ph.ownerHasShield) body.push(tag(t('g.takeover.shield'), 'bad', 'cards-shield'));
   const hint = victoryHint(state, ph.playerId, i);
   if (hint) body.push(hint);
@@ -450,7 +452,7 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
       {
         icon: spaceIcon(sp),
         accent: playerColor(owner.colorId).hex,
-        kicker: t('g.takeover.kicker'),
+        kicker: ph.winBack ? t('g.takeover.winBackKicker') : t('g.takeover.kicker'),
         title: spaceTitle(state, i),
         body,
         buttons: [
@@ -494,13 +496,18 @@ function doubleUpPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'doubleUp' }>
 
 /** Card choice (rules ≥ normal): two event cards side by side; tap one. */
 function cardChoicePrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'cardChoice' }>): PromptResult {
+  // Rules version 2: a doubles bonus card, and the last player's comeback card (the first one).
+  const tags = h('div', { class: 'pc-tags' });
+  if (ph.bonus) tags.append(tag(t('g.cardPick.bonus'), 'gold', 'dice-face-6'));
+  if (ph.underdog) tags.append(tag(t('g.cardPick.underdog'), 'gold', 'crown'));
   return {
     el: card(
       'pc-cardpick',
       {
         icon: 'space-event',
-        kicker: t('g.cardPick.kicker'),
+        kicker: ph.bonus ? t('g.bonusCard') : t('g.cardPick.kicker'),
         title: t('g.cardPick.title'),
+        body: [tags.childNodes.length ? tags : null],
         buttons: ph.options.map((id, k) => {
           // Rules ≥ normal: the second card is face down — a known card or a gamble.
           if (k === 1 && ruleFlags(ctx.state.settings).hiddenCard) {
@@ -555,6 +562,32 @@ function useCardPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'useCard' }>):
   };
 }
 
+/** All or nothing (rules version 2) at the tax office: pay the tax, or a die for it. */
+function gamblePrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'gamble' }>): PromptResult {
+  const pid = ph.playerId;
+  const tax = boardOf(ctx.state).board.find((sp) => sp.kind === 'tax')!;
+  return {
+    el: card(
+      'pc-gamble',
+      {
+        icon: 'space-tax',
+        kicker: t('g.gamble.kicker'),
+        title: t('g.gamble.title'),
+        body: [
+          h('div', { class: 'pc-kvs' }, kv(t('g.gamble.tax'), money(ph.tax), 'is-strong')),
+          h('div', { class: 'pc-note', text: t('g.gamble.note', { amount: money(ph.tax * ECONOMY.gambleLoss) }) }),
+        ],
+        buttons: [
+          button(t('g.gamble.roll'), ctx, { type: 'Gamble', playerId: pid }, { primary: true, tone: 'gold', icon: 'dice-face-4', sub: t('g.gamble.rollSub') }),
+          button(t('g.gamble.pay'), ctx, { type: 'Pass', playerId: pid }, { sub: money(ph.tax) }),
+        ],
+      },
+      ctx,
+    ),
+    focus: tax.index,
+  };
+}
+
 function pickList(
   ctx: PromptCtx,
   options: readonly number[],
@@ -605,6 +638,28 @@ function festivalPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'festival' }>
 function targetPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'target' }>): PromptResult {
   const pid = ph.playerId;
   const owner = (i: number) => ctx.state.players[ctx.state.properties[i]!.owner!]!;
+  if (ph.card === 'swap') {
+    // Land swap (rules version 2): the chosen city for our cheapest one; keeping ours is allowed.
+    const give = swapGive(ctx.state, pid);
+    return {
+      big: true,
+      el: card(
+        'pc-target pc-swap',
+        {
+          icon: cardIcon('swap'),
+          kicker: t('g.target.swap.kicker'),
+          title: t('g.target.swap.title'),
+          body: [
+            give !== null ? tag(t('g.target.swap.give', { name: loc(boardOf(ctx.state).board[give]!.short) }), 'info', spaceIcon(boardOf(ctx.state).board[give]!)) : null,
+            h('div', { class: 'pc-note', text: t('g.pick.hint') }),
+            pickList(ctx, ph.options, (i) => ({ type: 'ChooseTarget', playerId: pid, spaceIndex: i }), (i) => `${owner(i).name} · ${money(propertyValue(ctx.state, i))}`),
+          ],
+          buttons: [button(t('g.pass'), ctx, { type: 'Pass', playerId: pid })],
+        },
+        ctx,
+      ),
+    };
+  }
   return {
     big: true,
     el: card(
@@ -797,6 +852,8 @@ export function buildPromptFor(ctx: PromptCtx): PromptResult | null {
       return doubleUpPrompt(ctx, ph);
     case 'target':
       return targetPrompt(ctx, ph);
+    case 'gamble':
+      return gamblePrompt(ctx, ph);
     case 'gameOver':
       return null;
   }
@@ -845,7 +902,8 @@ export function spaceInfo(state: GameState, i: number): HTMLElement {
     }
     if (state.festival === i) el.append(tag(t('g.toll.festival'), 'gold', 'festival-marker'));
   } else {
-    el.append(h('div', { class: 'pc-note', text: t(`g.info.${sp.kind}`, { pot: state.pot.toLocaleString() }) }));
+    const key = sp.kind === 'tax' && ruleFlags(state.settings).allOrNothing ? 'g.info.tax.gamble' : `g.info.${sp.kind}`;
+    el.append(h('div', { class: 'pc-note', text: t(key, { pot: state.pot.toLocaleString() }) }));
   }
   el.append(h('button', { class: 'info-close', type: 'button', 'data-action': 'close-info', text: t('shell.close') }));
   return el;
