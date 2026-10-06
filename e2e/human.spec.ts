@@ -672,6 +672,14 @@ const CRAFTED_EN: Array<[string, Record<string, unknown>, string, boolean?]> = [
     false,
   ],
   ['takeover', {}, `const me = s.players[s.current]; me.position = 12; s.properties[17] = { owner: (s.current + 1) % 4, level: 2 }; s.testHooks = { diceQueue: [[2, 3]] };`],
+  // Rules version 2 (docs/research/08-fun-analysis.md): all or nothing, a win-back takeover.
+  ['gamble', {}, `const me = s.players[s.current]; me.position = 18; me.cash = 2000; s.testHooks = { diceQueue: [[2, 3]] };`],
+  [
+    'winBack',
+    { rules: 'advanced' },
+    `const me = s.players[s.current]; me.position = 12; const taker = (s.current + 1) % 4;
+     s.properties[17] = { owner: taker, level: 2 }; s.takenFrom = { 17: { from: me.id, by: taker } }; s.testHooks = { diceQueue: [[2, 3]] };`,
+  ],
 ];
 
 /** Text that is clipped (ellipsis / overflow) or boxes that spill out of the viewport. */
