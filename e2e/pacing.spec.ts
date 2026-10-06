@@ -2,7 +2,7 @@
  * What a player SEES, in every environment the game runs in (the time policy, src/ui/fx/time.ts).
  *
  * The other specs check state; this one samples the screen over time during one human turn and
- * one CPU turn: the held dice shake, the roll tumbles before the total shows, the token passes
+ * one CPU turn: the held dice shake, the dice are thrown before the total shows, the token passes
  * through the spaces, the turn takes seconds (not zero), and the CPU's turn is shown.
  *
  * It exists because the game once went instant wherever the DEVICE asked for reduced motion
@@ -55,7 +55,7 @@ const SNAP = `() => {
   const box = (pid) => { const r = document.querySelector('.token[data-pid="' + pid + '"]').getBoundingClientRect(); return Math.round(r.x) + ',' + Math.round(r.y); };
   return {
     cur: s.current, phase: s.phase.kind, busy: h.isBusy(),
-    tumble: !!document.querySelector('.dice-canvas'),
+    tumble: !!document.querySelector('.dice.is-rolling'),
     total: !!document.querySelector('.st-total'),
     t0: box(0), t1: box(1),
     tween: document.getAnimations().some((a) => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('.token')),
@@ -92,10 +92,10 @@ for (const env of ENVS) {
         s.testHooks = { diceQueue: [[1, 3], [2, 4]] }; // plain cities, no doubles
         h.loadState(s);
       });
-      const roll = page.locator('.st-prompt [data-action="Roll"]:not(:disabled)');
+      const roll = page.locator('.stage [data-action="Roll"]:not(:disabled)');
       await expect(roll).toBeVisible({ timeout: 30_000 });
 
-      // 1. Holding the button visibly shakes the dice.
+      // 1. Holding the dice (the throw pad) visibly shakes them.
       const b = (await roll.boundingBox())!;
       await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
       await page.mouse.down();
@@ -117,7 +117,7 @@ for (const env of ENVS) {
       );
       expect(shakes, 'the held dice move').toBeGreaterThanOrEqual(3);
 
-      // 2. Release: tumble → total → the token walks → the decision.
+      // 2. Release (no swipe: a toss): the throw → total → the token walks → the decision.
       const mine = sample<Snap>(page, SNAP, `() => { const s = window.__lotAndRoll.getState(); return s.phase.kind === 'buy' && !window.__lotAndRoll.isBusy(); }`);
       await page.mouse.up();
       const a = await mine;

@@ -5,7 +5,8 @@
  *
  * Checked for every press (the dev hook's press log, `__lotAndRoll.cpuHand()`): the control was
  * on screen, the measured fingertip lay inside it, it was the control of the chosen action, and
- * the decision was still pending (not dispatched yet). Covers roll, buy, pass, build, takeover,
+ * the decision was still pending (not dispatched yet). Covers roll (the hand presses the dice on
+ * the throw pad and flicks toward the board centre: the throw follows the stroke), buy, pass, build, takeover,
  * a board pick (festival / travel), the island choice and debt sales, on all four seats.
  * Screenshots (hand held at its press) → e2e/__screenshots__/cpu-hand-*.png
  */
@@ -141,10 +142,17 @@ test.describe('CPU hand', () => {
     for (const r of natural) record(r, 'natural');
     expect(new Set(natural.map((r) => r.seat)).size, 'more than one seat acted').toBeGreaterThan(1);
 
-    // Every seat's hand lands on the roll button (the Stage turned toward that seat).
+    // Every seat's hand lands on the dice (the Stage turned toward that seat) and flicks them
+    // away from its seat: in the Stage's frame (turned to that seat) that is always "up".
     for (const pid of [S, E, N, W]) {
+      await page.evaluate(() => window.__lotAndRoll!.dice().clear());
       await craft(page, pid, '');
-      record(await waitPress(page, /^preRoll:Roll$/), `roll seat ${pid}`);
+      const r = await waitPress(page, /^preRoll:Roll$/);
+      record(r, `roll seat ${pid}`);
+      expect(r.target, `roll seat ${pid}`).toBe('pad');
+      await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.dice().log.at(-1)?.kind ?? null), { timeout: 15_000 }).toBe('flick');
+      const aim = await page.evaluate(() => window.__lotAndRoll!.dice().log.at(-1)!.aim!);
+      expect(-aim.y, `seat ${pid}: thrown toward the board centre`).toBeGreaterThan(Math.abs(aim.x));
     }
     await craft(page, S, BUY);
     record(await waitPress(page, /^buy:/), 'buy');
@@ -213,13 +221,13 @@ test.describe('CPU hand', () => {
     await page.waitForFunction(() => window.__lotAndRoll!.cpuHand().frozen(), null, { timeout: 10_000 });
     const dice = page.locator('.st-dice .dice');
     await expect(dice).toHaveClass(/is-shaking/);
-    await expect(page.locator('.roll-btn')).toHaveClass(/is-held/);
+    await expect(page.locator('.roll-pad')).toHaveClass(/is-held/);
     await page.locator('.pause-btn').click();
     await expect(page.locator('.menu-title')).toContainText('일시 정지');
     await expect(dice, 'paused: the dice stop rattling').not.toHaveClass(/is-shaking/);
     await page.locator('.menu-item.is-primary').click(); // 계속하기
     await expect(dice, 'resumed mid-hold: rattling again').toHaveClass(/is-shaking/);
-    await expect(page.locator('.roll-btn')).toHaveClass(/is-held/);
+    await expect(page.locator('.roll-pad')).toHaveClass(/is-held/);
     expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), 'still holding, not rolled').toBe('preRoll');
     await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(false));
     await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), { timeout: 30_000 }).not.toBe('preRoll');

@@ -11,7 +11,7 @@ test('native WebView mode avoids full-screen navigation layers', async ({ page }
   await expect(page.locator('.screen-ghost')).toHaveCount(0);
 });
 
-test('native WebView mode keeps Roll usable without its repeating pulse', async ({ page }) => {
+test('native WebView mode keeps the roll (the throw pad) usable without a repeating pulse', async ({ page }) => {
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   await page.evaluate(() => {
@@ -21,10 +21,12 @@ test('native WebView mode keeps Roll usable without its repeating pulse', async 
     hook.setPromptTimer(0);
     hook.startGame(hook.demoSettings(4, false), 11);
   });
-  const roll = page.locator('.roll-btn');
+  const roll = page.locator('.roll-pad');
   await expect(roll).toBeVisible();
   await expect(page.locator('.stage-bg')).toHaveCSS('background-color', 'rgb(10, 56, 71)');
-  expect(await roll.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none');
+  // The pad paints nothing and runs no animation (the roll button and its pulse are hidden by default).
+  await expect(page.locator('.roll-btn')).toHaveCount(0);
+  expect(await roll.evaluate((el) => el.getAnimations().length + getComputedStyle(el).animationName)).toBe('0none');
   const panel = page.locator('.pp.is-turn:not(.is-cpu) .pp-card').first();
   expect(await panel.evaluate((el) => getComputedStyle(el, '::before').animationName)).toBe('none');
   await roll.click();

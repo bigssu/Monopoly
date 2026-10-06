@@ -92,7 +92,8 @@ function sel(a: Action): string {
   const sp = 'spaceIndex' in a ? `[data-space="${a.spaceIndex}"]` : '';
   const card = 'cardId' in a ? `[data-card="${a.cardId}"]` : '';
   const parity = 'parity' in a ? `[data-parity="${a.parity}"]` : '';
-  return `.st-prompt [data-action="${a.type}"]${sp}${card}${parity}`;
+  // The turn's roll is the throw pad on the stage (outside the prompt card); the island roll a button.
+  return `${a.type === 'Roll' ? '.stage' : '.st-prompt'} [data-action="${a.type}"]${sp}${card}${parity}`;
 }
 
 function boardSpace(page: Page, i: number): Locator {
@@ -119,7 +120,9 @@ async function checkPrompt(page: Page, s: GameState): Promise<void> {
     await expect(ctl, `${a.type} control in ${s.phase.kind}`).toHaveCount(1);
     await expect(ctl).toBeEnabled();
     const re = LABEL[a.type];
-    if (re) await expect(ctl).toHaveText(re);
+    // The throw pad has no text, only its accessible name.
+    if (re && a.type === 'Roll' && s.phase.kind === 'preRoll') await expect(ctl).toHaveAccessibleName(/던지기|Throw/);
+    else if (re) await expect(ctl).toHaveText(re);
   }
 }
 
@@ -274,7 +277,7 @@ test.describe('human play (clicking real controls)', () => {
     const s = await getState(page);
     const me = s.players[s.current]!;
     await expect(page.locator('.stage')).toHaveAttribute('data-seat', me.seat);
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await waitIdle(page);
     let st = await getState(page);
     expect(st.phase.kind).toBe('debt');
@@ -317,7 +320,7 @@ test.describe('human play (clicking real controls)', () => {
     );
     const s = await getState(page);
     const me = s.players[s.current]!;
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await waitIdle(page);
     const after = await getState(page);
     expect(after.players[me.id]!.bankrupt).toBe(true);
@@ -337,7 +340,7 @@ test.describe('human play (clicking real controls)', () => {
        s.testHooks = { diceQueue: [[2, 3]] };`,
     );
     const ended = await getState(page);
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await expect.poll(() => screen(page), { timeout: 20_000 }).toBe('result');
     await expect(page.locator('.rs-card')).toBeVisible();
     await page.waitForTimeout(700);
@@ -377,7 +380,7 @@ test.describe('human play (clicking real controls)', () => {
        s.properties[17] = { owner: (s.current + 1) % 4, level: 4 };
        s.testHooks = { diceQueue: [[2, 3]] };`,
     );
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await expect.poll(() => screen(page), { timeout: 20_000 }).toBe('result');
     await page.locator('.rs-btn:not(.is-primary)').click();
     await expect.poll(() => screen(page)).toBe('title');
@@ -424,7 +427,7 @@ test.describe('human play (clicking real controls)', () => {
 
     // --- Auction: decline to buy → every other player bids / drops out on their own seat.
     await loadCrafted(page, { settings: { auction: true } }, `s.players[s.current].position = 0; s.testHooks = { diceQueue: [[1, 3]] };`);
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await waitIdle(page);
     let s = await getState(page);
     expect(s.phase.kind).toBe('buy');
@@ -459,7 +462,7 @@ test.describe('human play (clicking real controls)', () => {
        s.properties[9] = { owner: me.id, level: 0 };
        s.testHooks = { diceQueue: [[1, 3]] };`,
     );
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await waitIdle(page);
     s = await getState(page);
     expect(s.phase.kind).toBe('festival');
@@ -474,7 +477,7 @@ test.describe('human play (clicking real controls)', () => {
     // --- Travel: land on 자유여행, others take their turns, then fly by tapping a board space.
     await loadCrafted(page, { players: 2 }, `const me = s.players[s.current]; me.position = 20; s.testHooks = { diceQueue: [[1, 3], [1, 2]] };`);
     const traveller = (await getState(page)).current;
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     for (let k = 0; k < 12; k++) {
       s = await getState(page);
       if (s.phase.kind === 'travel') break;
@@ -494,7 +497,7 @@ test.describe('human play (clicking real controls)', () => {
     // --- Event card: normal speed, tap the card to dismiss it early.
     await page.evaluate(() => window.__lotAndRoll!.setAnimSpeed(1));
     await loadCrafted(page, {}, `s.players[s.current].position = 0; s.testHooks = { diceQueue: [[1, 2]], cardQueue: ['lottery', 'fine'] };`);
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     // Normal rules (the default): pick one of two cards first, then it flips.
     await page.locator('.st-prompt [data-action="ChooseCard"][data-card="lottery"]').click({ timeout: 15_000 });
     await expect(page.locator('.ev-card-inner.is-flipped')).toBeVisible({ timeout: 10_000 });
@@ -525,7 +528,7 @@ test.describe('human play (clicking real controls)', () => {
     );
     const s = await getState(page);
     const owner = (s.current + 2) % 4;
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     // The toll is a money cut-in (MONEY-EVENTS §11): payer's coins → the city → the owner's pile.
     await expect(page.locator('.money-stage.is-live')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('.money-stage .mw.is-on')).toHaveCount(2, { timeout: 5000 });
@@ -538,7 +541,7 @@ test.describe('human play (clicking real controls)', () => {
     // Soft timer: a 2 s timer on the takeover/build prompt → ring visible, then auto-pass + toast.
     await page.evaluate(() => window.__lotAndRoll!.setPromptTimer(2));
     await loadCrafted(page, {}, `s.players[s.current].position = 0; s.testHooks = { diceQueue: [[1, 3]] };`);
-    await page.locator('.st-prompt [data-action="Roll"]').click();
+    await page.locator('.stage [data-action="Roll"]').click();
     await waitIdle(page);
     expect((await getState(page)).phase.kind).toBe('buy');
     await expect(page.locator('.st-prompt .timer-ring')).toBeVisible();
@@ -587,10 +590,10 @@ test.describe('human play (clicking real controls)', () => {
     await expect(page.locator('.rules-overlay')).toHaveCount(0);
     await expect(page.locator('.menu-overlay')).not.toHaveClass(/is-open/);
 
-    // Hold the roll button until the soft timer rolls: the shake loop (haptic + sound) must stop.
+    // Hold the dice (the roll pad) until the soft timer rolls: the shake loop (haptic + sound) must stop.
     await page.evaluate(() => window.__lotAndRoll!.setPromptTimer(2));
     await loadCrafted(page, { players: 2 }, `s.testHooks = { diceQueue: [[1, 3]] };`);
-    const box = (await page.locator('.st-prompt .roll-btn').boundingBox())!;
+    const box = (await page.locator('.st-dice .dice-pair').boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await expect.poll(async () => (await getState(page)).lastDice, { timeout: 6000 }).not.toBeNull();
@@ -636,7 +639,7 @@ test.describe('human play (clicking real controls)', () => {
       // The auction / debt / island / festival / travel cards too.
       for (const [name, settings, patch, roll = true] of CRAFTED_EN) {
         await loadCrafted(page, { settings }, patch);
-        if (roll) await page.locator('.st-prompt [data-action="Roll"]').click();
+        if (roll) await page.locator('.stage [data-action="Roll"]').click();
         await waitIdle(page);
         const s = await getState(page);
         await checkPrompt(page, s);

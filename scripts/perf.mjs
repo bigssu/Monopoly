@@ -34,7 +34,7 @@
  *           (same throttle / DPR / length). This machine's own long frames (VM scheduling, CPU
  *           throttler time slices): at 4x an empty page already shows 1-2 frames > 2 vsyncs per
  *           60 s here, so a play count at that level is the environment, not the game.
- *   tap     (--phases tap) roll-button press/release input-to-paint (Event Timing), info only.
+ *   tap     (--phases tap) roll pad press/release (a toss) input-to-paint (Event Timing), info only.
  *   fx      VFX gates F1–F10 (docs/VFX.md §10.3, §15): the worst-case effect chain replayed on a live
  *           4-human game at 4x (toll XL → takeover → landmark + monopoly → bankruptcy → hub
  *           victory): particles, layers / layer memory, presented + unique fps, rAF p95, then idle
@@ -297,7 +297,7 @@ if (CFG.phases.includes('idle')) {
       window.__lotAndRoll.setPromptTimer(0);
       window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, false), 11);
     });
-    await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy() && document.querySelector('.roll-btn:not([disabled])'), null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy() && document.querySelector('.roll-pad:not([disabled])'), null, { timeout: 60000 });
     await page.waitForTimeout(1500);
     out.idle.game = await idlePair(page, cdp, 'game (4 humans, roll prompt, timer off)');
     await ctx.close();
@@ -629,7 +629,7 @@ if (CFG.phases.includes('mount')) {
     await page.waitForTimeout(1000);
     const tr = await trace(page, cdp, async () => {
       await page.evaluate(() => window.__lotAndRoll.startGame(window.__lotAndRoll.demoSettings(4, false), 11));
-      await page.waitForFunction(() => document.querySelector('.roll-btn'), null, { timeout: 30000 });
+      await page.waitForFunction(() => document.querySelector('.roll-pad'), null, { timeout: 30000 });
       await page.waitForTimeout(1500);
     });
     runs.push(tr.layoutMaxMs);
@@ -921,7 +921,7 @@ if (CFG.phases.includes('tap')) {
   const samples = [];
   for (let i = 0; i < 3; i++) {
     await page.waitForFunction(() => window.__lotAndRoll.getState()?.phase.kind === 'preRoll' && !window.__lotAndRoll.isBusy(), null, { timeout: 60000 });
-    const btn = page.locator('.roll-btn:not([disabled])');
+    const btn = page.locator('.roll-pad:not([disabled])');
     await btn.waitFor({ state: 'visible' });
     await page.waitForTimeout(600);
     const box = await btn.boundingBox();

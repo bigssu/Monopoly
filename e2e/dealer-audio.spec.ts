@@ -55,7 +55,7 @@ test('the dealer greets and his bubble shows at the default setting', async ({ p
 test('dealer off: no bubble during play', async ({ page }) => {
   await boot(page, { dealer: 'off' });
   await startGame(page);
-  await page.locator('.st-prompt [data-action="Roll"]').click();
+  await page.locator('.stage [data-action="Roll"]').click();
   await page.waitForTimeout(6000);
   await expect(page.locator('.dealer-bubble.is-in')).toHaveCount(0);
 });
@@ -71,7 +71,7 @@ test('English UI: the dealer speaks in English subtitles', async ({ page }) => {
 test('sound off: no sample, voice or music is ever started', async ({ page }) => {
   await boot(page, { sound: false });
   await startGame(page);
-  await page.locator('.st-prompt [data-action="Roll"]').click();
+  await page.locator('.stage [data-action="Roll"]').click();
   await page.waitForTimeout(6000);
   expect(await page.evaluate(() => (window as unknown as { __starts: number }).__starts)).toBe(0);
 });
@@ -79,7 +79,7 @@ test('sound off: no sample, voice or music is ever started', async ({ page }) =>
 test('control: with sound on, samples do start (the counter works)', async ({ page }) => {
   await boot(page, { sound: true });
   await startGame(page);
-  await page.locator('.st-prompt [data-action="Roll"]').click();
+  await page.locator('.stage [data-action="Roll"]').click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __starts: number }).__starts), { timeout: 15_000 }).toBeGreaterThan(0);
 });
 
@@ -96,7 +96,7 @@ test('advanced rules: the double-up bonus completes from real clicks', async ({ 
     h.loadState(s);
   });
   await page.waitForSelector('.game .board');
-  await page.locator('.st-prompt [data-action="Roll"]').click();
+  await page.locator('.stage [data-action="Roll"]').click();
   const pick = page.locator('.st-prompt [data-action="DoubleUpGuess"]:not(:disabled)').first();
   await expect(pick).toBeVisible({ timeout: 20_000 });
   await pick.click();

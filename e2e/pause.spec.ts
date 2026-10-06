@@ -19,7 +19,7 @@ test('pause mid-turn freezes the board; resume continues', async ({ page }) => {
     s.testHooks = { diceQueue: [[3, 4]] };
     h.loadState(s);
   });
-  const roll = page.locator('.st-prompt [data-action="Roll"]:not(:disabled)');
+  const roll = page.locator('.stage [data-action="Roll"]:not(:disabled)');
   await expect(roll).toBeVisible({ timeout: 30_000 });
   await roll.click();
   await page.waitForTimeout(1200); // the dice have landed; the move has not finished

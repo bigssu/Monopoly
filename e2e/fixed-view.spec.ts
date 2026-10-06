@@ -337,6 +337,32 @@ test.describe('fixed view: one human vs CPUs', () => {
       expect(angles).toEqual({ layer: ANGLE.N, stage: 0 });
       await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(false));
 
+      // The same CPU rolls: its hand presses the dice on the throw pad (visible there, the stage
+      // still upright for S) and flicks toward the centre, down the screen away from N; the throw
+      // follows the stroke.
+      await page.evaluate(() => {
+        const hook = window.__lotAndRoll!;
+        hook.cpuHand().clear();
+        hook.dice().clear();
+        hook.cpuHand().freeze(true);
+        const s = hook.getState()!;
+        const cpu = s.players.find((p) => p.seat === 'S')!;
+        s.current = cpu.id;
+        s.phase = { kind: 'preRoll', playerId: cpu.id, rollAgain: false };
+        hook.loadState(s);
+      });
+      await page.waitForFunction(() => window.__lotAndRoll!.cpuHand().frozen(), null, { timeout: 30_000 });
+      await expect(page.locator('.cpu-hand')).toBeVisible();
+      await expect(page.locator('.roll-pad')).toHaveClass(/is-held/);
+      const roll = (await handLog(page)).find((x) => x.tip)!;
+      checkPress(roll, 'roll from N');
+      expect(roll.target).toBe('pad');
+      expect(roll.seat).toBe('N');
+      await page.evaluate(() => window.__lotAndRoll!.cpuHand().freeze(false));
+      await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.dice().log.at(-1)?.kind ?? null), { timeout: 15_000 }).toBe('flick');
+      const aim = await page.evaluate(() => window.__lotAndRoll!.dice().log.at(-1)!.aim!);
+      expect(aim.y, 'thrown down the screen, away from N').toBeGreaterThan(Math.abs(aim.x));
+
       // Happy birthday for the human: everyone pays into the vault — ONE upright total for S.
       await page.evaluate((human) => {
         const hook = window.__lotAndRoll!;
@@ -348,9 +374,9 @@ test.describe('fixed view: one human vs CPUs', () => {
         s.settings.rules = 'easy';
         hook.loadState(s);
       }, human);
-      const roll = page.locator('.st-prompt [data-action="Roll"]:not(:disabled)');
-      await expect(roll).toBeVisible({ timeout: 30_000 });
-      await roll.click();
+      const pad = page.locator('.stage [data-action="Roll"]:not(:disabled)');
+      await expect(pad).toBeVisible({ timeout: 30_000 });
+      await pad.click();
       // Hold the frame where the vault total pops (every payer's coins are in).
       const seen = await page.evaluate(
         (src) =>

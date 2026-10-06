@@ -11,7 +11,7 @@ test('the Roll and purchase views use a dark stage with a contained card', async
     hook.setPromptTimer(0);
     hook.startGame(hook.demoSettings(4, false), 31);
   });
-  await expect(page.locator('.roll-btn')).toBeVisible();
+  await expect(page.locator('.roll-pad')).toBeVisible();
   await expect(page.locator('.stage-bg')).toHaveCSS('background-color', 'rgb(10, 56, 71)');
   await page.evaluate(async () => {
     await window.__lotAndRoll!.whenIdle();

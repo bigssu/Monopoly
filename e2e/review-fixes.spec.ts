@@ -61,7 +61,7 @@ test('initial FX coordinates reuse layout without measuring game elements', asyn
     hook.setPromptTimer(0);
     hook.startGame(hook.demoSettings(4, false), 11);
   });
-  await expect(page.locator('.roll-btn')).toBeVisible();
+  await expect(page.locator('.roll-pad')).toBeVisible();
   await page.waitForFunction(() => window.__lotAndRoll!.fx()?.atlas === 'ready');
   expect(await page.evaluate(() => (window as unknown as { fxLayoutReads: string[] }).fxLayoutReads)).toEqual([]);
 });

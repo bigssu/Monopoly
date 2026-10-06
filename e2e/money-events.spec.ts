@@ -201,7 +201,7 @@ const TOLL = `s.players[me].position = 0; s.players[me].cash = 3000; s.propertie
 
 /** Roll into the toll and time the cut-in: ms from the stage going live to parked, coins seen. */
 async function timeToll(page: Page, during?: () => Promise<void>): Promise<{ liveMs: number; coinsSeen: number }> {
-  await page.locator('.st-prompt [data-action="Roll"]:not(:disabled)').click();
+  await page.locator('.stage [data-action="Roll"]:not(:disabled)').click();
   await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.money()!.live), { timeout: 20_000 }).toBe(true);
   const t0 = Date.now();
   const sampler = page.evaluate(
@@ -561,7 +561,7 @@ test.describe('a cut-in cut short (review round 1)', () => {
       const errors = watchConsole(page);
       await boot(page, 1600, 1000);
       await craft(page, 'S', TAX);
-      await page.locator('.st-prompt [data-action="Roll"]:not(:disabled)').click();
+      await page.locator('.stage [data-action="Roll"]:not(:disabled)').click();
       await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.money()?.t ?? 0), { timeout: 20_000, intervals: [16] }).toBeGreaterThan(300);
       if (how === 'resize') await page.setViewportSize({ width: 1500, height: 1000 });
       else await page.evaluate(() => window.dispatchEvent(new Event('orientationchange')));
