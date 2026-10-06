@@ -84,7 +84,8 @@ surface: `src/ui/orientation.ts` (`orientationFor(players)` → `mode`, `seat()`
 
 The board occupies the center square. The board's **inner area** (inside the ring of spaces) is
 the **Stage**. The Stage rotates (CSS transform, animated 400 ms) to face the seat of the player
-who must act (fixed view, §2.1: it never rotates and always faces S). Everything interactive lives on the Stage: the dice, the "굴리기/Roll" button, the
+who must act (fixed view, §2.1: it never rotates and always faces S). Everything interactive lives on the Stage: the dice (thrown with a press-hold-flick on the
+Stage centre, §2.4 "Dice throw"; the "굴리기/Roll" button only when shown in Settings), the
 buy/build/takeover decision cards, card draws, the island escape choice, the festival target
 picker, the travel destination prompt, the pay/sell flow, the turn banner.
 
@@ -120,15 +121,17 @@ TurnStart ─► (island? ► IslandChoice) ─► Roll ─► MoveAnim ─► L
 Every prompt has a **15-second soft timer** (setting: off/15/30 s) that auto-picks the safe default
 (pass) so a distracted table keeps moving. CPU turns auto-play with short delays so humans can
 follow. Every CPU decision is shown being made: a hand (white glove, cuff in the CPU's color)
-reaches in from the CPU's seat edge, presses the control it chose — the prompt button (roll, buy,
-pass, build, bail, sell, bid…) or, for board picks (travel, festival, free upgrade, typhoon
+reaches in from the CPU's seat edge, presses the control it chose — the dice on the throw pad (a
+roll: held while they rattle, then a short flick toward the board centre that the throw follows),
+a prompt button (buy, pass, build, bail, the island roll, sell, bid…) or, for board picks (travel, festival, free upgrade, typhoon
 target, build-anywhere), the board space — and the action is dispatched at the release
 (`src/ui/stage/CpuHand.ts`; mapping in `handTarget.ts`; timings `HAND` in `src/ui/fx/motion.ts`).
 
 ### 2.4 Feel
 
-* Dice: two big dice on the Stage; tap-and-hold shakes them (haptic ticks), release rolls with a
-  CSS 3D tumble (≈900 ms), result pips snap, doubles get a golden flash + "더블!" burst.
+* Dice: two big dice on the Stage; press-and-hold shakes them (haptic ticks), a flick throws them
+  across the Stage (below), the landed faces are the crisp DOM dice, doubles get a golden flash +
+  "더블!" burst.
 * Token movement: hop space-to-space (~180 ms/space, ease-out with squash & stretch), passing Start
   triggers the salary cut-in (coins fountain from the bank into that player's pile).
 * Money (docs/MONEY-EVENTS.md §11): every purchase, payment and income is a full-screen cut-in —
@@ -149,6 +152,62 @@ target, build-anywhere), the board space — and the action is dispatched at the
 * Sound (Web Audio, synthesized): dice shake (noise bursts), hop (short pitched blip that rises
   per hop), cash (coin ping arpeggio), buy (major chord), pay (descending), card flip (sweep),
   island (foghorn), festival (fanfare), win (arpeggio + shimmer). Master mute + volume in settings.
+
+#### Dice throw (owner request 2026-10-06; research `docs/research/07-dice-throw-research.md` §3)
+
+Instead of a roll button, the human's turn invites a throw and the dice are thrown by hand.
+
+* **Gesture.** When a human's roll comes up, the dice pair wobbles three times (~1.2 s,
+  transform only, stepped on the 30 Hz clock — not a Web Animation, whose start and end would
+  promote and re-raster every layer painted above the dice; the pair is its own layer while
+  invited), and once more if nobody has thrown after 5 s; then nothing moves (zero idle load). A
+  transparent pad (`Stage.armPad`, a `<button>`, `aria-label` from i18n) covers the Stage
+  centre: the dice area and the roll card's strip, below the banner / round line, under the
+  prompt card and under the dice in paint order (the dice ignore pointers). Press anywhere
+  on it: the dice shake (rattle + haptic; the B7 dice gauge swings as before). Release with a swipe
+  (≥ 300 px/s over the last 80 ms before the finger last moved, released within 0.1 s of that): a
+  **flick** in that direction, converted into the Stage's own frame (so it is right for every seat
+  and in the fixed view). Release without one, or Enter / Space on the focused pad: a **weak
+  toss** forward (toward the board centre, away from the acting seat). Leaving the pad before the
+  release still throws (pointer capture); a cancelled pointer only stops the shake. The roll
+  card keeps the tags and the gauge and shows a hint strip ("주사위를 꾹 누르고 밀어 던지세요" /
+  "Press, hold and flick to throw") where the button stood.
+* **The result is the engine's.** The same `Roll` (+ gauge) is dispatched however the dice were
+  thrown; the seeded RNG has decided the faces, the throw only arrives on them (saves, replays and
+  the balance simulation are unchanged).
+* **Motion model** (`src/ui/stage/throw.ts`, pure, unit-tested): no physics library, no WebGL.
+  Each die is a 2D point in the Stage's frame with planar friction (speed ∝ (1 − u)², stopping
+  exactly at the end of its roll), reflection off the four walls of the dice area (the dice slot
+  below the banner / round line / ranking strip × the Stage's inner width, inset by half a die;
+  restitution 0.55 on the normal, 0.86 kept on the tangential), and a one-line circle separation
+  between the two dice (pushed apart, part of the approaching velocity swapped). The spin is the
+  cube rolling (angle = distance / radius × 0.8), so it is proportional to the launch speed and
+  decays with the friction. A flick: the leading die leaves first, the other 60 ms later, a little
+  slower and a few degrees apart; the planner searches speeds and angles near the flick (within
+  10°, never faster than ~1 die per 30 Hz frame) for 2–3 wall hits per die and a rest point near
+  home; 1.2–1.6 s in all. A toss: ~1.5 die sizes forward, a small hop, at most one soft wall
+  touch, ~1.1 s. The end pose is planned (the rolled distance is scaled, or a short roll blended,
+  so each die arrives on the engine's face; the same resting tilt as before), the second half of
+  each roll steers it into its place in the pair, and the existing `BOUNCE` landing (lift and
+  squash; lower near the top wall so it never rises over the banner) plays over the roll. Up to
+  three wall hits sound a `dice-clack` (synthesized, gain by impact). No dust puff: it would cost
+  a layer. Time policy (`src/ui/fx/time.ts`): ÷ speed, ×5 on skip; reduced motion: no trajectory,
+  the in-place roll (~1 s); headless: instant.
+* **Rendering paths**, chosen by the same switch as the canvas effects (`fxQualityOn`):
+  * canvas effects on (the web build by default): one temporary software canvas, sized to the
+    throw's bounding box (not the Stage), dirty-rect cleared, removed at the landing — one layer
+    while flying, as the old tumble;
+  * canvas effects off (the **Android app by default**: the owner's Samsung tablet drew canvases
+    as white boxes): no canvas at all; the two DOM cubes are posed (`pose`) and translated on the
+    30 Hz clock, one layer per die while flying.
+  Dev A/B: `?dev=1&dice=dom|canvas`. Reduced motion keeps the in-place tumble (a canvas over the
+  pair, as before).
+* **Setting** "굴리기 버튼 보이기 / Show roll button" (default off): the roll button and its "꾹
+  누르면 주사위를 흔들어요" hint come back beside the pad and work exactly as before.
+* **CPU.** The hand presses the dice on the pad, holds them while they rattle (`HAND.holdRoll`),
+  flicks a short stroke toward the board centre (`HAND.flick`), and the throw follows the stroke.
+* Tests: `src/ui/stage/__tests__/throw.test.ts`, `e2e/dice-throw.spec.ts` (flicks in four
+  directions, the toss, keyboard, cancel, canvas path, the setting, reduced motion, the wobble).
 
 ### 2.5 Screens
 
