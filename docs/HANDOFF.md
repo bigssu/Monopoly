@@ -16,6 +16,8 @@
   없어요" 한 줄). 카드 높이는 내용만큼이고 자리 쪽 가장자리에 붙는다(1600×1000 479 → 약 180 px, 보드 크기·위치 그대로).
   설계 `docs/DESIGN.md` §2.1 "Player panel", 비교 `docs/assets/panel-simplify-before.png`·`-after.png`. 실제 태블릿에서는 아직 못 봤다.
   **재미 강화 룰**(규칙 버전 2, 분석 `docs/research/08-fun-analysis.md`, 수치 `docs/BALANCE.md` "Fun rules"): 보통에 행운 금고·뉴스 속보·역전 카드(땅 맞교환·선두 습격)·더블 보너스 카드·모 아니면 도, 고급에 되찾기. 예전 저장은 예전 규칙 그대로(`rulesVersion` 없음 = 1). 새·고친 딜러 대사 23줄은 음성 미녹음(텍스트만, `lines.ts VOICE_PENDING`): 키 있는 PC에서 `node scripts/dealer/gen-voice.mjs` 후 목록에서 지운다. 태블릿에서는 아직 못 봤다.
+  딜러 팔 들기 절반(말하는 동안 팔 든 표정 2.78 → 1.39회/초, `src/ui/dealer/cadence.ts`), 건물 팔 때 우는 큰 컷인(`sell`:
+  우는 딜러 + 눈물 + 무너지는 건물 + 은행 → 내 지갑, `docs/MONEY-EVENTS.md` §14). 둘 다 실제 태블릿에서는 아직 못 봤다.
 - 브랜치 `feat/dealer-rules-sound` (원격과 동일, 커밋되지 않은 변경 없음). PR은 아직 없다. PR 대상 브랜치는 `ccr-d6694140-gxcpml`.
 - 마지막 전체 검증(로컬 `npm run release:check`): 단위 422개, e2e 63개 통과, APK에 최신 번들 포함 확인.
 - **CPU 손(2026-10-05, `main`).** CPU가 결정할 때마다 흰 장갑 손(소매는 CPU 색, 아이콘 `cpu-hand`)이 그 자리
