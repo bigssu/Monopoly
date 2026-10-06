@@ -1,8 +1,10 @@
 /**
  * Seeded PRNG for the VFX engine (mulberry32), independent of the game engine's RNG (VFX.md §1-5):
  * the same seed and the same sequence of `play()` calls give the same particles, frame for frame
- * (unit tests, deterministic filmstrips / screenshots).
+ * (unit tests, deterministic filmstrips / screenshots). The step is the engine's `mulberry32Step`.
  */
+import { mulberry32Step } from '@/engine/rng';
+
 export interface Rng {
   /** Uniform in [0, 1). */
   next(): number;
@@ -21,11 +23,9 @@ export interface Rng {
 export function mulberry32(seed: number): Rng {
   let s = seed >>> 0;
   const next = (): number => {
-    s = (s + 0x6d2b79f5) >>> 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    const [v, n] = mulberry32Step(s);
+    s = n;
+    return v;
   };
   return {
     next,

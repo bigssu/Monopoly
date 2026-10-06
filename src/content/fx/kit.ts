@@ -3,6 +3,7 @@
  * All sprite artwork in this folder is original to this project (procedural SVG, no text/digits/currency).
  * Pure functions only - no DOM. Consumed by scripts/fx/bake.mjs (bundled with esbuild).
  */
+import { mulberry32Step } from '../../engine/rng';
 
 /** color = fixed-colour atlas; mask = white+alpha atlas (runtime tint, additive 'lighter'). */
 export type FxClass = 'color' | 'mask';
@@ -70,11 +71,9 @@ export const C = {
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    const [v, n] = mulberry32Step(a);
+    a = n;
+    return v;
   };
 }
 
