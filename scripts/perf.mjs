@@ -69,6 +69,9 @@ const CFG = {
   dpr: Number(opt('dpr', 2)),
   seconds: Number(opt('seconds', 60)),
   capSeconds: Number(opt('cap-seconds', 30)),
+  // No log line for this long = the run is stuck (a CDP reply that never comes): exit 3 with the
+  // phase it was in, instead of waiting forever (2026-10-06: a cap trace hung for 26 min).
+  stallSeconds: Number(opt('stall-seconds', 300)),
   f6Seconds: Number(opt('f6-seconds', 30)),
   layerSeconds: Number(opt('layer-seconds', 40)),
   phases: String(opt('phases', 'boot,idle,cap,play,layers,mount,fx')).split(','),
@@ -127,7 +130,31 @@ if (!CFG.url) {
 const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--no-sandbox'] });
 const [VW, VH] = CFG.viewport;
 const out = { cpuThrottle: `${CFG.throttle}x`, dpr: CFG.dpr, viewport: [VW, VH], chromium: browser.version() };
-const log = (...a) => console.error(...a);
+let lastLog = Date.now();
+let phase = 'setup';
+const log = (...a) => {
+  lastLog = Date.now();
+  console.error(...a);
+};
+/** Name the phase in progress (for the stall watchdog's message) and count it as progress. */
+const enter = (name) => {
+  phase = name;
+  lastLog = Date.now();
+};
+const watchdog = setInterval(() => {
+  const idle = (Date.now() - lastLog) / 1000;
+  if (idle < CFG.stallSeconds) return;
+  console.error(`\nperf: STALLED — no progress for ${Math.round(idle)} s in phase "${phase}" (--stall-seconds ${CFG.stallSeconds}). Exiting 3.`);
+  process.exit(3);
+}, 5000);
+watchdog.unref();
+
+/** Reject when `p` has not settled within `ms` (a CDP event or reply that never arrives). */
+class TraceTimeout extends Error {}
+function within(p, ms, what) {
+  let t;
+  return Promise.race([p, new Promise((_, rej) => (t = setTimeout(() => rej(new TraceTimeout(`${what}: no reply in ${Math.round(ms / 1000)} s`)), ms)))]).finally(() => clearTimeout(t));
+}
 
 async function newPage(throttle = CFG.throttle) {
   const ctx = await browser.newContext({ viewport: { width: VW, height: VH }, deviceScaleFactor: CFG.dpr });
@@ -153,9 +180,15 @@ async function trace(page, cdp, fn, extra = []) {
   const t0 = Date.now();
   await fn();
   const wall = (Date.now() - t0) / 1000;
-  await cdp.send('Tracing.end');
-  await done;
-  cdp.off('Tracing.dataCollected', onData);
+  // Bounded: a lost Tracing.tracingComplete used to hang the whole run (no other await here has
+  // a timeout of its own). Collection normally takes a few seconds per traced minute.
+  const limit = Math.max(60000, wall * 4000);
+  try {
+    await within(cdp.send('Tracing.end'), limit, 'Tracing.end');
+    await within(done, limit, 'Tracing.tracingComplete');
+  } finally {
+    cdp.off('Tracing.dataCollected', onData);
+  }
   const threads = new Map();
   for (const e of events) if (e.ph === 'M' && e.name === 'thread_name') threads.set(`${e.pid}:${e.tid}`, e.args.name);
   const key = (e) => `${e.pid}:${e.tid}`;
@@ -245,6 +278,7 @@ async function measureWindow(page, cdp, ms, { layerTree = true } = {}) {
 
 // ------------------------------------------------------------------------------------ boot
 if (CFG.phases.includes('boot')) {
+  enter('boot');
   const runs = [];
   for (let i = 0; i < 3; i++) {
     const { ctx, page } = await newPage();
@@ -286,6 +320,7 @@ async function idlePair(page, cdp, label) {
   return { decorative: deco, calm, pass: deco.pass && calm.pass };
 }
 if (CFG.phases.includes('idle')) {
+  enter('idle');
   out.idle = {};
   {
     const { ctx, page, cdp } = await newPage();
@@ -342,15 +377,27 @@ async function capRun(saver) {
   const act = as.fps > ad.fps ? as : ad;
   return { fps: act.fps, activeSec: act.activeSec, stillSec: r1(tr.sec - act.activeSec), windowFps: per(Math.max(tr.drawFrames, tr.swaps)), drawFramesPerSec: per(tr.drawFrames), swapsPerSec: per(tr.swaps), taskMsPerSec: per(task), paintsPerSec: per(tr.paint), rasterPerSec: per(tr.raster), stylePerSec: per(tr.style), rafPerSec: per(tr.raf) };
 }
+/** One fresh-page retry when a trace never completes; a second hang fails loudly. */
+async function capRunRetry(saver) {
+  try {
+    return await capRun(saver);
+  } catch (e) {
+    if (!(e instanceof TraceTimeout)) throw e;
+    log(`cap (${saver ? 'saver on' : 'saver off'}): ${e.message}; retrying once in a fresh page`);
+    return capRun(saver);
+  }
+}
 if (CFG.phases.includes('cap')) {
-  const on = await capRun(true);
-  const off = await capRun(false);
+  enter('cap');
+  const on = await capRunRetry(true);
+  const off = await capRunRetry(false);
   out.cap = { seconds: CFG.capSeconds, on, off, pass: on.fps >= 26 && on.fps <= 34 && off.fps >= 55 };
   log('cap', JSON.stringify(out.cap));
 }
 
 // ------------------------------------------------------------------------------------ unique frames (info)
 if (CFG.phases.includes('unique')) {
+  enter('unique');
   out.unique = {};
   for (const saver of [true, false]) {
     const { ctx, page, cdp } = await newPage(1);
@@ -380,6 +427,7 @@ if (CFG.phases.includes('unique')) {
 
 // ------------------------------------------------------------------------------------ play (frames)
 if (CFG.phases.includes('play')) {
+  enter('play');
   const { ctx, page, cdp } = await newPage();
   await page.goto(base + DEV);
   await onTitle(page);
@@ -480,6 +528,7 @@ if (CFG.phases.includes('play') || CFG.phases.includes('floor')) {
 
 // ------------------------------------------------------------------------------------ layers (C)
 if (CFG.phases.includes('layers')) {
+  enter('layers');
   const { ctx, page, cdp } = await newPage();
   await page.goto(base + DEV);
   await onTitle(page);
@@ -621,6 +670,7 @@ function cutInSplit(tr) {
 
 // ------------------------------------------------------------------------------------ mount
 if (CFG.phases.includes('mount')) {
+  enter('mount');
   const runs = [];
   for (let i = 0; i < 3; i++) {
     const { ctx, page, cdp } = await newPage();
@@ -678,6 +728,7 @@ async function fxPage(throttle) {
   return p;
 }
 if (CFG.phases.includes('fx')) {
+  enter('fx');
   // F4 at 1x (like gate A / the unique phase: at 4x the screencast itself cannot deliver 30 frames/s).
   let fps1;
   {
@@ -881,6 +932,7 @@ if (CFG.phases.includes('fx')) {
 
 // ------------------------------------------------------------------------------------ full game DOM
 if (CFG.phases.includes('full')) {
+  enter('full');
   const { ctx, page } = await newPage(1);
   await page.goto(base + DEV);
   await onTitle(page);
@@ -911,6 +963,7 @@ if (CFG.phases.includes('full')) {
 
 // ------------------------------------------------------------------------------------ tap (info)
 if (CFG.phases.includes('tap')) {
+  enter('tap');
   const { ctx, page } = await newPage();
   await page.goto(base + DEV);
   await onTitle(page);

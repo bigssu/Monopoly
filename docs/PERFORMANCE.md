@@ -531,7 +531,13 @@ dev 노브(`?dev=1&…`, `src/ui/game/view.ts`): `fxq=auto|high|low|off`(품질)
 `play` 단계는 이어서 `floor`(빈 페이지, 같은 조건)를 재서 표 아래에 "environment floor"로 출력한다. play의 "vsync 두 번 초과"
 개수가 floor 수준이면 그 프레임은 게임이 아니라 이 기계의 것이다(4.5 참고).
 Playwright 모듈/Chromium 경로는 `PLAYWRIGHT_MODULE`/`CHROMIUM_PATH`로 바꿀 수 있음(기본: `/opt/node22/lib/node_modules/playwright`,
-`/opt/pw-browsers/chromium`). 게이트 하나라도 실패하면 종료 코드 1. 글꼴 서브셋 재생성은 `scripts/subset-fonts.py` 머리말 참고.
+`/opt/pw-browsers/chromium`). 게이트 하나라도 실패하면 종료 코드 1.
+**멈춤 방지(2026-10-06)**: 2026-10-06 실행에서 cap 단계의 트레이스가 `Tracing.tracingComplete`를 받지 못해 26분 동안
+아무 출력 없이 멈췄고, 그 실행을 기다리느라 APK 푸시가 늦어졌다. 원인은 `trace()`의 `Tracing.end`와 완료 이벤트 대기에만 시간
+제한이 없던 것이다(다른 대기는 모두 제한이 있다). 지금은 두 대기가 max(60 s, 트레이스 길이 × 4)로 제한되고, cap 단계는
+트레이스가 끝나지 않으면 새 페이지로 한 번 다시 잰다. 그리고 `--stall-seconds`(기본 300) 동안 출력이 없으면 어느 단계에서
+멈췄는지 출력하고 종료 코드 3으로 끝난다. 성능 게이트는 빌드 조건(`release:check`)이 아니다: 빌드는 release:check 통과 뒤
+바로 푸시하고, perf는 그다음에 돌린다. 글꼴 서브셋 재생성은 `scripts/subset-fonts.py` 머리말 참고.
 
 ## 6. Android 주사율 주의사항
 
