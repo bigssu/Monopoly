@@ -317,7 +317,9 @@ test.describe('dice throw', () => {
     await boot(page, '&dice=dom');
     await craft(page, [6, 2]);
     // No wobble without motion.
-    expect(await page.evaluate(() => document.querySelector('.st-dice .dice-pair')!.getAnimations().length)).toBe(0);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (document.querySelector('.st-dice .dice-pair') as HTMLElement).style.transform)).toBe('');
+    expect(await page.evaluate(() => document.querySelector('.st-dice .dice')!.classList.contains('is-inviting'))).toBe(false);
     await stroke(page, await pairCentre(page), 0, -160);
     await checkResult(page, [6, 2], 'reduced');
     const rec = (await lastRec(page))!;
@@ -331,7 +333,8 @@ test.describe('dice throw', () => {
     const logs = watchConsole(page);
     await boot(page);
     await craft(page, [1, 3]);
-    const pairAnims = (): Promise<number> => page.evaluate(() => document.querySelector('.st-dice .dice-pair')!.getAnimations().filter((a) => a.playState === 'running').length);
+    // Wobbling = the pair's transform is being stepped (Dice.invite, on the 30 Hz clock).
+    const pairAnims = (): Promise<number> => page.evaluate(() => ((document.querySelector('.st-dice .dice-pair') as HTMLElement).style.transform ? 1 : 0));
     // Started with the prompt (the craft wait was 0.5 s of its ~1.2 s).
     expect(await pairAnims(), 'wobbling').toBe(1);
     await expect.poll(pairAnims, { timeout: 3000 }).toBe(0);

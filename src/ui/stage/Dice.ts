@@ -14,7 +14,7 @@
  */
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, D, headless, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
+import { anim, D, headless, isHeld, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, isDevHook } from '@/ui/game/util';
 import { EASE } from '@/ui/fx/motion';
@@ -344,18 +344,28 @@ export interface ThrowRecord {
 /** Dev only (`?dev=1`): every roll's record; null in production. */
 export const diceDev: { log: ThrowRecord[] } | null = typeof window !== 'undefined' && isDevHook() ? { log: [] } : null;
 
-/** `n` wobbles ("throw me"), 400 ms each: a lean, a counter-lean, a small settle (transform only). */
-function wobbleFrames(n: number): Keyframe[] {
-  const k: Keyframe[] = [];
-  const steps: [number, string][] = [
-    [0, 'none'],
-    [0.22, 'translateY(-4%) rotate(-7deg)'],
-    [0.5, 'translateY(-2%) rotate(6deg)'],
-    [0.75, 'rotate(-3deg)'],
-  ];
-  for (let i = 0; i < n; i++) for (const [o, t] of steps) k.push({ offset: (i + o) / n, transform: t });
-  k.push({ offset: 1, transform: 'none' });
-  return k;
+/**
+ * "Throw me" wobble at `x` wobbles in (0..n): a lean, a counter-lean, a small settle per 400 ms
+ * wobble, eased between the poses (degrees, and a small lift in die-pair %).
+ */
+const WOBBLE: [number, number, number][] = [
+  [0, 0, 0],
+  [0.22, -7, -4],
+  [0.5, 6, -2],
+  [0.75, -3, 0],
+  [1, 0, 0],
+];
+export function wobbleAt(x: number): string {
+  const u = x - Math.floor(x);
+  let i = 0;
+  while (i < WOBBLE.length - 2 && u > WOBBLE[i + 1]![0]) i++;
+  const p = WOBBLE[i]!;
+  const q = WOBBLE[i + 1]!;
+  const k = (u - p[0]) / (q[0] - p[0]);
+  const e = k * k * (3 - 2 * k);
+  const deg = p[1] + (q[1] - p[1]) * e;
+  const lift = p[2] + (q[2] - p[2]) * e;
+  return `translateY(${lift.toFixed(2)}%) rotate(${deg.toFixed(2)}deg)`;
 }
 
 export class Dice {
@@ -411,21 +421,45 @@ export class Dice {
 
   /**
    * A human's turn: the pair wobbles three times (~1.2 s), then holds still; still waiting after
-   * 5 s, once more, then nothing (no idle load). Transform only, on the 30 Hz grid (`anim`); the
-   * pair is its own layer while invited, so the wobbles never repaint. Skipped without motion.
+   * 5 s, once more, then nothing (no idle load). Transform only, on the 30 Hz clock; the pair is
+   * its own layer while invited, so the wobbles never repaint. Skipped without motion.
    */
   invite(): void {
     this.stopInvite();
     if (noMotion()) return;
     this.el.classList.add('is-inviting');
-    const wobble = (n: number): void => void anim(this.pair, wobbleFrames(n), { duration: 400 * n, easing: 'linear' });
+    // Stepped on the shared 30 Hz clock (not a Web Animation): a running transform animation makes
+    // Chromium assume it overlaps everything painted above the dice, promoting (and re-rastering)
+    // those layers when it starts and ends — the second wobble would break gate B's
+    // compositor-only window. A style change on the pair's own layer is compositor-only.
+    let stopW: (() => void) | null = null;
+    const wobble = (n: number): void => {
+      stopW?.();
+      const dur = D(400 * n);
+      if (dur <= 0) return;
+      let elapsed = 0;
+      let last = -1;
+      stopW = onFrame((now) => {
+        if (last >= 0 && !isHeld()) elapsed += now - last;
+        last = now;
+        if (elapsed >= dur) {
+          this.pair.style.transform = '';
+          stopW = null;
+          return false;
+        }
+        this.pair.style.transform = wobbleAt((elapsed / dur) * n);
+        return true;
+      });
+    };
     wobble(3);
-    // A plain timer (the wobble itself is quantized onto the grid by `anim`): a grid timeout set
-    // while a test's hand-driven clock runs would wait in manual time after it stops.
+    // A plain timer: a grid timeout set while a test's hand-driven clock runs would wait in manual
+    // time after it stops.
     const id = window.setTimeout(() => wobble(1), 5000);
     this.inviteStop = () => {
       window.clearTimeout(id);
-      for (const a of this.pair.getAnimations()) a.cancel();
+      stopW?.();
+      stopW = null;
+      this.pair.style.transform = '';
       this.el.classList.remove('is-inviting');
     };
   }

@@ -456,14 +456,16 @@
 .pc-roll { pointer-events: none; }
 .pc-roll .roll-btn, .pc-roll .timer-ring { pointer-events: auto; }
 /* The throw pad (Stage.armPad): transparent, over the dice area and the roll card's strip, under
-   the card itself. It paints nothing (no layer, no idle cost); keyboard focus shows a soft ring. */
+   the card and under the dice in paint order (the dice ignore pointers, so presses reach it): it
+   paints nothing and never sits over the wobbling pair (no overlap layer, no idle cost); keyboard
+   focus shows a soft ring. */
 .roll-pad {
   position: absolute;
   top: 22%;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1;
+  z-index: 0;
   margin: 0;
   padding: 0;
   border: 0;

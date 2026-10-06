@@ -128,7 +128,9 @@ export class Stage {
     const pad = h('button', { class: 'roll-pad', type: 'button', 'data-action': 'Roll', 'aria-label': t('g.roll.pad') }) as HTMLButtonElement;
     if (cpu) pad.disabled = true;
     if (this.padTop >= 0) pad.style.top = `${this.padTop}px`;
-    this.rot.insertBefore(pad, this.promptSlot);
+    // Under the dice in paint order (the dice ignore pointers): nothing over the pair, so the
+    // "throw me" wobble never promotes the pad into an overlap layer.
+    this.rot.insertBefore(pad, this.diceWrap);
     this.pad = pad;
     return pad;
   }
