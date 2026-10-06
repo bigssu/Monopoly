@@ -47,6 +47,8 @@ const BASE: Record<string, [number, number]> = {
   'toll S': [146, 107], 'toll M': [146, 107], 'festival toll': [161, 118], 'waived toll': [95, 95],
   takeover: [149, 107], collect: [148, 107], 'pay all': [154, 110], salary: [124, 95], tax: [122, 95],
   bail: [122, 95], 'sale (bank → me)': [116, 95], 'leader tax (via centre)': [137, 100], bankruptcy: [110, 95],
+  // The crying-dealer sell cut-in (2026-10-06), measured before EVENT_EXTEND like the rest.
+  'sell a building (crying dealer)': [118, 95], 'sell land + a hotel': [124, 95],
 };
 /** Frames EVENT_EXTEND adds to a cut-in (motion + hold). */
 const EXT_F = (EVENT_EXTEND.motionMs + EVENT_EXTEND.holdMs) / f(1);

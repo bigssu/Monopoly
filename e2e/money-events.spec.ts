@@ -646,7 +646,7 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
   test('debt: every sale is a crying-dealer cut-in, wallets = engine cash, the last one chains into the toll', async ({ page }) => {
     test.setTimeout(240_000);
     const errors = watchConsole(page);
-    await boot(page, 1600, 1000);
+    await boot(page, { w: 1600, h: 1000 });
     await craft(page, 'S', DEBT);
     await act(page, 'Roll');
     expect(await page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind)).toBe('debt');
@@ -667,11 +667,12 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
     sells.forEach((e, k) => {
       expect(e.play).toBe('sell');
       expect(Object.keys(e.wallets)).toEqual(['S']);
-      // A repeat of the same kind in a turn plays at 0.7× (§12.1): ≥ 3 s on screen, its still hold 0.7 s.
+      // A repeat of the same kind in a turn plays at 0.7× (§12.1, §12.4): still ≥ 4.1 s on screen,
+      // its still hold 0.7 × 1 s + holdMs.
       if (k === 0) expectBeats(e);
       else {
-        expect(e.liveMs, `sell ${k}: ${e.liveMs} ms on screen`).toBeGreaterThanOrEqual(2950);
-        expect(e.stillMs, `sell ${k}: still ${e.stillMs} ms`).toBeGreaterThanOrEqual(650);
+        expect(e.liveMs, `sell ${k}: ${e.liveMs} ms on screen`).toBeGreaterThanOrEqual(3950);
+        expect(e.stillMs, `sell ${k}: still ${e.stillMs} ms`).toBeGreaterThanOrEqual(1150);
       }
     });
     // The first sale's wallet ended on what the engine had then (+ the sale); the toll that the
@@ -691,7 +692,7 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
     test(`filmstrip + crying hero ${size.w}x${size.h}`, async ({ page }) => {
       test.setTimeout(180_000);
       const errors = watchConsole(page);
-      await boot(page, size.w, size.h);
+      await boot(page, { w: size.w, h: size.h });
       mkdirSync(STRIPS, { recursive: true });
       await craft(page, 'S', DEBT, true);
       await page.evaluate(() => {
@@ -727,7 +728,7 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
     const errors = watchConsole(page);
     for (const v of ['high', 'mid', 'low', 'N', 'reduced'] as const) {
       if (v === 'reduced') await reduceMotion(page);
-      await boot(page, 1280, 800, v === 'reduced' || v === 'N' ? '' : `&mres=${v}`);
+      await boot(page, { w: 1280, h: 800, query: v === 'reduced' || v === 'N' ? '' : `&mres=${v}` });
       // Seat N: the cut-in turns 180° to face the seller across the table.
       await craft(page, v === 'N' ? 'N' : 'S', DEBT, true);
       await page.evaluate(() => {
