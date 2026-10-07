@@ -320,7 +320,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         await runSteps(view, planFx(ev, ctx).filter((s) => s.wait));
         return;
       }
-      await stage.dice.roll(ev.dice[0], ev.dice[1], ev.total, ev.isDouble);
+      await stage.dice.roll(ev.dice[0], ev.dice[1], ev.isDouble);
       const hs = fire(view, planFx(ev, ctx));
       // Timing: the total, huge, held so it can be read before anything else happens.
       await stage.bigTotal(ev.total, BEAT.diceRead);

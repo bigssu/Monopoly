@@ -20,7 +20,6 @@ import { haptic } from '@/ui/audio/haptics';
 import { anim, D, headless, isHeld, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, isDevHook } from '@/ui/game/util';
-import { EASE } from '@/ui/fx/motion';
 import { bounceAt, frameFrom, isFlick, planThrow, rollMode, sampleThrow, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowPlan, type Vec } from './throw';
 
 const PIPS: Record<number, Array<[number, number]>> = {
@@ -397,7 +396,6 @@ function wobbleAt(x: number): string {
 export class Dice {
   readonly el: HTMLElement;
   private dice: [Die, Die];
-  private readout: HTMLElement;
   private shakeTimer = 0;
   private pair: HTMLElement;
   private stopTumble: (() => void) | null = null;
@@ -413,9 +411,8 @@ export class Dice {
 
   constructor() {
     this.dice = [new Die(), new Die()];
-    this.readout = h('div', { class: 'dice-readout' });
     this.pair = h('div', { class: 'dice-pair' }, this.dice[0].el, this.dice[1].el);
-    this.el = h('div', { class: 'dice' }, this.readout, this.pair);
+    this.el = h('div', { class: 'dice' }, this.pair);
   }
 
   show(values: [number, number] | null): void {
@@ -423,7 +420,6 @@ export class Dice {
     const [a, b] = values ?? [5, 2];
     this.dice[0].set(a);
     this.dice[1].set(b);
-    this.readout.innerHTML = '';
     this.el.classList.remove('is-doubles');
   }
 
@@ -517,10 +513,9 @@ export class Dice {
     this.inviteStop = null;
   }
 
-  async roll(a: number, b: number, total: number, doubles: boolean): Promise<void> {
+  async roll(a: number, b: number, doubles: boolean): Promise<void> {
     this.shake(false);
     this.stopInvite();
-    this.readout.innerHTML = '';
     this.el.classList.remove('is-doubles');
     sfx.play('dice-shake');
     const aim = this.aimV;
@@ -538,19 +533,12 @@ export class Dice {
     if (rec) rec.endedAt = performance.now();
     sfx.play('dice-land');
     haptic('light');
-    // The total sits ABOVE the dice (under the round line), never over them: the dice themselves
-    // show the faces, so a player can see doubles at a glance. The old readout (mini faces + total
-    // below the pair) overlapped the dice whenever a prompt squeezed the dice area on a tablet.
-    this.readout.innerHTML = `<b class="dr-total">${total}</b>`;
+    // No total readout (owner, 2026-10-07): the faces are the number, and the token's walk shows it.
     if (doubles) {
       this.el.classList.add('is-doubles');
       sfx.play('doubles');
       haptic('success');
     }
-    void anim(this.readout, [{ transform: 'scale(.4)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], {
-      duration: 260,
-      easing: EASE.overshoot,
-    });
   }
 
   /**
