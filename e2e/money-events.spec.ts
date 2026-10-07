@@ -13,6 +13,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { boot, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
+import { SOB, SOB_SHEET } from '../src/content/fx/sob-sheet';
 
 interface LogEntry {
   stillMs: number;
@@ -589,11 +590,21 @@ test.describe('a cut-in cut short (review round 1)', () => {
  */
 const DEBT = `s.players[me].position = 12; s.players[me].cash = 280; s.properties[4] = { owner: me, level: 2 }; s.properties[6] = { owner: me, level: 1 }; s.properties[17] = { owner: other(1), level: 1 }; s.testHooks = { diceQueue: [[2, 3]] };`;
 
-/** The sad sprite's lower eyelids (fractions of the sprite; scenes.ts SAD_EYES, measured on public/dealer/sad.webp). */
+/**
+ * The sad sprite's lower eyelids (fractions of the sprite; scenes.ts SAD_EYES, measured on
+ * public/dealer/sad.webp). In a sob frame the rigid head, and so the lids, sit SOB.headDy[phase]
+ * sprite px lower (docs/MONEY-EVENTS.md §14.5).
+ */
 const EYES = [{ x: 0.405, y: 0.398 }, { x: 0.548, y: 0.374 }];
+const lidDy = (phase: number): number => SOB.headDy[phase]! / SOB.cell;
+/** The sob phase a probe saw (cell p of n sits at background-position p / (n − 1)). */
+const phaseOf = (p: CryProbe): number => Math.round((p.pos / 100) * (SOB.cells - 1));
 
 interface CryProbe {
+  /** The sob sheet (background-image). */
   src: string;
+  /** background-position x (%): the sheet cell on show is `phaseOf`. */
+  pos: number;
   /** Sprite box on screen (px). */
   w: number;
   /** Tear streams: top / bottom centre relative to the sprite box, and grown (> 0 px tall). */
@@ -602,9 +613,9 @@ interface CryProbe {
   drops: Array<{ x: number; y: number }>;
 }
 
-/** Where the tears are on the crying dealer (relative to the sprite's box on screen). */
+/** Where the tears are on the crying dealer (relative to the sprite's box on screen), and the sob phase. */
 function cryProbe(): CryProbe | null {
-  const img = document.querySelector<HTMLElement>('.money-stage .mh-crier-img');
+  const img = document.querySelector<HTMLElement>('.money-stage .mh-crier-sob');
   if (!img) return null;
   const r = img.getBoundingClientRect();
   if (!r.width) return null;
@@ -612,8 +623,10 @@ function cryProbe(): CryProbe | null {
     const b = e.getBoundingClientRect();
     return { x: (b.left + b.width / 2 - r.left) / r.width, y: (b.top - r.top) / r.height, yb: (b.bottom - r.top) / r.height, cy: (b.top + b.height / 2 - r.top) / r.height, h: b.height, o: Number(getComputedStyle(e).opacity) };
   };
+  const cs = getComputedStyle(img);
   return {
-    src: img.getAttribute('src') ?? '',
+    src: cs.backgroundImage,
+    pos: parseFloat(cs.backgroundPositionX),
     w: r.width,
     streams: [...document.querySelectorAll('.money-stage .mh-stream')].map(rel).map((q) => ({ x: q.x, y: q.y, yb: q.yb, h: q.h })),
     drops: [...document.querySelectorAll('.money-stage .mh-tear')].map(rel).filter((q) => q.o > 0.05).map((q) => ({ x: q.x, y: q.cy })),
@@ -621,25 +634,41 @@ function cryProbe(): CryProbe | null {
 }
 
 /**
- * Every grown stream starts on an eye's lower lid; every drop is on the face or falling from it.
+ * Every grown stream starts on an eye's lower lid — where the lid is in this sob phase (the head
+ * moves up and down with the body) — and every drop is on the face or falling from it.
  * `flip`: the hero faces seat N (turned 180° on screen): the sprite's own coordinates are 1 − screen.
  */
 function expectTearsOnFace(p: CryProbe, where: string, flip = false): void {
   const grown = p.streams.filter((q) => q.h > 1);
+  const phase = phaseOf(p);
+  const dy = lidDy(phase);
   expect(grown.length, `${where}: both streams`).toBe(2);
   grown.forEach((q, i) => {
     const x = flip ? 1 - q.x : q.x;
     const y = flip ? 1 - q.yb : q.y;
     expect(Math.abs(x - EYES[i]!.x), `${where}: stream ${i} x ${x.toFixed(3)}`).toBeLessThanOrEqual(0.03);
-    expect(Math.abs(y - EYES[i]!.y), `${where}: stream ${i} y ${y.toFixed(3)}`).toBeLessThanOrEqual(0.03);
+    expect(Math.abs(y - (EYES[i]!.y + dy)), `${where}: phase ${phase} stream ${i} y ${y.toFixed(3)}`).toBeLessThanOrEqual(0.03);
   });
   for (const d0 of p.drops) {
     const d = flip ? { x: 1 - d0.x, y: 1 - d0.y } : d0;
     expect(d.x, `${where}: drop x`).toBeGreaterThan(0.3);
     expect(d.x, `${where}: drop x`).toBeLessThan(0.65);
-    expect(d.y, `${where}: drop y`).toBeGreaterThan(0.33);
-    expect(d.y, `${where}: drop y`).toBeLessThan(0.75);
+    expect(d.y - dy, `${where}: drop y`).toBeGreaterThan(0.33);
+    expect(d.y - dy, `${where}: drop y`).toBeLessThan(0.75);
   }
+}
+
+/**
+ * The tears were checked in at least two sob phases, one of them the stretch (phase 5: the head
+ * 4 % of the sprite above the still, more than the ±3 % tolerance, so tears that stayed put would
+ * have failed there).
+ */
+function expectPhasesSampled(ps: CryProbe[], where: string): void {
+  const seen = new Set(ps.map(phaseOf));
+  expect(seen.size, `${where}: sob phases seen ${[...seen].join(',')}`).toBeGreaterThanOrEqual(2);
+  const far = SOB.headDy.findIndex((d) => Math.abs(d) / SOB.cell > 0.03);
+  expect(far, 'a phase whose head moves more than the tolerance').toBeGreaterThanOrEqual(0);
+  expect(seen.has(far), `${where}: phase ${far} sampled`).toBe(true);
 }
 
 test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)', () => {
@@ -708,13 +737,16 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
       // The hero is the sad dealer, big; tears on the face in every frame they show.
       const probes = shots.map((x) => x.data as CryProbe | null).filter((p): p is CryProbe => !!p);
       expect(probes.length).toBeGreaterThan(6);
-      expect(probes.every((p) => p.src.endsWith('dealer/sad.webp'))).toBe(true);
+      expect(probes.every((p) => p.src.includes(SOB_SHEET)), probes[0]?.src).toBe(true);
+      // He sobs: the sheet steps through all its phases (the head rigid, the body heaving).
+      expect(new Set(probes.map(phaseOf)).size, 'sob phases shown').toBe(SOB.cells);
       expect(Math.max(...probes.map((p) => p.w)), 'the dealer fills about half the short side').toBeGreaterThan(size.h * 0.45);
       const crying = probes.filter((p) => p.streams.some((q) => q.h > 1));
       expect(crying.length, 'crying for most of the cut-in').toBeGreaterThan(probes.length * 0.6);
       expect(crying.some((p) => p.drops.length >= 2), 'drops run down').toBe(true);
       // Fully grown streams (from a few frames in) sit on the eyes.
       crying.slice(4).forEach((p, k) => expectTearsOnFace(p, `frame ${k}`));
+      expectPhasesSampled(crying.slice(4), `${size.w}x${size.h}`);
       // Key frame: the still hold (plaque up, tears running).
       const key = shots[Math.min(shots.length - 1, Math.round(shots.length * 0.75))]!;
       writeFileSync(`${SHOTS}/money-${tag}.png`, Buffer.from(key.img, 'base64'));
@@ -741,10 +773,19 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
       const crying = probes.filter((p) => p.streams.some((q) => q.h > 1));
       expect(crying.length, `${v}: crying`).toBeGreaterThan(probes.length * 0.6);
       crying.slice(4).forEach((p, k) => expectTearsOnFace(p, `${v} frame ${k}`, v === 'N'));
+      // Reduced motion: no sob (phase 0 only, the tears on its lids); else at least two phases.
+      if (v === 'reduced') expect(new Set(crying.map(phaseOf)), `${v}: phase 0 only`).toEqual(new Set([0]));
+      else expectPhasesSampled(crying.slice(4), v);
       if (v === 'reduced') {
-        // No movement: the drops stand still on the cheeks for the whole cut-in (one per eye).
-        const at = crying.slice(4).map((p) => JSON.stringify(p.drops.map((d) => [d.x.toFixed(2), d.y.toFixed(2)])));
-        expect(new Set(at).size, `${v}: drops do not move`).toBe(1);
+        // No movement: the drops stand still on the cheeks for the whole cut-in (one per eye). Within
+        // 1 % of the sprite: the hero's out (it shrinks away) rounds their box by a pixel.
+        const ref = crying[4]!.drops;
+        crying.slice(4).forEach((p, k) => {
+          expect(p.drops.length, `${v} frame ${k}: drops`).toBe(ref.length);
+          p.drops.forEach((d, i) => {
+            expect(Math.abs(d.x - ref[i]!.x) + Math.abs(d.y - ref[i]!.y), `${v} frame ${k}: drop ${i} does not move`).toBeLessThanOrEqual(0.01);
+          });
+        });
         expect(crying[4]!.drops.length).toBe(2);
         // Same time on screen: the frames the stage was live, like a normal cut-in.
         expect(shots.length * EVERY, `${v}: ticks live`).toBeGreaterThan(90);
