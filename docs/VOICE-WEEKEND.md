@@ -58,6 +58,10 @@ git push origin main
 
 ## 같이 하면 좋은 것 (선택)
 
+- **sprite-gen으로 딜러 움직임**: 오너가 보여 준 sprite-gen(https://github.com/aldegad/sprite-gen)의 영상 → 투명 루프
+  파이프라인은 Grok 로그인(`grok login`) 또는 `XAI_API_KEY`가 있어야 돈다. 딜러가 **말하는 동안** 고개·어깨가 살짝
+  움직이는 루프 하나가 가장 효과가 크다. 후보와 명령은 `docs/research/09-sprite-gen.md` §5. 하지 않아도 된다.
+
 - **우는 판매 컷인의 흐느낌 소리**: 지금은 합성음(`sob`)이다. 녹음 효과음으로 바꾸려면 `scripts/sound/gen-sound.mjs`에
   프롬프트를 넣고 `src/ui/audio/sfx.ts`의 `SYNTH_ONLY_SFX`에서 빼는 작은 코드 수정이 필요하다. 원하면 미리 해 둔다.
 - **ElevenLabs 상업 이용 증빙**: `docs/RELEASE.md` 체크리스트 항목. 요금제 화면을 캡처해 보관한다.
