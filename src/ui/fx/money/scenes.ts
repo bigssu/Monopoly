@@ -16,6 +16,7 @@
 import type { Seat } from '@/engine';
 import { iconMarkup } from '@/content/icons';
 import { bank, dirtPlot, plotSign, vault } from '@/content/fx/sprites-money';
+import { SOB, SOB_SHEET } from '@/content/fx/sob-sheet';
 import { fmtMoney, t } from '@/i18n';
 import { EVENT_EXTEND, headless } from '../time';
 import { f, type MoneyClock } from './clock';
@@ -26,6 +27,7 @@ import {
 } from './denom';
 import { type MoneyStage, type SpaceArt } from './stage';
 import { rotate, type Wallet } from './wallet';
+import { frameOf, phaseAt, type Sob } from './sob';
 import './strings';
 import { SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
 import { outBack } from '../vfx/ease';
@@ -1141,7 +1143,8 @@ interface SellArgs extends SceneOpts {
  * waist faded out. Its eyes' lower lids, measured on public/dealer/sad.webp (320 × 320: dark pupil
  * pixels, viewer's left eye ≈ x 38–43 %, y 34–40 %; right eye ≈ x 53–57 %, y 32–38 %), as fractions
  * of the sprite: the tears are placed in the sprite's own box, so they sit on the face at every
- * render tier and hero scale.
+ * render tier and hero scale. He sobs with the baked frames of public/dealer/sad-sob.webp (`sob`):
+ * the head is rigid in them and only moves up and down by `SOB.headDy`, and the tears move with it.
  */
 const CRIER = { left: -0.06, top: 0.22, size: 0.8 } as const;
 export const SAD_EYES: ReadonlyArray<{ x: number; y: number; drift: number }> = [
@@ -1180,19 +1183,59 @@ function sellHero(x: Ctx, a: SellArgs): string {
     `<div class="mh-sell" style="--pc:${a.playerColor}">` +
     `<div class="mh-sold n${n}">${cards}<div class="mh-bankb">${bank()}</div></div>` +
     `<div class="mh-crier" style="left:${CRIER.left * 100}%;top:${CRIER.top * 100}%;width:${CRIER.size * 100}%;height:${CRIER.size * 100}%">` +
-    `<img class="mh-crier-img" src="dealer/sad.webp" alt="" draggable="false">${streams}${tears}</div>` +
+    `<div class="mh-crier-sob" style="background-image:url(${SOB_SHEET});background-size:${SOB.cells * 100}% 100%;background-position:${sobAt(0)}"></div>` +
+    `<div class="mh-face" style="transform:${faceAt(0)}">${streams}${tears}</div></div>` +
     `</div>`
   );
 }
 
-/** A sniffle: the dealer breathes in (stretches up), sobs (squashes down) and settles — squash & stretch. */
-function sniffle(x: Ctx, el: HTMLElement | null, k = 1, frames = 9): Promise<void> {
-  if (!el) return x.c.after(f(frames));
-  return x.st.tween(f(frames), (u) => {
-    const sy = u < 0.4 ? 1 + 0.06 * k * Math.sin((Math.PI * u) / 0.4) : 1 - 0.075 * k * Math.sin((Math.PI * (u - 0.4)) / 0.6) * (1.2 - u);
-    const sx = 1 - (sy - 1) * 0.85;
-    el.style.transform = u >= 1 ? '' : `scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+/** The sheet cell of a sob phase (background-size cells × 100 %: cell p sits at p / (cells − 1)). */
+function sobAt(p: number): string {
+  return `${((p / (SOB.cells - 1)) * 100).toFixed(1)}% 0`;
+}
+
+/** The tears ride the head: its rigid move in that phase, as a % of the sprite box (= of the face box). */
+function faceAt(p: number): string {
+  return `translateY(${((SOB.headDy[p]! / SOB.cell) * 100).toFixed(3)}%)`;
+}
+
+/**
+ * Start loading the sheet as the cut-in is queued, so it has decoded by the time the hero shows
+ * (the still was always in cache: the dealer preloads it). Nothing holds it afterwards: the sheet
+ * lives in the hero's markup, which the stage clears when it parks.
+ */
+function warmSob(): void {
+  if (headless() || typeof Image === 'undefined') return;
+  const img = new Image();
+  img.src = SOB_SHEET;
+  void img.decode?.().catch(() => undefined);
+}
+
+/**
+ * The sob (squash & stretch of the body, the head kept rigid): the baked frames of the sheet,
+ * stepped on the scene clock (30 Hz; paused / skipped / manual like the tears). He breathes slowly
+ * from the start and through the still hold; `sob(cycles)` runs that many fast cycles from now (the
+ * sniffle beats). The tears' box moves with the head on the same step, so they stay on the lids.
+ * Reduced motion: phase 0 only. Headless: no scene, nothing.
+ */
+function sob(x: Ctx, crier: HTMLElement | null): (cycles: number) => void {
+  const body = crier?.querySelector<HTMLElement>('.mh-crier-sob') ?? null;
+  const face = crier?.querySelector<HTMLElement>('.mh-face') ?? null;
+  if (!body || !face || x.st.reduced()) return () => undefined;
+  const start = frameOf(x.c.t);
+  const sobs: Sob[] = [];
+  let shown = 0;
+  x.c.add((t) => {
+    if (t > 1e12) return false; // the clock is being disposed: the stage parks
+    const p = phaseAt(t, start, sobs, SOB.cells);
+    if (p !== shown) {
+      shown = p;
+      body.style.backgroundPosition = sobAt(p);
+      face.style.transform = faceAt(p);
+    }
+    return true;
   });
+  return (cycles) => void sobs.push({ at: frameOf(x.c.t), cycles });
 }
 
 /**
@@ -1257,13 +1300,14 @@ function cry(x: Ctx, crier: HTMLElement | null): void {
 }
 
 /**
- * Selling to the bank (debt): the dealer, big, cries — tears stream from his eyes, he sniffles and
- * sobs — while the sold building lifts off its city card and crumbles (the land: its card turns the
+ * Selling to the bank (debt): the dealer, big, cries — tears stream from his eyes, his body heaves
+ * with sobs (baked frames, the head rigid) — while the sold building lifts off its city card and crumbles (the land: its card turns the
  * bank's grey and lifts away), then the bank pays: coins from the bank badge into my wallet.
  */
 export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
   const total = a.items.reduce((s, it) => s + it.amount, 0);
   const tier = a.tier ?? maxTier('M', tierFor(total));
+  warmSob();
   return runScene(st, 'sell', tier, a, async (x) => {
     const w = walletOf(x, { seat: a.seat, cash: a.cash, color: a.playerColor });
     void heroIn(x, sellHero(x, a), a.seat, 'is-sell', { s: 1, rx: 10 });
@@ -1271,14 +1315,17 @@ export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
     const root = x.st.heroIn;
     const crier = root.querySelector<HTMLElement>('.mh-crier');
     const front = frontOf(x, a.seat, 0.42);
+    // He breathes from the first frame; a sob is fast cycles of the same frames.
+    const sobs = sob(x, crier);
     // INTRO: the stage settles, the tears start.
     await x.at(6);
     cry(x, crier);
     await x.at(BEATS_F.intro - BEATS_F.lift);
-    // Anticipation: a sob — he breathes in and his shoulders drop — while the building trembles and lifts.
+    // Anticipation: a sob — two fast heaves with the sound's two caught breaths — while the building
+    // trembles and lifts.
     x.st.sound.cue('sob');
     x.st.sound.buzz('light');
-    void sniffle(x, crier);
+    sobs(2);
     const items = [...root.querySelectorAll<HTMLElement>('.mh-sold-i')];
     const lifts = items.map((it, k) => {
       const b = it.querySelector<HTMLElement>('.mh-sold-b') ?? it.querySelector<HTMLElement>('.mh-sold-c');
@@ -1343,8 +1390,9 @@ export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
         w.bump(x.st, 1.1, f(6));
         void x.st.fx('coin_burst', w.center(), { scale: x.coin / 30 });
         void w.merge(x.st, (_m, at) => void x.st.fx('coin_burst', at, { scale: x.coin / 36 }));
-        // He sniffles again, smaller (follow-through); the tears keep running through the still hold.
-        await sniffle(x, crier, 0.7, 8);
+        // He sobs again, once (follow-through: the result beat is one sob long); then the slow
+        // breath and the tears keep going through the still hold.
+        sobs(1);
       },
       plaque: () =>
         revealPlaque(x, 0, a.seat, front, {

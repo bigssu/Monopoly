@@ -285,16 +285,20 @@
 .mh-sold .mh-band { font-size: calc(var(--hu) * 4.2); }
 .mh-chunk:nth-of-type(3n) { background: var(--pc, #C9B79C); }
 .mh-bankb { position: absolute; left: 27%; bottom: -8%; width: 46%; height: 40%; transform: scale(0); transform-origin: 50% 70%; }
-.mh-crier { position: absolute; transform-origin: 50% 100%; }
-.mh-crier-img {
+.mh-crier { position: absolute; }
+/* The sob sheet (public/dealer/sad-sob.webp, 6 cells side by side; image and size 600% 100% set
+   inline from SOB): one cell fills the box, the scene clock steps background-position (scenes.ts
+   `sob`). No transform on the dealer: the body squashes in the baked frames, the head never scales. */
+.mh-crier-sob {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  background-repeat: no-repeat;
   /* The sprite is cut at the waist: fade it out instead of a hard edge mid-screen. */
   -webkit-mask-image: linear-gradient(#000 80%, transparent 99%);
   mask-image: linear-gradient(#000 80%, transparent 99%);
 }
+/* The tears' box: the sprite's box, moved with the rigid head (translateY = headDy of the phase). */
+.mh-face { position: absolute; inset: 0; }
 /* A wet line down the cheek from each eye's lower lid (grows from the lid). */
 .mh-stream {
   position: absolute;
