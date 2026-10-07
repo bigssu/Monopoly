@@ -73,6 +73,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['자, 신나는 땅따먹기 여행을 시작해 볼까요? 다들 준비됐죠?', "Let's start our land-grabbing trip! Everyone ready?"],
       ['안녕하세요! 오늘 진행을 맡은 딜러예요. 재밌게 놀아 봐요!', "Hi! I'm your dealer today. Let's have fun!"],
+      ['머니폴리에 오신 걸 환영해요! 누가 제일 큰 부자가 될까요?', 'Welcome to Money Poly! Who will end up the richest?'],
     ],
   },
   ...turnLines,
@@ -758,12 +759,14 @@ export interface DealerLine {
 }
 
 /**
- * Takes whose Korean voice is not recorded yet (new or reworded lines: the rules version 2 lines,
- * and the IP rewording 랜드마크 → 명소 / the festival's grand name). They show as text until
- * `ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs` is run on a machine with the key; then
- * remove their ids here (the dealer test checks every other line ships its file).
+ * Takes whose Korean voice is not recorded yet (new or reworded lines). They show as text only.
+ * `ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs` records exactly these (plus any voiced
+ * line whose text no longer matches scripts/dealer/voice-texts.json) and empties this list itself.
+ * Runbook: docs/VOICE-WEEKEND.md. Rewording a voiced line? Add its id here (the dealer test fails
+ * otherwise: a recording of other words must never ship).
  */
 export const VOICE_PENDING: ReadonlySet<string> = new Set([
+  'game.start.3', 'explain.sets.1',
   'festival.grand.2', 'landmark.done.1', 'landmark.done.2', 'explain.takeover.1',
   'news.tollFever.1', 'news.quake.1', 'news.buildBoom.1', 'news.takeoverSale.1', 'news.shareDay.1', 'news.vaultBoom.1',
   'bonus.card.1', 'comeback.offer.1', 'card.swap.1', 'card.raid.1', 'swap.pick.1', 'swap.done.1',

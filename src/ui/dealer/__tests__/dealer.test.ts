@@ -35,6 +35,13 @@ describe('dealer catalog', () => {
     for (const id of VOICE_PENDING) expect(DEALER_LINES.some((l) => l.id === id), id).toBe(true);
   });
 
+  it('every shipped recording says the line as it is written now (reworded lines go to VOICE_PENDING)', () => {
+    // scripts/dealer/voice-texts.json is the text each public/voice file was recorded from
+    // (gen-voice.mjs writes it). A line reworded without re-recording would play other words.
+    const texts = JSON.parse(readFileSync(join(PUB, '..', 'scripts', 'dealer', 'voice-texts.json'), 'utf8')) as Record<string, string>;
+    for (const l of DEALER_LINES) if (l.voice) expect(texts[l.id], `${l.id}: reworded? add it to VOICE_PENDING`).toBe(l.ko);
+  });
+
   it('uses no name from the reference games in what the dealer says (docs/research/02 §2)', () => {
     const banned = /올림픽|Olympic|랜드마크|Monopoly|Chance|황금열쇠|우주여행|사회복지기금|세계여행|마블/;
     for (const l of DEALER_LINES) expect(`${l.ko} ${l.en}`, l.id).not.toMatch(banned);
