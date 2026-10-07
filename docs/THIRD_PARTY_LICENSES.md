@@ -35,7 +35,11 @@ and do not reproduce any protected design.
 
 The dealer host (`public/dealer/*.webp`) was generated with Google Gemini (`gemini-3-pro-image`,
 `scripts/dealer/gen-sprites.mjs`) using that launcher image as the character reference, so it
-inherits the launcher image's unresolved rights. The dealer's Korean voice lines
+inherits the launcher image's unresolved rights. Its sob frames (`public/dealer/sad-sob.webp`) were
+baked from `public/dealer/sad.webp` with sprite-gen (https://github.com/aldegad/sprite-gen, Apache-2.0,
+commit f7cb0db; `scripts/dealer/bake-sob.py`), a deterministic offline tool used only to bake the
+asset: none of its code ships in the app, and the frames have the same status as the still they come
+from. The dealer's Korean voice lines
 (`public/voice/*.ogg`, `scripts/dealer/gen-voice.mjs`) were generated with ElevenLabs (voice
 "Krys", model `eleven_v4`) on a paid plan that permits commercial use; confirm the plan is active
 when publishing.
