@@ -121,7 +121,7 @@ test.describe('fun rules (rules version 2)', () => {
     await roll(page);
     let s = await getState(page);
     expect(s.phase).toMatchObject({ kind: 'cardChoice', underdog: true, options: ['swap', 'fine'] });
-    await expect(page.locator('.pc-cardpick .pc-tags')).toContainText('역전 찬스');
+    await expect(page.locator('.pc-cardpick .pc-tags')).toContainText('역전 기회');
     await page.screenshot({ path: `${SHOTS}/fun-comeback-offer-1600x1000.png` });
     const me = s.current;
     await page.locator('.st-prompt [data-action="ChooseCard"][data-card="swap"]').click();

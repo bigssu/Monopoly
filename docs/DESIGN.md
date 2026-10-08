@@ -554,10 +554,15 @@ Setup picks a rule level; the engine only reads flags (`ruleFlags(settings)` in
 Why the fun rules exist and how they were measured: `docs/research/08-fun-analysis.md`; numbers:
 `docs/BALANCE.md` "Fun rules".
 
+Since 2026-10-08 the setup screen offers two **game modes** instead of three levels (owner request):
+**캐주얼 모드** = `normal` (default; plays exactly as rules version 2) and **전략 모드** = `advanced` (with the
+rules version 3 strategy package, §4.3). `easy` stays in the engine for old saves; a stored `easy` setup
+shows and starts as casual. Each mode has a one-line description and a "?" speech bubble listing its rules.
+
 | Level | Rules |
 |---|---|
-| 쉬움 easy | §4 only (with §4.1). |
-| 보통 normal (default) | late toll · card choice (one face down) · manual toll pass / shield · typhoon targeting · finish the round after a first bankruptcy + seat bonus · **대축제 Grand Festival** (the festival held again on the same city: ×2 → ×3 → ×5) · and the version-2 rules below marked N |
+| 쉬움 easy (old saves only) | §4 only (with §4.1). |
+| 보통 normal = 캐주얼 (default) | late toll · card choice (one face down) · manual toll pass / shield · typhoon targeting · finish the round after a first bankruptcy + seat bonus · **대축제 Grand Festival** (the festival held again on the same city: ×2 → ×3 → ×5) · and the version-2 rules below marked N |
 | 고급 advanced | normal + hub growth · double-up at Start · dice gauge · the version-2 rule marked A |
 
 Rules version 2 (`Settings.rulesVersion = 2`, set by `defaultSettings()`; a game keeps the version it
@@ -586,6 +591,47 @@ started with, so saves from before play on with the old rules):
 * **A 되찾기 (win-back)** — after a takeover, the player who lost the city may take it back for
   **1 × value** (not 2 ×) when they land on it, while the taker still owns it. A win-back gives no new
   right; a shield still blocks it.
+
+### 4.3 Strategy mode — rules version 3 (2026-10-08)
+
+Why: `docs/research/10-strategy-depth.md` (skill stopped at "avoid blunders", the dice decided);
+the throw: `docs/research/11-skill-throw.md`; numbers: `docs/BALANCE.md` "Rules version 3".
+`RULES_VERSION = 3`; every item has its own `RuleFlag`, on for `advanced` + version 3 only (casual and
+every older save are unchanged; `src/engine/__tests__/compat-v3.test.ts` replays v1/v2 saves recorded
+before the change). The B7 dice gauge is off from version 3 (the skill throw replaces it).
+
+* **보폭 선택 (stride, `strideChoice`)** — before rolling: one die (1–6, never doubles: no extra roll,
+  bonus card or third-double island) or two (2–12, default). The island escape roll is always two dice.
+* **손맛 던지기 (skill throw, `skillThrow`)** — the `Roll` action carries `aim` ('low' | 'high') and
+  `accuracy` (0..1). With chance `SKILL_CAP × accuracy` (`SKILL_CAP = 0.6`, `economy.ts`) the result is
+  drawn inside the band in natural proportions (two dice: low 2–5, high 9–12; one die: 1–2 / 5–6), else
+  a natural roll. A perfect throw at the two-dice low band lands in it ≈ 71 % of the time. `DiceRolled`
+  carries `stride`, `aim`, `accuracy`, `assisted`; a one-die roll is `dice: [die, 0]`. The CPU picks
+  stride and aim by expected landing score and throws with an accuracy drawn from the seeded state
+  (normal mean 0.55, easy 0.25).
+* **출발 투자 (start investment, `startInvest`)** — passing or landing on Start (any forward move, or a
+  card back onto it) opens, once the landing is resolved, a pick of one of your cities to raise one level
+  at the build cost, up to a hotel (a landmark still needs standing on the city), or Pass. A move that
+  ends the turn at once (the island) still gets it before the turn ends.
+* **독점 예고 · 견제 매입 (set alert + block-buy, `monopolyNotice`)** — completing a line, triple or the
+  hubs no longer wins at once: the set is announced (`pendingWins`, outlined on the board, on the round
+  line) and wins at the start of its owner's next turn if they still hold a winning set. Until then each
+  opponent may, once per alert, before moving (pre-roll, island or travel prompt), buy one non-landmark
+  property of the set from anywhere for its takeover price (chase multiplier) **+ 2 × value**
+  (`blockSurcharge`), all paid to the owner. A guard shield stops it (and uses up that answer). Landing
+  on a member and taking it over normally also breaks it. Hubs get no extra fee (`blockHubFee` 0:
+  hub wins stay about 5 % of 2-player games). If the game ends (round limit, or the round after a first
+  bankruptcy) before the owner's next turn, the alert still wins when every solvent opponent has had a
+  turn since it was announced (`heard`); otherwise the assets decide.
+* **추격 인수 (chase takeover, `chaseTakeover`)** — takeover price = m × value with
+  m = 2 + 0.5 × clamp(log(buyer assets / owner assets) / log 2, −1, 1), to one decimal: half the owner's
+  assets → 1.5 ×, equal → 2 ×, twice → 2.5 ×. The takeover-sale headline scales it × 0.75; a win-back stays
+  1 ×. The prompt says the multiplier and why ("자산 차이로 1.8배 (할인)").
+* **속보 예보 (news forecast, `newsForecast`)** — the headline is drawn at the start of the round before
+  its news round (rounds 3, 7, 11, …), shown as a toast and on the round line ("예보: 건설 붐"), and runs
+  at the start of the next round (one that no longer has anything to hit does nothing).
+* **금고 상한 (vault cap, `vaultCap`)** — the vault never holds more than **500** (fees beyond it stay with
+  the bank) and the bank adds **20** a round instead of 100. The Start info shows the cap.
 
 ## 5. Engine architecture (`src/engine`)
 

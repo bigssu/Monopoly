@@ -93,10 +93,10 @@
 @keyframes lr-pick { 50% { opacity: 0.45; } }
 .bm-focus rect,
 .bm-focus circle { stroke: var(--brand); stroke-width: 9; }
-/* Monopoly warning (rules version 3): the set's spaces, dashed in the owner's colour; three blinks
+/* Monopoly warning (rules version 3): the set's spaces, dashed gold (the cards already wear the owner's colour); three blinks
    when it appears (finite: no idle animation), then still. */
 .bm-notice rect,
-.bm-notice circle { stroke: var(--nc, #F5A524); stroke-width: 12; stroke-dasharray: 34 16; }
+.bm-notice circle { stroke: #FFC53D; stroke-width: 14; stroke-dasharray: 34 16; }
 .bm-notice { animation: lr-notice 420ms ease-in-out 6 alternate; }
 @keyframes lr-notice { to { opacity: 0.2; } }
 /* Pick mode dims the other spaces: a board-colored veil at .68 = those groups at opacity .32. */

@@ -730,7 +730,7 @@ export class Board {
   }
 
   /**
-   * Monopoly warnings (rules version 3, `pendingWins`): a dashed outline in the owner's colour on
+   * Monopoly warnings (rules version 3, `pendingWins`): a dashed gold outline (owner in `--nc`) on
    * every space of the announced set until it wins or breaks. It blinks three times when it
    * appears (a finite animation: nothing runs while the table waits) and then stays still.
    */

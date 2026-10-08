@@ -392,8 +392,11 @@ registerScreen('setup', (root) => {
     const setOpen = (open: boolean): void => {
       bubble.hidden = !open;
       help.setAttribute('aria-expanded', String(open));
-      if (open) document.addEventListener('pointerdown', onDoc, true);
-      else document.removeEventListener('pointerdown', onDoc, true);
+      if (open) {
+        document.addEventListener('pointerdown', onDoc, true);
+        bubble.scrollIntoView?.({ block: 'nearest' });
+      }
+      if (!open) document.removeEventListener('pointerdown', onDoc, true);
     };
     help.addEventListener('click', () => {
       sfx.play('tap');

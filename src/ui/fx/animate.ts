@@ -424,7 +424,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       return;
     }
     case 'MonopolyNotice': {
-      const notice = { playerId: ev.playerId, victory: ev.victory, members: [...ev.members], round: ev.round, blocked: [] as number[], ...(ev.side ? { side: ev.side } : {}), ...(ev.groups ? { groups: [...ev.groups] } : {}) };
+      const notice = { playerId: ev.playerId, victory: ev.victory, members: [...ev.members], round: ev.round, blocked: [] as number[], heard: [] as number[], ...(ev.side ? { side: ev.side } : {}), ...(ev.groups ? { groups: [...ev.groups] } : {}) };
       vs.pendingWins = [...(vs.pendingWins ?? []).filter((w) => w.playerId !== ev.playerId), notice];
       render(view, vs);
       stage.setTurn(vs.players[vs.current]!, vs);
