@@ -12,7 +12,7 @@
  *   --rules-version N (current) --rounds N|inf (30) --jobs N (4, parallel processes)
  *   --off flag,flag (rule flags forced off: ablation) --cap X (SKILL_CAP) --set key=value,… (ECONOMY)
  *   --ai key=value,… (AI_TUNING, the version-3 CPU knobs)
- *   --policies a,b (matchups: normal,easy,yes,plain,random,pass,alt) --alt key=value,… (the alt CPU's AI_TUNING) --k N (expert rollouts, 16) --cands N (moves tried, 6) --progress --json
+ *   --policies a,b (matchups: normal,easy,yes,plain,random,pass,alt) --alt key=value,… (the alt CPU's AI_TUNING) --k N (expert rollouts, 16) --cands N (moves tried, 6) --margin N (wins over the CPU's move needed to switch, 1) --progress --json
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +52,8 @@ const jobs = Number(arg('jobs') ?? 4);
 const K = Number(arg('k') ?? 16);
 /** expert: moves tried per decision (the CPU's + random others). */
 const CANDS = Number(arg('cands') ?? 6);
+/** expert: switch from the CPU's move only when another wins this many more of the K rollouts. */
+const MARGIN = Number(arg('margin') ?? 1);
 for (const f of (arg('off') ?? '').split(',').filter(Boolean)) FLAGS_OFF.add(f as keyof RuleFlags);
 if (arg('cap')) (ECONOMY as Record<string, unknown>).skillCap = Number(arg('cap'));
 for (const kv of (arg('set') ?? '').split(',').filter(Boolean)) {
@@ -350,8 +352,8 @@ function leaderOf(s: GameState): PlayerId | null {
 function expert(lo: number, hi: number): Counts {
   const c: Counts = {};
   const u32 = () => Math.floor(rnd() * 4294967296) >>> 0;
-  const rollout = (s: GameState, pid: PlayerId, seed: number): number => {
-    let t = { ...s, rng: seed };
+  const rollout = (s: GameState, pid: PlayerId): number => {
+    let t = s;
     let k = 0;
     while (t.phase.kind !== 'gameOver' && k++ < 40000) t = reduce(t, chooseAction(t, t.phase.playerId)).state;
     return t.phase.kind === 'gameOver' && t.phase.result.winnerId === pid ? 1 : 0;
@@ -376,16 +378,16 @@ function expert(lo: number, hi: number): Counts {
           while (cands.length < CANDS && rest.length) cands.push(rest.splice(Math.floor(rnd() * rest.length), 1)[0]!);
         }
         const seedsK = Array.from({ length: K }, u32);
-        const value = (x: Action) => {
-          const after = reduce(s, x).state;
-          return seedsK.reduce((w, sd) => w + rollout(after, pid, sd), 0) / K;
-        };
+        // Each rollout reseeds the generator BEFORE the move: the move's own dice / draws are not
+        // known in advance (reducing with the game's real seed would let the search peek at the
+        // roll each stride / aim is about to get).
+        const value = (x: Action) => seedsK.reduce((w, sd) => w + rollout(reduce({ ...s, rng: sd }, x).state, pid), 0) / K;
         let best = a;
         let bestV = value(a);
         for (const x of cands) {
           if (sameAction(x, a)) continue;
           const v = value(x);
-          if (v > bestV + 1 / K) {
+          if (v > bestV + MARGIN / K) {
             best = x;
             bestV = v;
           }
@@ -425,7 +427,7 @@ function report(c: Counts): void {
     return;
   }
   if (mode === 'expert') {
-    console.log(`expert (K=${K}, ${CANDS} moves) vs normal AI — ${label}: wins ${c.wins ?? 0}/${c.games ?? 0} = ${pct(c.wins ?? 0, c.games ?? 0)} ${ci(c.wins ?? 0, c.games ?? 0)} · changed ${pct(c.changed ?? 0, c.decisions ?? 0)} of ${c.decisions ?? 0} decisions`);
+    console.log(`expert (K=${K}, ${CANDS} moves, margin ${MARGIN}) vs normal AI — ${label}: wins ${c.wins ?? 0}/${c.games ?? 0} = ${pct(c.wins ?? 0, c.games ?? 0)} ${ci(c.wins ?? 0, c.games ?? 0)} · changed ${pct(c.changed ?? 0, c.decisions ?? 0)} of ${c.decisions ?? 0} decisions`);
     return;
   }
   const g = c.games ?? 0;

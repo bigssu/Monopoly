@@ -593,6 +593,15 @@ test.describe('human play (clicking real controls)', () => {
     test(`English text fits on the game screen at ${vp.w}x${vp.h}`, async ({ page }) => {
       test.setTimeout(240_000);
       const logs = watchConsole(page, { warnings: true });
+      // The win-back card is strategy mode: its first-roll skill guide would cover the pad.
+      await page.addInitScript(() => {
+        try {
+          const key = 'lotandroll:prefs:v1';
+          localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skillGuideSeen: true }));
+        } catch {
+          /* storage blocked */
+        }
+      });
       await boot(page, { w: vp.w, h: vp.h });
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;

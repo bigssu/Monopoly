@@ -73,7 +73,7 @@ for (const vp of VIEWPORTS) {
       await page.click('[data-action="rules"]');
       await expect(page.locator('#app[data-screen="rules"]')).toBeVisible();
       await shot(page, 'rules-1', vp);
-      for (let i = 2; i <= 9; i++) {
+      for (let i = 2; i <= 10; i++) {
         await page.click('[data-action="next"]');
         await shot(page, `rules-${i}`, vp);
       }
