@@ -18,6 +18,20 @@
  *   island, card amounts, start cash) is exactly as in §4.
  */
 
+/**
+ * Skill throw (rules version 3, docs/research/11-skill-throw.md §1): the chance at a perfect
+ * accuracy that the roll is drawn inside the aimed band. 0.6 → the two-dice low band (2–5, 27.8 %
+ * naturally) comes up 0.6 + 0.4 × 0.278 ≈ 71 % of the time. Chosen by simulation (docs/BALANCE.md
+ * "Rules version 3").
+ */
+export const SKILL_CAP = 0.6;
+
+/** Skill throw bands [low, high] by stride (inclusive sums). */
+export const SKILL_BANDS: Readonly<Record<1 | 2, Readonly<Record<'low' | 'high', readonly [number, number]>>>> = {
+  1: { low: [1, 2], high: [5, 6] },
+  2: { low: [2, 5], high: [9, 12] },
+};
+
 export const ECONOMY = {
   /** Default starting cash (setup options: 2,000 / 3,000 / 5,000). */
   startCash: 3000,
@@ -113,4 +127,8 @@ export const ECONOMY = {
   gambleLoss: 2,
   /** Win-back: the player who lost a city in a takeover may take it back for this × value. */
   winBackMultiplier: 1,
+
+  // --- Rules version 3 (docs/research/10-strategy-depth.md, docs/BALANCE.md "Rules version 3") ---
+  /** Skill throw assist cap (`SKILL_CAP`); read through here so the balance scripts can sweep it. */
+  skillCap: SKILL_CAP as number,
 } as const;

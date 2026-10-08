@@ -28,7 +28,8 @@ import {
   space,
   START_INDEX,
 } from './board';
-import { ECONOMY } from './economy';
+import { ECONOMY, SKILL_BANDS } from './economy';
+import { mulberry32Step } from './rng';
 import { defaultAction, legalActions, raidTarget, saleOptions, swapGive } from './reducer';
 import {
   completedGroups,
@@ -193,6 +194,102 @@ function travelScore(state: GameState, pid: PlayerId, target: number): number {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rules version 3: stride choice and the skill throw (docs/research/11-skill-throw.md §1)
+// ---------------------------------------------------------------------------
+
+/** Mean throw accuracy by CPU level (what the CPU expects of itself when it picks an aim). */
+const CPU_ACCURACY = { easy: 0.25, normal: 0.55 } as const;
+
+/**
+ * The CPU's throw accuracy for this roll (0..1), drawn from the seeded state without advancing it
+ * (chooseAction stays a pure function of the state): the mean of two uniforms around the level's
+ * mean — normal 0.55 (0.1–1), easy 0.25 (0–0.5).
+ */
+export function cpuAccuracy(state: GameState, pid: PlayerId): number {
+  const [u1, next] = mulberry32Step((state.rng ^ (0x5bd1e995 + pid * 0x9e3779b9)) >>> 0);
+  const [u2] = mulberry32Step(next);
+  const easy = state.players[pid]!.cpuLevel === 'easy';
+  const spread = easy ? 0.25 : 0.45;
+  const mean = easy ? CPU_ACCURACY.easy : CPU_ACCURACY.normal;
+  return Math.min(1, Math.max(0, Math.round((mean + (u1 + u2 - 1) * spread) * 100) / 100));
+}
+
+/** Natural probability of each total for one die (index = total). */
+const ONE_DIE = [0, 1, 1, 1, 1, 1, 1].map((w) => w / 6);
+/** Natural probability of each total for two dice (index = total). */
+const TWO_DICE = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((w) => w / 36);
+
+/** Probability of each total for a throw (stride, aim) with assist chance `p` (= SKILL_CAP × accuracy). */
+export function throwDistribution(stride: 1 | 2, aim: 'low' | 'high' | undefined, p: number): number[] {
+  const nat = stride === 1 ? ONE_DIE : TWO_DICE;
+  if (!aim || p <= 0) return nat.slice();
+  const [lo, hi] = SKILL_BANDS[stride][aim];
+  const inBand = nat.reduce((a, w, t) => a + (t >= lo && t <= hi ? w : 0), 0);
+  return nat.map((w, t) => (1 - p) * w + (t >= lo && t <= hi ? (p * w) / inBand : 0));
+}
+
+/** What landing on `target` is worth to `pid` (travelScore, with the corners a roll can reach). */
+function landScore(state: GameState, pid: PlayerId, target: number): number {
+  const size = state.settings.spacesPerSide ?? 7;
+  const kind = space(target, size).kind;
+  // Losing up to three turns vs a free destination next turn.
+  if (kind === 'island') return -120;
+  if (kind === 'travel') return 80;
+  return travelScore(state, pid, target);
+}
+
+/** Value of rolling doubles (an extra roll, and a bonus card from version 2). */
+const DOUBLES_VALUE = 60;
+
+/**
+ * Expected score of a throw: Σ P(total) × landing score, + progress (salary per space) and the
+ * chance of doubles (two dice only). The express card doubles every total.
+ */
+function throwScore(state: GameState, pid: PlayerId, stride: 1 | 2, aim: 'low' | 'high' | undefined, acc: number): number {
+  const p = state.players[pid]!;
+  const size = getBoardInfo(state.settings.spacesPerSide ?? 7).size;
+  const dist = throwDistribution(stride, aim, ECONOMY.skillCap * acc);
+  const mult = p.expressPending ? 2 : 1;
+  const perStep = ECONOMY.salary / size;
+  let score = 0;
+  dist.forEach((w, total) => {
+    if (w <= 0) return;
+    const steps = total * mult;
+    score += w * (landScore(state, pid, (p.position + steps) % size) + steps * perStep);
+  });
+  if (stride === 2 && p.consecutiveDoubles < ECONOMY.maxConsecutiveDoubles - 1) score += DOUBLES_VALUE / 6;
+  return score;
+}
+
+/**
+ * The CPU's roll (rules version 3): the stride and aim with the best expected score at the level's
+ * mean accuracy, thrown with this roll's sampled accuracy. Easy changes from a plain two-dice roll
+ * only for a big gain, and aims less often. Before version 3: a plain roll.
+ */
+export function chooseRoll(state: GameState, pid: PlayerId): Action {
+  const flags = ruleFlags(state.settings);
+  const plain: Action = { type: 'Roll', playerId: pid };
+  if (!flags.strideChoice && !flags.skillThrow) return plain;
+  const easy = state.players[pid]!.cpuLevel === 'easy';
+  const expected = easy ? CPU_ACCURACY.easy : CPU_ACCURACY.normal;
+  const strides: Array<1 | 2> = flags.strideChoice ? [2, 1] : [2];
+  const aims: Array<'low' | 'high' | undefined> = flags.skillThrow ? [undefined, 'low', 'high'] : [undefined];
+  const base = throwScore(state, pid, 2, undefined, expected);
+  let best = { stride: 2 as 1 | 2, aim: undefined as 'low' | 'high' | undefined, score: base };
+  for (const stride of strides) {
+    for (const aim of aims) {
+      const sc = throwScore(state, pid, stride, aim, expected);
+      if (sc > best.score + 1e-9) best = { stride, aim, score: sc };
+    }
+  }
+  // Easy: only a clear gain moves it off the plain roll.
+  if (easy && best.score - base < 60) best = { stride: 2, aim: undefined, score: base };
+  // The accuracy rides along even without an aim, so the table sees how the CPU threw.
+  const out: Action = { type: 'Roll', playerId: pid, stride: best.stride, accuracy: cpuAccuracy(state, pid) };
+  return best.aim ? { ...out, aim: best.aim } : out;
+}
+
 /** Card choice: how much the CPU likes each card (money in > keep-cards > moves > money out). */
 const CARD_VALUE: Partial<Record<CardId, number>> = {
   lottery: 9, welfare: 8, 'free-upgrade': 8, 'hub-bonus': 7, birthday: 7, 'bank-dividend': 6, 'to-start': 6,
@@ -261,7 +358,7 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
 
   switch (ph.kind) {
     case 'preRoll':
-      return { type: 'Roll', playerId };
+      return chooseRoll(state, playerId);
 
     case 'island':
       if (can('UseEscapeCard')) return { type: 'UseEscapeCard', playerId };

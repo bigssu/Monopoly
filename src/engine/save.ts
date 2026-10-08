@@ -353,7 +353,9 @@ export function deserialize(json: string): GameState {
     !validateProperties(state.properties, board.propertyIndices, board.cityIndices, state.players.length)) fail('Save file players or properties are malformed');
   if (!integer(state.seed) || !integer(state.rng, 0) || !integer(state.pot, 0) || !integer(state.round, 1) || !integer(state.turn, 1) ||
     !playerId(state.current, state.players.length) || !(state.festival === null || (spaceIndex(state.festival, board.size) && board.cityIndices.includes(state.festival))) ||
-    !(state.lastDice === null || (Array.isArray(state.lastDice) && state.lastDice.length === 2 && state.lastDice.every((die) => integer(die, 1) && die <= 6))) ||
+    !(state.lastDice === null || (Array.isArray(state.lastDice) && state.lastDice.length === 2 && integer(state.lastDice[0], 1) && state.lastDice[0] <= 6 &&
+      // A one-die roll (rules version 3) is [die, 0].
+      integer(state.lastDice[1], (state.settings.rulesVersion ?? 1) >= 3 ? 0 : 1) && state.lastDice[1] <= 6)) ||
     !boolean(state.extraRoll) || !boolean(state.remoteBuildUsed) || !Array.isArray(state.bankruptOrder) ||
     !state.bankruptOrder.every((id) => playerId(id, state.players.length)) || new Set(state.bankruptOrder).size !== state.bankruptOrder.length ||
     !validateTestHooks(state.testHooks) || !validateRuleState(state, board.size) || !validatePhase(state.phase, board.size, board.propertyIndices, board.cityIndices, state.players.length) ||

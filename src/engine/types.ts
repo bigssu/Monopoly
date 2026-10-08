@@ -346,6 +346,7 @@ export interface GameState {
   /** Whose turn it is. */
   current: PlayerId;
   phase: Phase;
+  /** The last roll's faces (`[die, 0]` for a one-die roll, rules version 3). */
   lastDice: [number, number] | null;
   /** The current roll was doubles and earns another roll after resolution. */
   extraRoll: boolean;
@@ -361,8 +362,16 @@ export interface GameState {
 // ---------------------------------------------------------------------------
 
 export type Action =
-  /** `gauge` (rules = advanced, 0..1): where the player released the dice gauge (B7). */
-  | { type: 'Roll'; playerId: PlayerId; gauge?: number }
+  /**
+   * Roll the dice. `gauge` (rules = advanced, versions 1–2 only, 0..1): where the player released
+   * the dice gauge (B7). Rules version 3 (normal / advanced, docs/research/11-skill-throw.md §1):
+   * `stride` 1 = one die (1–6, never doubles), 2 or missing = two dice; `aim` the band the throw
+   * aims at (two dice: low 2–5 / high 9–12; one die: low 1–2 / high 5–6) and `accuracy` (0..1) how
+   * well it was thrown: with chance `SKILL_CAP × accuracy` the result is drawn inside the band (in
+   * its natural proportions), otherwise it is a natural roll. No `aim` or accuracy 0 = natural.
+   * The island escape roll ignores all three (it needs doubles).
+   */
+  | { type: 'Roll'; playerId: PlayerId; gauge?: number; stride?: 1 | 2; aim?: 'low' | 'high'; accuracy?: number }
   | { type: 'PayBail'; playerId: PlayerId }
   | { type: 'UseEscapeCard'; playerId: PlayerId }
   | { type: 'ChooseTravel'; playerId: PlayerId; spaceIndex: number }
@@ -400,6 +409,7 @@ export type GameEvent =
   | {
       type: 'DiceRolled';
       playerId: PlayerId;
+      /** The faces. A one-die roll (`stride` 1) is `[die, 0]`: there is no second die. */
       dice: [number, number];
       total: number;
       isDouble: boolean;
@@ -410,6 +420,14 @@ export type GameEvent =
       /** Spaces the token will move (0 if the roll does not move: island fail / 3rd double). */
       steps: number;
       context: 'normal' | 'island';
+      /** Rules version 3: how many dice were thrown (always set from version 3, 2 on the island). */
+      stride?: 1 | 2;
+      /** Rules version 3: the band the throw aimed at, if any. */
+      aim?: 'low' | 'high';
+      /** Rules version 3: the throw's accuracy (0..1), when the roll carried one. */
+      accuracy?: number;
+      /** Rules version 3: the assist drew this result inside the aimed band (else a natural roll). */
+      assisted?: boolean;
     }
   | {
       type: 'TokenMoved';

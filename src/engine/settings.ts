@@ -53,10 +53,12 @@ export const RULE_LEVELS: readonly RuleLevel[] = ['easy', 'normal', 'advanced'];
 
 /**
  * Current rule revision (Settings.rulesVersion). 2 (2026-10-06, docs/research/08-fun-analysis.md):
- * the fun rules below. A game keeps the revision it started with, so a saved game from before
- * (no `rulesVersion`) continues with the rules it was played with.
+ * the fun rules below. 3 (2026-10-08, docs/research/10-strategy-depth.md, 11-skill-throw.md):
+ * stride choice and the skill throw (the dice gauge retires), start investment, monopoly notice and
+ * block-buy, chase takeover, news forecast and vault cap. A game keeps the revision it started
+ * with, so a saved game from before (no `rulesVersion`) continues with the rules it was played with.
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** Which optional rules a level turns on (the engine checks flags, never level names). */
 export interface RuleFlags {
@@ -89,19 +91,40 @@ export interface RuleFlags {
   allOrNothing: boolean;
   /** Win-back: a city lost in a takeover can be taken back for 1× its value. */
   winBack: boolean;
+  // --- rules version 3 (docs/research/10-strategy-depth.md, 11-skill-throw.md) ---
+  /** Stride choice (보폭 선택): roll one die (1–6, no doubles) or two (2–12). */
+  strideChoice: boolean;
+  /** Skill throw (손맛 던지기): aim at the low or high band; accuracy × SKILL_CAP is the assist chance. */
+  skillThrow: boolean;
 }
+
+/**
+ * Simulation only (scripts/skill.ts ablations): rule flags forced off for every game in this
+ * process. The game itself never touches it, and it is empty unless a script fills it.
+ */
+export const FLAGS_OFF = new Set<keyof RuleFlags>();
 
 export function ruleFlags(settings: Pick<Settings, 'rules' | 'rulesVersion'>): RuleFlags {
   const level = settings.rules ?? 'easy';
   const normal = level !== 'easy';
   const advanced = level === 'advanced';
   const v2 = (settings.rulesVersion ?? 1) >= 2;
-  return {
+  const v3 = (settings.rulesVersion ?? 1) >= 3;
+  const flags: RuleFlags = {
     lateToll: normal, cardChoice: normal, manualCards: normal, grandFestival: normal, targeting: normal, finishRound: normal, seatBonus: normal, hiddenCard: normal,
-    hubGrowth: advanced, doubleUp: advanced, diceGauge: advanced,
+    hubGrowth: advanced,
+    doubleUp: advanced,
+    // The skill throw replaces the gauge from version 3 (docs/research/11-skill-throw.md).
+    diceGauge: advanced && !v3,
     luckyVault: v2 && normal, newsFlash: v2 && normal, comebackCards: v2 && normal, doublesCard: v2 && normal, allOrNothing: v2 && normal,
     winBack: v2 && advanced,
+    // Version 3's strategy package is the 'advanced' level only (the setup screen's 전략 모드; 캐주얼
+    // 모드 is 'normal' and plays exactly as version 2).
+    strideChoice: v3 && advanced,
+    skillThrow: v3 && advanced,
   };
+  if (FLAGS_OFF.size > 0) for (const k of FLAGS_OFF) flags[k] = false;
+  return flags;
 }
 
 export const ROUND_LIMIT_OPTIONS: readonly (number | null)[] = [10, 15, 20, 30, null];

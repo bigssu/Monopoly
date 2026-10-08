@@ -19,7 +19,7 @@ import {
   space,
   walkPath,
 } from './board';
-import { ECONOMY } from './economy';
+import { ECONOMY, SKILL_BANDS } from './economy';
 import { ruleFlags } from './settings';
 import { createRng, rollDice, seedToState, type Rng } from './rng';
 import {
@@ -256,6 +256,52 @@ export function gaugeRoll(rng: Rng, gauge: number, first: [number, number]): [nu
   const sum = (d: [number, number]) => d[0] + d[1];
   const better = g > 0.5 ? sum(second) > sum(first) : sum(second) < sum(first);
   return better ? second : first;
+}
+
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+
+/** Two-dice combinations (in natural proportion) whose sum lies in each skill band. */
+const BAND_COMBOS = new Map<string, Array<[number, number]>>();
+function bandCombos(lo: number, hi: number): Array<[number, number]> {
+  const key = `${lo}-${hi}`;
+  let list = BAND_COMBOS.get(key);
+  if (!list) {
+    list = [];
+    for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) if (a + b >= lo && a + b <= hi) list.push([a, b]);
+    BAND_COMBOS.set(key, list);
+  }
+  return list;
+}
+
+/**
+ * Skill throw (rules version 3, docs/research/11-skill-throw.md §1): with chance
+ * `cap × accuracy` the result is drawn inside the aimed band in its natural proportions (two dice:
+ * one of the band's face pairs, so it is always two real dice), otherwise a natural roll. One die
+ * comes back as `[die, 0]`. No aim, or accuracy 0, draws nothing extra from the generator.
+ */
+export function skilledRoll(
+  rng: Rng,
+  stride: 1 | 2,
+  aim: 'low' | 'high' | undefined,
+  accuracy: number | undefined,
+  cap: number = ECONOMY.skillCap,
+): { dice: [number, number]; assisted: boolean } {
+  const p = aim ? cap * clamp01(accuracy ?? 0) : 0;
+  if (aim && p > 0 && rng.next() < p) {
+    const [lo, hi] = SKILL_BANDS[stride][aim];
+    if (stride === 1) return { dice: [lo + rng.int(hi - lo + 1), 0], assisted: true };
+    const combos = bandCombos(lo, hi);
+    return { dice: [...combos[rng.int(combos.length)]!], assisted: true };
+  }
+  return { dice: stride === 1 ? [rng.int(6) + 1, 0] : rollDice(rng), assisted: false };
+}
+
+/** The roll fields an action may carry are well-formed (the values a Roll is checked against). */
+function validRollFields(a: Extract<Action, { type: 'Roll' }>): boolean {
+  return (a.stride === undefined || a.stride === 1 || a.stride === 2) &&
+    (a.aim === undefined || a.aim === 'low' || a.aim === 'high') &&
+    (a.accuracy === undefined || (typeof a.accuracy === 'number' && Number.isFinite(a.accuracy))) &&
+    (a.gauge === undefined || (typeof a.gauge === 'number' && Number.isFinite(a.gauge)));
 }
 
 function pick<T>(ctx: Ctx, list: readonly T[]): T {
@@ -1236,6 +1282,22 @@ export function saleOptions(state: GameState, pid: PlayerId): Array<{ action: Ac
   return out;
 }
 
+/**
+ * The rolls on offer before moving: a plain roll, and from rules version 3 every stride (two dice
+ * first: the default) × aim (none / low / high). `accuracy` is the thrower's skill, not a choice:
+ * any finite value is legal (it is clamped to 0..1).
+ */
+function rollChoices(state: GameState, pid: PlayerId): Action[] {
+  const flags = ruleFlags(state.settings);
+  if (!flags.strideChoice && !flags.skillThrow) return [{ type: 'Roll', playerId: pid }];
+  const out: Action[] = [];
+  for (const stride of flags.strideChoice ? ([2, 1] as const) : ([2] as const)) {
+    out.push({ type: 'Roll', playerId: pid, stride });
+    if (flags.skillThrow) for (const aim of ['low', 'high'] as const) out.push({ type: 'Roll', playerId: pid, stride, aim });
+  }
+  return out;
+}
+
 /** Every legal action in the current phase (empty only when the game is over). */
 export function legalActions(state: GameState): Action[] {
   const ph = state.phase;
@@ -1245,7 +1307,7 @@ export function legalActions(state: GameState): Action[] {
   const pass: Action = { type: 'Pass', playerId: pid };
   switch (ph.kind) {
     case 'preRoll':
-      return [{ type: 'Roll', playerId: pid }];
+      return rollChoices(state, pid);
     case 'island': {
       const out: Action[] = [{ type: 'Roll', playerId: pid }];
       if (p.cash >= ECONOMY.bail) out.push({ type: 'PayBail', playerId: pid });
@@ -1318,11 +1380,18 @@ export function defaultAction(state: GameState): Action | null {
 }
 
 export function isLegal(state: GameState, action: Action): boolean {
+  // A roll carries the thrower's skill (accuracy, the old gauge): any well-formed value is legal;
+  // fields a rule level does not use are ignored by the reducer.
+  if (action.type === 'Roll') {
+    const ph = state.phase;
+    return (ph.kind === 'preRoll' || ph.kind === 'island') && ph.playerId === action.playerId && validRollFields(action);
+  }
   return legalActions(state).some((a) => sameAction(a, action));
 }
 
 export function sameAction(a: Action, b: Action): boolean {
   if (a.type !== b.type || a.playerId !== b.playerId) return false;
+  if (a.type === 'Roll' && b.type === 'Roll') return (a.stride ?? 2) === (b.stride ?? 2) && a.aim === b.aim;
   const ai = 'spaceIndex' in a ? a.spaceIndex : undefined;
   const bi = 'spaceIndex' in b ? b.spaceIndex : undefined;
   const ac = 'cardId' in a ? a.cardId : undefined;
@@ -1378,7 +1447,8 @@ function dispatch(ctx: Ctx, action: Action): void {
 
   switch (ph.kind) {
     case 'preRoll':
-      return doRoll(ctx, pid, action.type === 'Roll' ? action.gauge : undefined);
+      if (action.type === 'Roll') return doRoll(ctx, pid, action);
+      break;
 
     case 'island':
       switch (action.type) {
@@ -1542,13 +1612,36 @@ function dispatch(ctx: Ctx, action: Action): void {
   throw new IllegalActionError(`Unhandled action ${action.type} in phase ${ph.kind}`, action, ph.kind);
 }
 
-function doRoll(ctx: Ctx, pid: PlayerId, gauge?: number): void {
+/** Version 3 fields of a DiceRolled event (empty before version 3: old events keep their shape). */
+type ThrowInfo = { stride?: 1 | 2; aim?: 'low' | 'high'; accuracy?: number; assisted?: boolean };
+
+function doRoll(ctx: Ctx, pid: PlayerId, action: Extract<Action, { type: 'Roll' }>): void {
   const s = ctx.s;
   const p = player(ctx, pid);
-  const dice = nextDice(ctx, gauge);
+  const flags = ruleFlags(s.settings);
+  let dice: [number, number];
+  let info: ThrowInfo = {};
+  let stride: 1 | 2 = 2;
+  if (flags.strideChoice || flags.skillThrow) {
+    // Rules version 3: stride choice + skill throw (the gauge is ignored).
+    stride = flags.strideChoice && action.stride === 1 ? 1 : 2;
+    const aim = flags.skillThrow ? action.aim : undefined;
+    const accuracy = action.accuracy === undefined ? undefined : clamp01(action.accuracy);
+    const q = s.testHooks?.diceQueue;
+    let assisted = false;
+    if (q && q.length > 0) {
+      const d = q.shift()!;
+      dice = stride === 1 ? [d[0], 0] : d;
+    } else {
+      ({ dice, assisted } = skilledRoll(ctx.rng, stride, aim, accuracy));
+    }
+    info = { stride, ...(aim ? { aim } : {}), ...(accuracy !== undefined ? { accuracy } : {}), assisted };
+  } else {
+    dice = nextDice(ctx, action.gauge);
+  }
   s.lastDice = dice;
-  const total = dice[0] + dice[1];
-  const isDouble = dice[0] === dice[1];
+  const total = stride === 1 ? dice[0] : dice[0] + dice[1];
+  const isDouble = stride === 2 && dice[0] === dice[1];
   p.consecutiveDoubles = isDouble ? p.consecutiveDoubles + 1 : 0;
   // Doubles bonus card: one per roll.
   if (s.bonusCardUsed) s.bonusCardUsed = false;
@@ -1563,6 +1656,7 @@ function doRoll(ctx: Ctx, pid: PlayerId, gauge?: number): void {
       express: false,
       steps: 0,
       context: 'normal',
+      ...info,
     });
     sendToIsland(ctx, pid, 'doubles');
     return endTurn(ctx);
@@ -1581,6 +1675,7 @@ function doRoll(ctx: Ctx, pid: PlayerId, gauge?: number): void {
     express,
     steps,
     context: 'normal',
+    ...info,
   });
   const paid = walk(ctx, pid, steps, 'roll');
   return land(ctx, pid, { salaryPaid: paid });
@@ -1590,6 +1685,9 @@ function doIslandRoll(ctx: Ctx, pid: PlayerId): void {
   const s = ctx.s;
   const p = player(ctx, pid);
   const dice = nextDice(ctx);
+  // Version 3 events say how many dice were thrown: the escape roll is always two, never aimed.
+  const flags = ruleFlags(s.settings);
+  const info: ThrowInfo = flags.strideChoice || flags.skillThrow ? { stride: 2, assisted: false } : {};
   s.lastDice = dice;
   const total = dice[0] + dice[1];
   const isDouble = dice[0] === dice[1];
@@ -1609,6 +1707,7 @@ function doIslandRoll(ctx: Ctx, pid: PlayerId): void {
       express,
       steps,
       context: 'island',
+      ...info,
     });
     p.islandTurns = 0;
     emit(ctx, { type: 'Escaped', playerId: pid, method: 'doubles' });
@@ -1625,6 +1724,7 @@ function doIslandRoll(ctx: Ctx, pid: PlayerId): void {
     express: false,
     steps: 0,
     context: 'island',
+    ...info,
   });
   p.islandTurns -= 1;
   emit(ctx, { type: 'IslandStay', playerId: pid, turnsLeft: p.islandTurns });
