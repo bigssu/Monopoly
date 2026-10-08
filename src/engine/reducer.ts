@@ -9,6 +9,7 @@ import { CARDS, COMEBACK_CARD_IDS, getCard, type CardDef, type CardId, type Keep
 import {
   GROUP_IDS,
   citiesInGroup,
+  citiesOnSide,
   getBoardInfo,
   distance,
   isCity,
@@ -41,9 +42,11 @@ import {
   sellPropertyValue,
   setVictory,
   takeoverPrice,
+  takeoverTerms,
   tollOf,
   totalAssets,
   type OneAwayWarning,
+  type SetVictory,
 } from './rules';
 import type {
   PlayerStats,
@@ -57,6 +60,7 @@ import type {
   NewsId,
   Payee,
   Payment,
+  PendingWin,
   Phase,
   PhaseKind,
   Player,
@@ -352,6 +356,8 @@ function addCash(
 }
 
 function changePot(ctx: Ctx, delta: number): void {
+  // Vault cap (version 3): the vault stops at its cap; the rest of a fee stays with the bank.
+  if (delta > 0 && ruleFlags(ctx.s.settings).vaultCap) delta = Math.min(delta, Math.max(0, ECONOMY.vaultCap - ctx.s.pot));
   if (delta === 0) return;
   ctx.s.pot += delta;
   emit(ctx, { type: 'PotChanged', delta, pot: ctx.s.pot });
@@ -517,10 +523,66 @@ function finish(ctx: Ctx, partial: Omit<GameResult, 'ranking' | 'round'>): never
   throw new GameEndedSignal();
 }
 
-function checkVictory(ctx: Ctx): void {
+function checkVictory(ctx: Ctx, by: PlayerId | null = null): void {
   if (ctx.s.phase.kind === 'gameOver') throw new GameEndedSignal();
-  const v = findVictory(ctx.s, ctx.s.current);
-  if (v) finish(ctx, v);
+  if (!ruleFlags(ctx.s.settings).monopolyNotice) {
+    const v = findVictory(ctx.s, ctx.s.current);
+    if (v) finish(ctx, v);
+    return;
+  }
+  // Monopoly notice (version 3): the last solvent player still wins at once; a set only announces.
+  if (ctx.s.players.filter((p) => !p.bankrupt).length <= 1) {
+    const v = findVictory(ctx.s, ctx.s.current);
+    if (v) finish(ctx, v);
+  }
+  updateNotices(ctx, by);
+}
+
+/** The properties of a winning set (for the notice's blinking spaces and the block-buy). */
+function setMembers(s: GameState, v: SetVictory): number[] {
+  const size = s.settings.spacesPerSide ?? 7;
+  if (v.victory === 'hubs') return [...getBoardInfo(size).hubIndices];
+  if (v.victory === 'line') return [...citiesOnSide(v.side!, size)];
+  return (v.groups ?? []).flatMap((g) => [...citiesInGroup(g, size)]).sort((a, b) => a - b);
+}
+
+function noticeFields(s: GameState, v: SetVictory): Pick<PendingWin, 'victory' | 'side' | 'groups' | 'members'> {
+  return { victory: v.victory, ...(v.side ? { side: v.side } : {}), ...(v.groups ? { groups: [...v.groups] } : {}), members: setMembers(s, v) };
+}
+
+/**
+ * Monopoly notices (version 3): drop the ones whose owner no longer holds a winning set (`by`: who
+ * broke it, when known) and announce every newly completed one.
+ */
+function updateNotices(ctx: Ctx, by: PlayerId | null): void {
+  const s = ctx.s;
+  const kept: PendingWin[] = [];
+  for (const w of s.pendingWins ?? []) {
+    const v = player(ctx, w.playerId).bankrupt ? null : setVictory(s, w.playerId);
+    if (!v) {
+      emit(ctx, { type: 'MonopolyBroken', playerId: w.playerId, by: by ?? (s.current !== w.playerId ? s.current : null) });
+      continue;
+    }
+    kept.push({ playerId: w.playerId, ...noticeFields(s, v), round: w.round, blocked: w.blocked });
+  }
+  for (const p of s.players) {
+    if (p.bankrupt || kept.some((w) => w.playerId === p.id)) continue;
+    const v = setVictory(s, p.id);
+    if (!v) continue;
+    const w: PendingWin = { playerId: p.id, ...noticeFields(s, v), round: s.round, blocked: [] };
+    kept.push(w);
+    emit(ctx, {
+      type: 'MonopolyNotice',
+      playerId: p.id,
+      victory: w.victory,
+      ...(w.side ? { side: w.side } : {}),
+      ...(w.groups ? { groups: [...w.groups] } : {}),
+      members: [...w.members],
+      round: s.round,
+    });
+  }
+  if (kept.length > 0) s.pendingWins = kept;
+  else delete s.pendingWins;
 }
 
 function finishOnRoundLimit(ctx: Ctx): never {
@@ -557,6 +619,11 @@ function startTurn(ctx: Ctx, pid: PlayerId): void {
   s.extraRoll = false;
   p.consecutiveDoubles = 0;
   emit(ctx, { type: 'TurnStarted', playerId: pid, round: s.round, turn: s.turn });
+  // Monopoly notice (version 3): the set survived a full round of answers — it wins now.
+  if (s.pendingWins?.some((w) => w.playerId === pid)) {
+    const v = setVictory(s, pid);
+    if (v) finish(ctx, { winnerId: pid, ...v });
+  }
   if (p.islandTurns > 0) return setPhase(ctx, islandPhase(ctx, pid));
   if (p.travelPending) return setPhase(ctx, { kind: 'travel', playerId: pid, options: travelOptions(p.position, s.settings.spacesPerSide ?? 7) });
   return setPhase(ctx, { kind: 'preRoll', playerId: pid, rollAgain: false });
@@ -564,6 +631,12 @@ function startTurn(ctx: Ctx, pid: PlayerId): void {
 
 function endTurn(ctx: Ctx): void {
   const s = ctx.s;
+  // Start investment (version 3) still owed for a move that ended the turn at once (the island).
+  if (s.investPending) {
+    delete s.investPending;
+    const options = investOptions(s, s.current);
+    if (options.length > 0 && !player(ctx, s.current).bankrupt) return setPhase(ctx, { kind: 'invest', playerId: s.current, options, then: 'turn' });
+  }
   const cur = s.current;
   emit(ctx, { type: 'TurnEnded', playerId: cur });
   checkVictory(ctx);
@@ -590,8 +663,78 @@ function endTurn(ctx: Ctx): void {
 function roundStart(ctx: Ctx): void {
   const s = ctx.s;
   const flags = ruleFlags(s.settings);
-  if (flags.luckyVault) changePot(ctx, ECONOMY.vaultSeed);
-  if (flags.newsFlash && s.round % ECONOMY.newsEvery === 0) newsFlash(ctx);
+  if (flags.luckyVault) changePot(ctx, flags.vaultCap ? ECONOMY.vaultSeedCapped : ECONOMY.vaultSeed);
+  if (!flags.newsFlash) return;
+  if (!flags.newsForecast) {
+    if (s.round % ECONOMY.newsEvery === 0) newsFlash(ctx);
+    return;
+  }
+  // News forecast (version 3): run the headline announced last round, then announce the next one.
+  const due = s.newsForecast;
+  if (due && due.round === s.round) {
+    delete s.newsForecast;
+    runNews(ctx, due);
+  }
+  if ((s.round + 1) % ECONOMY.newsEvery === 0) forecastNews(ctx);
+}
+
+/** News forecast (version 3): pick the next round's headline now (same draw as the flash) and announce it. */
+function forecastNews(ctx: Ctx): void {
+  const s = ctx.s;
+  const { id, group } = drawHeadline(ctx);
+  const news: GameState['news'] = { id, round: s.round + 1, ...(group ? { group } : {}) };
+  s.newsForecast = news;
+  emit(ctx, { type: 'NewsForecast', id, round: news.round, ...(group ? { group } : {}) });
+}
+
+/** A headline not run yet this cycle that has something to hit (quake: a colour group with buildings). */
+function drawHeadline(ctx: Ctx): { id: NewsId; group?: GroupId } {
+  const s = ctx.s;
+  let seen = s.newsSeen ?? [];
+  if (seen.length >= NEWS_IDS.length) seen = [];
+  const applicable = (id: NewsId): boolean =>
+    id === 'quake' ? quakeGroups(s).length > 0 : id === 'shareDay' ? richestAndPoorest(s) !== null : true;
+  let options = NEWS_IDS.filter((id) => !seen.includes(id) && applicable(id));
+  if (options.length === 0) options = NEWS_IDS.filter(applicable);
+  const id = pick(ctx, options);
+  s.newsSeen = [...seen, id];
+  return id === 'quake' ? { id, group: pick(ctx, quakeGroups(s)) } : { id };
+}
+
+/** Run a forecast headline this round (what no longer applies, e.g. a quake on a bare group, does nothing). */
+function runNews(ctx: Ctx, due: NonNullable<GameState['news']>): void {
+  const s = ctx.s;
+  s.news = { ...due, round: s.round };
+  emit(ctx, { type: 'NewsFlash', id: due.id, round: s.round, ...(due.group ? { group: due.group } : {}) });
+  applyHeadline(ctx, s.news);
+}
+
+/** What a headline does at once (the others only change prices for the round). */
+function applyHeadline(ctx: Ctx, news: NonNullable<GameState['news']>): void {
+  const s = ctx.s;
+  switch (news.id) {
+    case 'quake':
+      for (const i of citiesInGroup(news.group!, s.settings.spacesPerSide ?? 7)) {
+        const pr = propertyAt(s, i);
+        if (pr.owner === null || pr.level < 1 || pr.level >= ECONOMY.maxLevel) continue;
+        pr.level = (pr.level - 1) as Level;
+        emit(ctx, { type: 'Demolished', spaceIndex: i, ownerId: pr.owner, level: pr.level, cause: 'quake' });
+      }
+      return;
+    case 'shareDay': {
+      const rp = richestAndPoorest(s);
+      if (!rp) return;
+      const rich = player(ctx, rp.rich);
+      const amt = Math.min(rich.cash, round10(rich.cash * ECONOMY.newsShareRate));
+      pay(ctx, rp.rich, rp.poor, amt, 'news');
+      return;
+    }
+    case 'vaultBoom':
+      changePot(ctx, Math.max(s.pot, ECONOMY.newsVaultMin));
+      return;
+    default:
+      return;
+  }
 }
 
 export const NEWS_IDS: readonly NewsId[] = ['tollFever', 'quake', 'buildBoom', 'takeoverSale', 'shareDay', 'vaultBoom'];
@@ -660,6 +803,12 @@ function newsFlash(ctx: Ctx): void {
 function endLanding(ctx: Ctx): void {
   const s = ctx.s;
   const p = player(ctx, s.current);
+  // Start investment (version 3): passing Start opens the offer once the landing is resolved.
+  if (s.investPending) {
+    delete s.investPending;
+    const options = investOptions(s, p.id);
+    if (options.length > 0 && !p.bankrupt) return setPhase(ctx, { kind: 'invest', playerId: p.id, options, then: 'landing' });
+  }
   if (!p.bankrupt && s.extraRoll && p.islandTurns === 0 && !p.travelPending) {
     // Doubles bonus card (rules version 2): one event card for the roll, then the extra roll.
     const flags = ruleFlags(s.settings);
@@ -701,6 +850,7 @@ function walk(ctx: Ctx, pid: PlayerId, steps: number, cause: 'roll' | 'card' | '
   if (crosses) {
     emit(ctx, { type: 'PassedStart', playerId: pid, salary: ECONOMY.salary, landed: to === board.startIndex });
     receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', board.startIndex);
+    if (ruleFlags(ctx.s.settings).startInvest) ctx.s.investPending = true;
   }
   return crosses;
 }
@@ -765,6 +915,7 @@ function land(ctx: Ctx, pid: PlayerId, opts: LandOpts = {}): void {
       if (!opts.salaryPaid) {
         emit(ctx, { type: 'PassedStart', playerId: pid, salary: ECONOMY.salary, landed: true });
         receiveFromBank(ctx, pid, ECONOMY.salary, 'salary', board.startIndex);
+        if (ruleFlags(s.settings).startInvest) s.investPending = true;
       }
       receivePot(ctx, pid);
       if (ruleFlags(s.settings).doubleUp) {
@@ -895,6 +1046,8 @@ function takeoverCheck(ctx: Ctx, pid: PlayerId, idx: number): void {
     ownerHasShield: owner.cards.includes('shield'),
   };
   if (isWinBack(s, idx, pid)) phase.winBack = true;
+  // Chase takeover (version 3): show the multiplier and why.
+  if (ruleFlags(s.settings).chaseTakeover) Object.assign(phase, takeoverTerms(s, idx, pid));
   return setPhase(ctx, phase);
 }
 
@@ -922,7 +1075,8 @@ function blockTakeover(ctx: Ctx, buyerId: PlayerId, ownerId: PlayerId, idx: numb
 function completeTakeover(ctx: Ctx, buyerId: PlayerId, ownerId: PlayerId, idx: number, price: number): void {
   const s = ctx.s;
   const winBack = isWinBack(s, idx, buyerId);
-  emit(ctx, { type: 'TakenOver', buyerId, sellerId: ownerId, spaceIndex: idx, price, ...(winBack ? { winBack: true } : {}) });
+  const terms = ruleFlags(s.settings).chaseTakeover ? takeoverTerms(s, idx, buyerId) : null;
+  emit(ctx, { type: 'TakenOver', buyerId, sellerId: ownerId, spaceIndex: idx, price, ...(winBack ? { winBack: true } : {}), ...(terms ?? {}) });
   pay(ctx, buyerId, ownerId, price, 'takeover', idx);
   propertyAt(s, idx).owner = buyerId;
   // Win-back (rules = advanced): the loser may take it back for 1×; a win-back gives no new right.
@@ -1268,6 +1422,80 @@ function drawCard(ctx: Ctx, pid: PlayerId, chosen?: CardId): void {
 }
 
 // ---------------------------------------------------------------------------
+// Rules version 3: start investment, block-buy
+// ---------------------------------------------------------------------------
+
+/**
+ * Start investment options: `pid`'s cities below `investMaxLevel` whose next level they can pay for
+ * now (a landmark always needs standing on the city: remote building up to a landmark would end the
+ * takeover game for that city).
+ */
+export function investOptions(s: GameState, pid: PlayerId): number[] {
+  const cash = s.players[pid]!.cash;
+  return ownedCities(s, pid).filter((i) => {
+    const cost = nextBuildCost(s, i);
+    return propertyAt(s, i).level < ECONOMY.investMaxLevel && cost !== null && cost <= cash;
+  });
+}
+
+/**
+ * Block-buy price, all paid to the owner (a forced buy-out at a premium): the takeover price for
+ * `buyer` (chase multiplier) plus `blockSurcharge` × value and, for a hub, `blockHubFee`.
+ */
+export function counterbuyPrice(s: GameState, idx: number, buyer: PlayerId): number {
+  return takeoverPrice(s, idx, buyer) + round10(ECONOMY.blockSurcharge * propertyValue(s, idx)) +
+    (isHub(idx, s.settings.spacesPerSide ?? 7) ? ECONOMY.blockHubFee : 0);
+}
+
+/** Block-buy options for `pid` now: non-landmark properties of opponents' notices they have not answered, affordable. */
+export function counterbuyOptions(s: GameState, pid: PlayerId): Array<{ spaceIndex: number; price: number; ownerId: PlayerId }> {
+  if (!ruleFlags(s.settings).monopolyNotice || !s.settings.takeover) return [];
+  const p = s.players[pid]!;
+  const out: Array<{ spaceIndex: number; price: number; ownerId: PlayerId }> = [];
+  for (const w of s.pendingWins ?? []) {
+    if (w.playerId === pid || w.blocked.includes(pid)) continue;
+    for (const i of w.members) {
+      if (s.properties[i]?.owner !== w.playerId || !canBeTakenOver(s, i) || out.some((o) => o.spaceIndex === i)) continue;
+      const price = counterbuyPrice(s, i, pid);
+      if (p.cash >= price) out.push({ spaceIndex: i, price, ownerId: w.playerId });
+    }
+  }
+  return out;
+}
+
+function counterbuy(ctx: Ctx, pid: PlayerId, idx: number): void {
+  const s = ctx.s;
+  const ph = s.phase as Extract<Phase, { kind: 'preRoll' | 'island' | 'travel' }>;
+  const ownerId = propertyAt(s, idx).owner!;
+  const owner = player(ctx, ownerId);
+  const price = counterbuyPrice(s, idx, pid);
+  // One answer per notice, whether it lands or a shield stops it.
+  for (const w of s.pendingWins ?? []) if (w.playerId === ownerId && !w.blocked.includes(pid)) w.blocked.push(pid);
+  if (owner.cards.includes('shield')) {
+    // The guard shield stops a block-buy as it stops a swap (no prompt).
+    owner.cards.splice(owner.cards.indexOf('shield'), 1);
+    emit(ctx, { type: 'CardUsed', playerId: ownerId, card: 'shield' });
+    emit(ctx, { type: 'TakeoverBlocked', buyerId: pid, ownerId, spaceIndex: idx, block: true });
+  } else {
+    const winBack = isWinBack(s, idx, pid);
+    emit(ctx, { type: 'TakenOver', buyerId: pid, sellerId: ownerId, spaceIndex: idx, price, ...(winBack ? { winBack: true } : {}), block: true, ...takeoverTerms(s, idx, pid) });
+    pay(ctx, pid, ownerId, price, 'takeover', idx);
+    propertyAt(s, idx).owner = pid;
+    if (ruleFlags(s.settings).winBack) {
+      const taken = { ...s.takenFrom };
+      if (winBack) delete taken[idx];
+      else taken[idx] = { from: ownerId, by: pid };
+      s.takenFrom = taken;
+    }
+    checkVictory(ctx, pid);
+  }
+  // Back to the same decision (it may have changed: bail affordability).
+  if (ph.kind === 'island') return setPhase(ctx, islandPhase(ctx, pid));
+  if (ph.kind === 'travel') return setPhase(ctx, { ...ph });
+  return setPhase(ctx, { kind: 'preRoll', playerId: pid, rollAgain: ph.rollAgain });
+}
+
+// ---------------------------------------------------------------------------
 // Legal actions
 // ---------------------------------------------------------------------------
 
@@ -1298,6 +1526,11 @@ function rollChoices(state: GameState, pid: PlayerId): Action[] {
   return out;
 }
 
+/** Block-buys open to `pid` before they move (rules version 3). */
+function blockBuys(state: GameState, pid: PlayerId): Action[] {
+  return counterbuyOptions(state, pid).map((o): Action => ({ type: 'Counterbuy', playerId: pid, spaceIndex: o.spaceIndex }));
+}
+
 /** Every legal action in the current phase (empty only when the game is over). */
 export function legalActions(state: GameState): Action[] {
   const ph = state.phase;
@@ -1307,15 +1540,17 @@ export function legalActions(state: GameState): Action[] {
   const pass: Action = { type: 'Pass', playerId: pid };
   switch (ph.kind) {
     case 'preRoll':
-      return rollChoices(state, pid);
+      return [...rollChoices(state, pid), ...blockBuys(state, pid)];
     case 'island': {
       const out: Action[] = [{ type: 'Roll', playerId: pid }];
       if (p.cash >= ECONOMY.bail) out.push({ type: 'PayBail', playerId: pid });
       if (p.cards.includes('escape')) out.push({ type: 'UseEscapeCard', playerId: pid });
-      return out;
+      return [...out, ...blockBuys(state, pid)];
     }
     case 'travel':
-      return [...ph.options.map((i): Action => ({ type: 'ChooseTravel', playerId: pid, spaceIndex: i })), pass];
+      return [...ph.options.map((i): Action => ({ type: 'ChooseTravel', playerId: pid, spaceIndex: i })), pass, ...blockBuys(state, pid)];
+    case 'invest':
+      return [...ph.options.map((i): Action => ({ type: 'Invest', playerId: pid, spaceIndex: i })), pass];
     case 'buy':
       return p.cash >= ph.price ? [{ type: 'Buy', playerId: pid }, pass] : [pass];
     case 'build':
@@ -1445,6 +1680,8 @@ function dispatch(ctx: Ctx, action: Action): void {
   const pid = action.playerId;
   const p = player(ctx, pid);
 
+  if (action.type === 'Counterbuy') return counterbuy(ctx, pid, action.spaceIndex);
+
   switch (ph.kind) {
     case 'preRoll':
       if (action.type === 'Roll') return doRoll(ctx, pid, action);
@@ -1560,6 +1797,16 @@ function dispatch(ctx: Ctx, action: Action): void {
     case 'festival':
       if (action.type === 'SetFestival') setFestival(ctx, pid, action.spaceIndex);
       return endLanding(ctx);
+
+    case 'invest':
+      if (action.type === 'Invest') {
+        const prop = propertyAt(s, action.spaceIndex);
+        const cost = nextBuildCost(s, action.spaceIndex)!;
+        pay(ctx, pid, 'bank', cost, 'build', action.spaceIndex);
+        prop.level = (prop.level + 1) as Level;
+        emit(ctx, { type: 'Built', playerId: pid, spaceIndex: action.spaceIndex, level: prop.level, cost, free: false, via: 'invest' });
+      }
+      return ph.then === 'turn' ? endTurn(ctx) : endLanding(ctx);
 
     case 'freeUpgrade':
       if (action.type === 'FreeUpgrade') {

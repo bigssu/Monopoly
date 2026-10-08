@@ -131,4 +131,24 @@ export const ECONOMY = {
   // --- Rules version 3 (docs/research/10-strategy-depth.md, docs/BALANCE.md "Rules version 3") ---
   /** Skill throw assist cap (`SKILL_CAP`); read through here so the balance scripts can sweep it. */
   skillCap: SKILL_CAP as number,
+  /** Chase takeover: the multiplier at equal assets, and how far it moves either way (2 ± 0.5). */
+  chaseBase: 2 as number,
+  chaseRange: 0.5 as number,
+  /**
+   * Chase takeover: the asset ratio (buyer / owner, or its inverse) at which the multiplier reaches
+   * its end (log scale: half the owner's assets → 1.5×, twice → 2.5× at 2).
+   */
+  chaseSpan: 2 as number,
+  /** News "takeover sale" under the chase takeover: the chase multiplier × this. */
+  chaseSaleRate: 0.75 as number,
+  /** Start investment: the highest level it can build from afar (3 = hotel; a landmark needs a visit). */
+  investMaxLevel: 3 as number,
+  /** Block-buy: surcharge (× value, paid to the owner with the price) on top of the takeover price. */
+  blockSurcharge: 2 as number,
+  /** Block-buy: extra paid (to the owner) when the block-bought property is a hub. */
+  blockHubFee: 0 as number,
+  /** Vault cap: the lucky vault never holds more than this; fees beyond it go to the bank. */
+  vaultCap: 500 as number,
+  /** Vault cap: the bank's per-round addition to the vault (instead of `vaultSeed`). */
+  vaultSeedCapped: 20 as number,
 } as const;

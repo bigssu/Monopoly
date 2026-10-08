@@ -6,8 +6,8 @@ import { GROUP_IDS, SIDE_IDS } from '../content/board';
 import type { GameState } from './types';
 import { getBoardInfo, priceOf } from './board';
 import { ECONOMY } from './economy';
-import { NEWS_IDS, festivalOptions, swapOptions, travelOptions } from './reducer';
-import { canBeTakenOver, isWinBack, liquidationValue, nextBuildCost, ownedCities, round10, takeoverPrice, tollOf } from './rules';
+import { NEWS_IDS, festivalOptions, investOptions, swapOptions, travelOptions } from './reducer';
+import { canBeTakenOver, isWinBack, liquidationValue, nextBuildCost, ownedCities, round10, takeoverPrice, takeoverTerms, tollOf } from './rules';
 import { RULES_VERSION, ruleFlags } from './settings';
 
 export const SAVE_FORMAT = 'lot-and-roll-save';
@@ -122,7 +122,11 @@ function validatePhase(value: unknown, boardSize: number, propertyIndices: reado
     case 'buy': return prompt() && propertyIndex(value.spaceIndex) && integer(value.price, 0);
     case 'build': return prompt() && propertyIndex(value.spaceIndex) && [1, 2, 3, 4].includes(value.toLevel as number) && integer(value.cost, 0);
     case 'takeover': return prompt() && propertyIndex(value.spaceIndex) && playerId(value.ownerId, playerCount) && integer(value.price, 0) && boolean(value.ownerHasShield) &&
-      (value.winBack === undefined || value.winBack === true);
+      (value.winBack === undefined || value.winBack === true) &&
+      (value.multiplier === undefined || (typeof value.multiplier === 'number' && Number.isFinite(value.multiplier) && value.multiplier > 0)) &&
+      (value.why === undefined || ['chase', 'sale', 'winBack'].includes(value.why as string));
+    case 'invest': return prompt() && options(value.options, boardSize) && value.options.length > 0 && value.options.every((index) => cityIndices.includes(index)) &&
+      (value.then === 'landing' || value.then === 'turn');
     case 'auction':
       return prompt() && propertyIndex(value.spaceIndex) && playerId(value.declinedBy, playerCount) && Array.isArray(value.order) &&
         value.order.every((id) => playerId(id, playerCount)) && Array.isArray(value.active) && value.active.every((id) => playerId(id, playerCount)) &&
@@ -172,7 +176,9 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
   // Auction bidders may be waiting on the island/travel themselves; turn-entry obligations
   // belong to the current turn owner, not necessarily the player acting in this phase.
   const turnOwner = state.players[state.current]!;
-  if (turnOwner.islandTurns > 0 ? phase.kind !== 'island' : turnOwner.travelPending && phase.kind !== 'travel') return false;
+  // A start investment owed by a move that ended on the island (or the travel corner) comes before the turn ends.
+  const investLate = phase.kind === 'invest';
+  if (!investLate && (turnOwner.islandTurns > 0 ? phase.kind !== 'island' : turnOwner.travelPending && phase.kind !== 'travel')) return false;
   const player = state.players[phase.playerId]!;
   const currentPrompt = phase.playerId === state.current && !player.bankrupt;
   const size = state.settings.spacesPerSide ?? 7;
@@ -200,8 +206,15 @@ function validatePhaseContext(value: unknown, state: GameState): boolean {
       return currentPrompt && player.position === phase.spaceIndex && state.settings.takeover &&
         property(phase.spaceIndex).owner === phase.ownerId && phase.ownerId !== phase.playerId && canBeTakenOver(state, phase.spaceIndex) &&
         phase.price === takeoverPrice(state, phase.spaceIndex, phase.playerId) && player.cash >= phase.price && phase.ownerHasShield === owner.cards.includes('shield') &&
-        !!phase.winBack === isWinBack(state, phase.spaceIndex, phase.playerId);
+        !!phase.winBack === isWinBack(state, phase.spaceIndex, phase.playerId) &&
+        // Chase takeover (version 3): the shown multiplier is the one priced.
+        (ruleFlags(state.settings).chaseTakeover
+          ? phase.multiplier === takeoverTerms(state, phase.spaceIndex, phase.playerId).multiplier && phase.why === takeoverTerms(state, phase.spaceIndex, phase.playerId).why
+          : phase.multiplier === undefined && phase.why === undefined);
     }
+    case 'invest':
+      // Start investment (version 3): exactly the cities the player can raise from afar now.
+      return currentPrompt && ruleFlags(state.settings).startInvest && sameNumbers(phase.options, investOptions(state, phase.playerId));
     case 'gamble': {
       const tax = getBoardInfo(size).board.find((sp) => sp.kind === 'tax')!.index;
       return currentPrompt && ruleFlags(state.settings).allOrNothing && player.position === tax &&
@@ -311,6 +324,15 @@ function validateRuleState(state: JsonObject, boardSize: number): boolean {
     (state.news.group === undefined || GROUP_IDS.includes(state.news.group as never)))) return false;
   if (state.newsSeen !== undefined && !(Array.isArray(state.newsSeen) && state.newsSeen.every((id) => NEWS_IDS.includes(id as never)))) return false;
   if (state.bonusCardUsed !== undefined && !boolean(state.bonusCardUsed)) return false;
+  // Rules version 3: start investment, monopoly notices, news forecast.
+  if (state.investPending !== undefined && !boolean(state.investPending)) return false;
+  if (state.newsForecast !== undefined && !(object(state.newsForecast) && NEWS_IDS.includes(state.newsForecast.id as never) && integer(state.newsForecast.round, 1) &&
+    (state.newsForecast.group === undefined || GROUP_IDS.includes(state.newsForecast.group as never)))) return false;
+  if (state.pendingWins !== undefined && !(Array.isArray(state.pendingWins) && state.pendingWins.length > 0 && state.pendingWins.every((w) =>
+    object(w) && integer(w.playerId, 0) && ['triple', 'line', 'hubs'].includes(w.victory as string) && Array.isArray(w.members) && w.members.length > 0 &&
+    w.members.every((i) => spaceIndex(i, boardSize)) && integer(w.round, 1) && Array.isArray(w.blocked) && w.blocked.every((id) => integer(id, 0)) &&
+    (w.side === undefined || SIDE_IDS.includes(w.side as never)) &&
+    (w.groups === undefined || (Array.isArray(w.groups) && w.groups.every((g) => GROUP_IDS.includes(g as never))))))) return false;
   if (state.takenFrom !== undefined && !(object(state.takenFrom) && Object.entries(state.takenFrom).every(([k, v]) =>
     spaceIndex(Number(k), boardSize) && object(v) && integer(v.from, 0) && integer(v.by, 0)))) return false;
   if (state.hubVisits === undefined) return true;

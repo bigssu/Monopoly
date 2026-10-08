@@ -23,6 +23,7 @@ import type {
   PlayerId,
   PropertyState,
   RankingEntry,
+  TakeoverWhy,
   VictoryKind,
 } from './types';
 
@@ -53,7 +54,7 @@ export function nextBuildCost(state: GameState, index: number): number | null {
 }
 
 /** The news flash headline in force this round (rules version 2), if it is `id`. */
-function newsActive(state: GameState, id: NewsId): boolean {
+export function newsActive(state: GameState, id: NewsId): boolean {
   return state.news?.id === id && state.news.round === state.round && ruleFlags(state.settings).newsFlash;
 }
 
@@ -159,13 +160,41 @@ export function canBeTakenOver(state: GameState, index: number): boolean {
 
 /**
  * Takeover price: 2 × value; 1.5 × in a "takeover sale" news round; 1 × for a win-back (rules =
- * advanced) — `buyer` lost this city to its owner in a takeover.
+ * advanced) — `buyer` lost this city to its owner in a takeover. Rules version 3 (chase takeover):
+ * the multiplier follows the buyer / owner asset ratio, 1.5× … 2.5× (see `takeoverTerms`).
  */
 export function takeoverPrice(state: GameState, index: number, buyer?: PlayerId): number {
   const value = propertyValue(state, index);
-  if (buyer !== undefined && isWinBack(state, index, buyer)) return round10(ECONOMY.winBackMultiplier * value);
-  if (newsActive(state, 'takeoverSale')) return round10(ECONOMY.newsTakeoverMultiplier * value);
-  return ECONOMY.takeoverMultiplier * value;
+  const terms = takeoverTerms(state, index, buyer);
+  // Before version 3 the 2× price is exact (no rounding), as it always was.
+  if (terms.why === undefined) return ECONOMY.takeoverMultiplier * value;
+  return round10(terms.multiplier * value);
+}
+
+/**
+ * The takeover multiplier and its reason. Without the chase rule: 1× win-back, the sale headline's
+ * 1.5×, else 2× (`why` undefined). Chase takeover (version 3): 2 + 0.5 × clamp(log(ratio) /
+ * log(chaseSpan), −1, 1) with ratio = buyer / owner total assets, to one decimal — poorer buyers pay
+ * less, richer more; a sale headline scales it by `chaseSaleRate`.
+ */
+export function takeoverTerms(state: GameState, index: number, buyer?: PlayerId): { multiplier: number; why?: TakeoverWhy } {
+  if (buyer !== undefined && isWinBack(state, index, buyer)) return { multiplier: ECONOMY.winBackMultiplier, why: 'winBack' };
+  const owner = state.properties[index]?.owner ?? null;
+  const sale = newsActive(state, 'takeoverSale');
+  if (ruleFlags(state.settings).chaseTakeover && buyer !== undefined && owner !== null && owner !== buyer) {
+    const m = chaseMultiplier(state, buyer, owner);
+    if (sale) return { multiplier: Math.round(m * ECONOMY.chaseSaleRate * 10) / 10, why: 'sale' };
+    return { multiplier: m, why: 'chase' };
+  }
+  if (sale) return { multiplier: ECONOMY.newsTakeoverMultiplier, why: 'sale' };
+  return { multiplier: ECONOMY.takeoverMultiplier };
+}
+
+/** Chase takeover multiplier for `buyer` taking from `owner` (1.5–2.5×, one decimal). */
+export function chaseMultiplier(state: GameState, buyer: PlayerId, owner: PlayerId): number {
+  const ratio = Math.max(1, totalAssets(state, buyer)) / Math.max(1, totalAssets(state, owner));
+  const x = Math.max(-1, Math.min(1, Math.log(ratio) / Math.log(ECONOMY.chaseSpan)));
+  return Math.round((ECONOMY.chaseBase + ECONOMY.chaseRange * x) * 10) / 10;
 }
 
 /** Win-back: `buyer` lost the city at `index` in a takeover and its taker still owns it. */
@@ -207,7 +236,7 @@ function solventPlayers(state: GameState): PlayerId[] {
   return state.players.filter((p) => !p.bankrupt).map((p) => p.id);
 }
 
-interface SetVictory {
+export interface SetVictory {
   victory: Exclude<VictoryKind, 'lastStanding' | 'bankruptcy' | 'roundLimit'>;
   groups?: GroupId[];
   side?: SideId;

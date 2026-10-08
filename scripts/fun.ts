@@ -22,6 +22,12 @@ function arg(name: string): string | undefined {
 }
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
+if (flag('help')) {
+  console.log(`npm run fun -- [--seeds 400] [--rounds 30|inf] [--players 2|3|4] [--rules easy|normal|advanced] [--detail]
+  [--mixed] [--rules-version N] [--from 1]   (no --players / --rules: every combination)`);
+  process.exit(0);
+}
+
 /** Book-keeping events that every turn has (not "something happened"). */
 const ROUTINE = new Set<GameEvent['type']>([
   'RoundStarted', 'TurnStarted', 'TurnEnded', 'DiceRolled', 'TokenMoved', 'MoneyChanged', 'PotChanged', 'PromptOpened', 'PassedStart',
@@ -53,7 +59,7 @@ export function interactionOf(ev: GameEvent): string | null {
   }
 }
 /** Event types (added by later rules) that are player-vs-player by nature. */
-const INTERACTION_TYPES = new Set<string>(['CitySwapped', 'BuildingStolen', 'TollMirrored', 'Bounty', 'RevengeToll', 'Blockade', 'JackpotWon']);
+const INTERACTION_TYPES = new Set<string>(['CitySwapped', 'BuildingStolen', 'TollMirrored', 'Bounty', 'RevengeToll', 'Blockade', 'JackpotWon', 'MonopolyBroken']);
 
 interface GameMetrics {
   rounds: number;

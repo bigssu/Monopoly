@@ -96,6 +96,16 @@ export interface RuleFlags {
   strideChoice: boolean;
   /** Skill throw (손맛 던지기): aim at the low or high band; accuracy × SKILL_CAP is the assist chance. */
   skillThrow: boolean;
+  /** Start investment (출발 투자): passing Start lets you raise one of your cities a level from afar. */
+  startInvest: boolean;
+  /** Monopoly notice (독점 예고) + block-buy (견제 매입): a completed set wins a turn later, if it survives. */
+  monopolyNotice: boolean;
+  /** Chase takeover (추격 인수): the takeover multiplier follows the buyer / owner asset ratio (1.5–2.5×). */
+  chaseTakeover: boolean;
+  /** News forecast (속보 예보): each headline is announced one round before it runs. */
+  newsForecast: boolean;
+  /** Vault cap (금고 상한): the lucky vault stops at a cap and the bank adds less each round. */
+  vaultCap: boolean;
 }
 
 /**
@@ -122,6 +132,11 @@ export function ruleFlags(settings: Pick<Settings, 'rules' | 'rulesVersion'>): R
     // 모드 is 'normal' and plays exactly as version 2).
     strideChoice: v3 && advanced,
     skillThrow: v3 && advanced,
+    startInvest: v3 && advanced,
+    monopolyNotice: v3 && advanced,
+    chaseTakeover: v3 && advanced,
+    newsForecast: v3 && advanced,
+    vaultCap: v3 && advanced,
   };
   if (FLAGS_OFF.size > 0) for (const k of FLAGS_OFF) flags[k] = false;
   return flags;

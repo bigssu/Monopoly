@@ -26,7 +26,11 @@ export {
   swapGive,
   raidTarget,
   isComebackDraw,
+  skilledRoll,
+  investOptions,
+  counterbuyOptions,
+  counterbuyPrice,
 } from './reducer';
-export { chooseAction, tollExposure, cardValue } from './ai';
+export { chooseAction, chooseRoll, cpuAccuracy, throwDistribution, tollExposure, cardValue } from './ai';
 export { serialize, deserialize, peekSave, SaveError, SAVE_VERSION, SAVE_FORMAT, type SaveFile } from './save';
 export { simulateGame, assertInvariants, type SimResult, type SimOptions, type SimBankruptcy } from './sim';

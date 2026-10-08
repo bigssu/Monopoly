@@ -85,6 +85,24 @@ interface NewsState {
   group?: GroupId;
 }
 
+/**
+ * Monopoly notice (rules version 3, strategy mode): `playerId` completed a winning set; it wins at
+ * the start of their next turn if they still hold a winning set. Until then every opponent may,
+ * once, block-buy one non-landmark property of `members` from anywhere (`blocked` = who has).
+ */
+export interface PendingWin {
+  playerId: PlayerId;
+  victory: 'triple' | 'line' | 'hubs';
+  side?: SideId;
+  groups?: GroupId[];
+  /** The set's properties (every city of the line / the groups, or the four hubs). */
+  members: number[];
+  /** The round it was announced in. */
+  round: number;
+  /** Opponents who already used their block-buy on this notice. */
+  blocked: PlayerId[];
+}
+
 /** Win-back (rules = advanced): `from` lost the city to `by` in a takeover. */
 interface TakenFrom {
   from: PlayerId;
@@ -211,7 +229,16 @@ export type Phase =
       ownerHasShield: boolean;
       /** Win-back (rules = advanced): the city was taken from this player; the price is 1× value. */
       winBack?: boolean;
+      /** Rules version 3 (chase takeover): the price multiplier (× value) and why it is not 2×. */
+      multiplier?: number;
+      why?: TakeoverWhy;
     }
+  /**
+   * Start investment (rules version 3, strategy mode): having passed or landed on Start, raise one
+   * of your cities a level (at the build cost, up to a hotel: a landmark still needs standing on
+   * the city) — Invest{spaceIndex} — or Pass. `then`: where the turn continues afterwards.
+   */
+  | { kind: 'invest'; playerId: PlayerId; options: number[]; then: 'landing' | 'turn' }
   /** Festival corner: SetFestival{spaceIndex} or Pass. */
   | { kind: 'festival'; playerId: PlayerId; options: number[] }
   /** Free upgrade card: FreeUpgrade{spaceIndex} or Pass. */
@@ -275,6 +302,12 @@ export type Phase =
   | { kind: 'target'; playerId: PlayerId; card: 'typhoon' | 'swap'; options: number[] }
   | { kind: 'gameOver'; result: GameResult };
 
+/**
+ * Why a takeover costs what it does (rules version 3): `chase` = the buyer / owner asset ratio set
+ * the multiplier (1.5× poorer … 2.5× richer), `sale` = a takeover-sale headline, `winBack` = 1×.
+ */
+export type TakeoverWhy = 'chase' | 'sale' | 'winBack';
+
 export interface TollInfo {
   spaceIndex: number;
   ownerId: PlayerId;
@@ -337,6 +370,12 @@ export interface GameState {
   takenFrom?: Record<number, TakenFrom>;
   /** Doubles bonus card (version 2): already drawn for the current roll. */
   bonusCardUsed?: boolean;
+  /** Start investment (version 3): the current player passed Start; the offer comes when the landing ends. */
+  investPending?: boolean;
+  /** Monopoly notices (version 3) waiting for their owner's next turn. */
+  pendingWins?: PendingWin[];
+  /** News forecast (version 3): the headline announced for the next news round. */
+  newsForecast?: NewsState;
   /** Donation pot. */
   pot: number;
   /** 1-based round number. */
@@ -387,6 +426,13 @@ export type Action =
   | { type: 'UseCard'; playerId: PlayerId }
   | { type: 'DoubleUpGuess'; playerId: PlayerId; guess: 'high' | 'low' }
   | { type: 'ChooseTarget'; playerId: PlayerId; spaceIndex: number }
+  /** Start investment (rules version 3): raise this city one level. */
+  | { type: 'Invest'; playerId: PlayerId; spaceIndex: number }
+  /**
+   * Block-buy (rules version 3): before rolling, buy one non-landmark property of an opponent's
+   * announced set (a monopoly notice) from anywhere, at its takeover price (+ a fee for a hub).
+   */
+  | { type: 'Counterbuy'; playerId: PlayerId; spaceIndex: number }
   /** All or nothing: roll for the tax (Pass pays it). */
   | { type: 'Gamble'; playerId: PlayerId }
   /** Decline the current prompt (buy/build/takeover/festival/freeUpgrade/travel/auction). */
@@ -457,7 +503,8 @@ export type GameEvent =
   | { type: 'PotChanged'; delta: number; pot: number }
   | { type: 'PropertyBought'; playerId: PlayerId; spaceIndex: number; price: number; via: 'buy' | 'auction' }
   | { type: 'CannotAfford'; playerId: PlayerId; spaceIndex: number; price: number }
-  | { type: 'Built'; playerId: PlayerId; spaceIndex: number; level: Level; cost: number; free: boolean }
+  /** `via` 'invest': a start investment (rules version 3), built from afar. */
+  | { type: 'Built'; playerId: PlayerId; spaceIndex: number; level: Level; cost: number; free: boolean; via?: 'invest' }
   | {
       type: 'Demolished';
       spaceIndex: number;
@@ -479,13 +526,33 @@ export type GameEvent =
       /** 통행료 면제권 consumed: nothing paid. */
       waived: boolean;
     }
-  | { type: 'TakenOver'; buyerId: PlayerId; sellerId: PlayerId; spaceIndex: number; price: number; winBack?: boolean }
-  | { type: 'TakeoverBlocked'; buyerId: PlayerId; ownerId: PlayerId; spaceIndex: number }
+  /**
+   * `block`: a block-buy against a monopoly notice (rules version 3). `multiplier` / `why` (version 3):
+   * the price as a multiple of the value and why (see TakeoverWhy).
+   */
+  | {
+      type: 'TakenOver';
+      buyerId: PlayerId;
+      sellerId: PlayerId;
+      spaceIndex: number;
+      price: number;
+      winBack?: boolean;
+      block?: boolean;
+      multiplier?: number;
+      why?: TakeoverWhy;
+    }
+  | { type: 'TakeoverBlocked'; buyerId: PlayerId; ownerId: PlayerId; spaceIndex: number; block?: boolean }
   | { type: 'CardsOffered'; playerId: PlayerId; options: [CardId, CardId]; bonus?: boolean; underdog?: boolean }
   /** Doubles bonus card (version 2): an event card before the extra roll. */
   | { type: 'BonusCard'; playerId: PlayerId }
   /** News flash (version 2) at the start of a round. */
   | { type: 'NewsFlash'; id: NewsId; round: number; group?: GroupId }
+  /** News forecast (version 3): the headline that will run at the start of `round`. */
+  | { type: 'NewsForecast'; id: NewsId; round: number; group?: GroupId }
+  /** Monopoly notice (version 3): a winning set completed; it wins at its owner's next turn. */
+  | { type: 'MonopolyNotice'; playerId: PlayerId; victory: 'triple' | 'line' | 'hubs'; side?: SideId; groups?: GroupId[]; members: number[]; round: number }
+  /** A monopoly notice lapsed: the set was broken before its owner's turn (`by` the block-buyer, if any). */
+  | { type: 'MonopolyBroken'; playerId: PlayerId; by: PlayerId | null }
   /** All or nothing: the die (4–6 → paid nothing, 1–3 → paid twice the tax). */
   | { type: 'Gambled'; playerId: PlayerId; die: number; win: boolean; tax: number; paid: number }
   /** City swap card: `took` (was `ownerId`'s) is now `playerId`'s, `gave` is now `ownerId`'s. */

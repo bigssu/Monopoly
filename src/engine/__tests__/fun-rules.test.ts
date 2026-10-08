@@ -18,7 +18,7 @@ import { act, edit, game, ofType, own, pass, queueCards, queueDice, queuePicks, 
 
 const TAX = 23;
 const EVENT = 3;
-const v2 = (rules: RuleLevel = 'normal', n = 2) => game({ rules, rulesVersion: RULES_VERSION, n });
+const v2 = (rules: RuleLevel = 'normal', n = 2) => game({ rules, rulesVersion: 2, n });
 
 /** Advance the game to the start of `round` by ending turns with plain moves (no landing effects). */
 function atRoundStart(s: GameState, round: number): GameState {

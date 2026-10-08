@@ -30,7 +30,7 @@ import {
 } from './board';
 import { ECONOMY, SKILL_BANDS } from './economy';
 import { mulberry32Step } from './rng';
-import { defaultAction, legalActions, raidTarget, saleOptions, swapGive } from './reducer';
+import { counterbuyOptions, defaultAction, legalActions, raidTarget, saleOptions, swapGive } from './reducer';
 import {
   completedGroups,
   propertyValue,
@@ -172,7 +172,7 @@ function travelScore(state: GameState, pid: PlayerId, target: number): number {
         return score + 5;
       }
       // Opponent property: only worth it for a winning takeover.
-      const cost = tollOf(state, target) + takeoverPrice(state, target);
+      const cost = tollOf(state, target) + takeoverPrice(state, target, ruleFlags(state.settings).chaseTakeover ? pid : undefined);
       const canTake =
         state.settings.takeover &&
         pr.level < ECONOMY.maxLevel &&
@@ -239,8 +239,14 @@ function landScore(state: GameState, pid: PlayerId, target: number): number {
   return travelScore(state, pid, target);
 }
 
-/** Value of rolling doubles (an extra roll, and a bonus card from version 2). */
-const DOUBLES_VALUE = 60;
+/**
+ * Version-3 CPU knobs (docs/BALANCE.md "Rules version 3"; the balance scripts sweep them with
+ * `npm run skill -- … --ai key=value`). `doublesValue`: what rolling doubles is worth (an extra roll
+ * and a bonus card). `investFactor`: start-invest only with this × the cost in hand (normal).
+ * `investReserve`: … and keep this × the toll reserve after paying. `chaseTake`: take over a built
+ * city for its value alone when the chase multiplier is at most this (0 = only for sets).
+ */
+export const AI_TUNING = { doublesValue: 60, investFactor: 3, investReserve: 2, chaseTake: 1.9 };
 
 /**
  * Expected score of a throw: Σ P(total) × landing score, + progress (salary per space) and the
@@ -258,7 +264,7 @@ function throwScore(state: GameState, pid: PlayerId, stride: 1 | 2, aim: 'low' |
     const steps = total * mult;
     score += w * (landScore(state, pid, (p.position + steps) % size) + steps * perStep);
   });
-  if (stride === 2 && p.consecutiveDoubles < ECONOMY.maxConsecutiveDoubles - 1) score += DOUBLES_VALUE / 6;
+  if (stride === 2 && p.consecutiveDoubles < ECONOMY.maxConsecutiveDoubles - 1) score += AI_TUNING.doublesValue / 6;
   return score;
 }
 
@@ -345,11 +351,55 @@ function bestSwap(state: GameState, pid: PlayerId, options?: readonly number[]):
   return best;
 }
 
+/** Two-dice chance of moving exactly `d` spaces in one roll (0 outside 2..12). */
+const twoDice = (d: number): number => (d >= 2 && d <= 12 ? (6 - Math.abs(d - 7)) / 36 : 0);
+
+/**
+ * Start investment (rules version 3): what raising `idx` a level is worth — the toll gain, weighted
+ * by how likely opponents are to land there on their next roll, more for a city in our own notice
+ * (it raises the block-buy price) or a complete colour group.
+ */
+function investScore(state: GameState, pid: PlayerId, idx: number): number {
+  const size = state.settings.spacesPerSide ?? 7;
+  let reach = 0;
+  for (const q of state.players) {
+    if (q.id === pid || q.bankrupt) continue;
+    reach += twoDice(distance(q.position, idx, size));
+  }
+  let score = toll10Gain(state, idx) * (1 + 4 * reach);
+  const g = groupOf(idx, size);
+  if (g && citiesInGroup(g, size).every((i) => state.properties[i]!.owner === pid)) score *= 1.3;
+  if (state.pendingWins?.some((w) => w.playerId === pid && w.members.includes(idx))) score += 200;
+  return score;
+}
+
+/**
+ * Block-buy (rules version 3): the cheapest buy that actually breaks an opponent's announced set,
+ * if affordable (easy keeps 300 back). Stopping a win is worth nearly any price.
+ */
+function chooseBlock(state: GameState, pid: PlayerId): Action | null {
+  const opts = counterbuyOptions(state, pid);
+  if (opts.length === 0) return null;
+  const p = state.players[pid]!;
+  const breaks = opts.filter((o) => {
+    const after: GameState = { ...state, properties: state.properties.map((pr) => (pr ? { ...pr } : pr)) };
+    after.properties[o.spaceIndex]!.owner = pid;
+    return !setVictory(after, o.ownerId);
+  });
+  const keep = p.cpuLevel === 'easy' ? 300 : 0;
+  const best = pickBest(breaks.filter((o) => p.cash - o.price >= keep), (o) => -o.price + (completesSet(state, pid, o.spaceIndex) ? 300 : 0));
+  return best ? { type: 'Counterbuy', playerId: pid, spaceIndex: best.spaceIndex } : null;
+}
+
 /** Choose an action for `playerId` in the current phase. Always legal. */
 export function chooseAction(state: GameState, playerId: PlayerId): Action {
   const ph = state.phase;
   if (ph.kind === 'gameOver') throw new Error('Game is over');
   if (ph.playerId !== playerId) throw new Error(`Not player ${playerId}'s decision`);
+  if (ph.kind === 'preRoll' || ph.kind === 'island' || ph.kind === 'travel') {
+    const block = chooseBlock(state, playerId);
+    if (block) return block;
+  }
   const p = state.players[playerId]!;
   const easy = p.cpuLevel === 'easy';
   const pass: Action = { type: 'Pass', playerId };
@@ -408,12 +458,28 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action {
       if (stopsWin && after >= 0) return { type: 'Takeover', playerId };
       const mine = completesSet(state, playerId, ph.spaceIndex) || setProgress(state, playerId, ph.spaceIndex) >= 0.5;
       if ((mine || blocks) && after >= reserve) return { type: 'Takeover', playerId };
+      // Chase takeover (version 3): a trailing buyer's discount makes a built-up city worth taking.
+      if (ph.multiplier !== undefined && ph.multiplier <= AI_TUNING.chaseTake && propertyAt(state, ph.spaceIndex).level >= 1 && after >= reserve * 1.5) {
+        return { type: 'Takeover', playerId };
+      }
       return pass;
     }
 
     case 'festival': {
       const best = pickBest(ph.options, (i) => tollOf(state, i) * 10 + priceOf(i, state.settings.spacesPerSide ?? 7) / 100);
       return best !== undefined ? { type: 'SetFestival', playerId, spaceIndex: best } : pass;
+    }
+
+    case 'invest': {
+      // Like building on landing: only with twice (easy: three times) the cost in hand.
+      const factor = easy ? AI_TUNING.investFactor + 1 : AI_TUNING.investFactor;
+      const keep = AI_TUNING.investReserve * reserveFor(state, playerId);
+      const affordable = ph.options.filter((i) => {
+        const cost = nextBuildCost(state, i) ?? Infinity;
+        return p.cash >= factor * cost && p.cash - cost >= keep;
+      });
+      const best = pickBest(affordable, (i) => investScore(state, playerId, i));
+      return best !== undefined ? { type: 'Invest', playerId, spaceIndex: best } : pass;
     }
 
     case 'freeUpgrade': {
