@@ -40,7 +40,10 @@ import type { Board } from '@/ui/board/Board';
 import { cardIcon, chip, groupColor, h, iconEl, money, setPlayerVars, spaceIcon, svgNode, TINT, tokenBadge, type ChipTone } from '@/ui/game/util';
 import type { Dice } from './Dice';
 import type { Stage } from './Stage';
-import { releaseVelocity } from './throw';
+import { flickAim, releaseVelocity, type ThrowAim } from './throw';
+import { SkillPad } from './SkillPad';
+import { skillThrowOn, strideChoiceOn } from './skill';
+import { skillGuideCard } from './skillGuide';
 
 interface PromptCtx {
   state: GameState;
@@ -53,6 +56,8 @@ interface PromptCtx {
   stage: Stage;
   /** Settings "굴리기 버튼 보이기": the roll button is shown beside the pad. */
   rollButton: boolean;
+  /** Strategy mode: show the skill throw's guide at this roll (first time), and mark it seen. */
+  skillGuide?: { show: boolean; seen: () => void };
 }
 
 interface PromptResult {
@@ -189,26 +194,54 @@ const GAUGE_MIN_MS = 300;
 
 /**
  * The roll: the stage centre is a pad (Stage.armPad, docs/DESIGN.md "Dice throw"). Press and hold
- * anywhere on it: the dice shake (rattle + haptic, and the B7 gauge swings while held); release
- * with a swipe: the dice are thrown in that direction (the release velocity over the last 80 ms,
- * in the stage's frame); release without one, or the keyboard (Enter / Space on the focused pad):
- * a weak toss forward. Leaving the pad before the release still throws (pointer capture); a
- * cancelled pointer only stops the shake. The throw never changes the result: the same `Roll`
- * (+ gauge) is dispatched and the engine's RNG decides. The roll button (Settings "굴리기 버튼
- * 보이기", off by default) works as before beside it.
+ * anywhere on it: the dice shake (rattle + haptic). Leaving the pad before the release still throws
+ * (pointer capture); a cancelled pointer only stops the shake. The engine's RNG decides the faces.
+ *
+ * - Casual mode: release with a swipe: the dice are thrown in that direction, as hard as the
+ *   release speed (the last 80 ms, in the stage's frame); release without one, or the keyboard
+ *   (Enter / Space on the focused pad): a weak toss forward. The B7 gauge (advanced rules of
+ *   versions 1–2) swings while held. The strength is cosmetic.
+ * - Strategy mode (`skillThrowOn`, docs/DESIGN.md "Skill throw"): the stride chips (one die /
+ *   two), the timing ring while held (the accuracy freezes when the drag starts), the aim arrow
+ *   (short = 작게, middle = 보통, long = 크게), and the release sends `Roll { stride, aim,
+ *   accuracy }` (no aim for 보통 or a tap) and throws along the arrow, as hard as it is long. The
+ *   keyboard rolls 보통 with the chosen stride. The first time a human rolls in strategy mode a
+ *   three-step guide opens (`ctx.skillGuide`).
+ *
+ * The roll button (Settings "굴리기 버튼 보이기", off by default) works as before beside the pad.
  */
 function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): PromptResult {
   const p = ctx.state.players[ph.playerId]!;
+  const skillOn = skillThrowOn(ctx.state.settings);
   const pad = ctx.stage.armPad(ctx.cpu);
+  if (skillOn) pad.setAttribute('aria-label', t('g.skill.pad'));
   let rollBtn: HTMLButtonElement | null = null;
   if (ctx.rollButton) {
     rollBtn = h('button', { class: 'roll-btn', type: 'button', 'data-action': 'Roll' }) as HTMLButtonElement;
     rollBtn.append(iconEl('dice-face-5', 'ico roll-ico'), h('span', { class: 'roll-label', text: t('g.roll') }));
   }
   const roll: Action = { type: 'Roll', playerId: ph.playerId };
-  // Dice gauge (rules = advanced): while held, a gauge swings low ↔ high (slow at the ends);
-  // releasing after GAUGE_MIN_MS sends where it was. A quick tap or the keyboard rolls neutral.
-  const gaugeOn = ruleFlags(ctx.state.settings).diceGauge && !ctx.cpu;
+  // Strategy mode: the stride chips, the ring and the arrow (the CPU hand drives the same pad).
+  ctx.stage.skill?.dispose();
+  const skill = skillOn
+    ? new SkillPad({
+        stage: ctx.stage,
+        dice: ctx.dice,
+        board: ctx.board,
+        position: p.position,
+        boardSize: boardOf(ctx.state).board.length,
+        express: !!p.expressPending,
+        color: playerColor(p.colorId).hex,
+        cpu: ctx.cpu,
+        strideChoice: strideChoiceOn(ctx.state.settings),
+      })
+    : null;
+  ctx.stage.skill = skill;
+  ctx.dice.setCount(2);
+  // Dice gauge (rules = advanced, versions 1–2; strategy mode replaces it): while held, a gauge
+  // swings low ↔ high (slow at the ends); releasing after GAUGE_MIN_MS sends where it was. A quick
+  // tap or the keyboard rolls neutral.
+  const gaugeOn = ruleFlags(ctx.state.settings).diceGauge && !skillOn && !ctx.cpu;
   const fill = h('i', { class: 'rg-fill' });
   const gaugeEl = gaugeOn
     ? h('div', { class: 'roll-gauge', 'aria-hidden': 'true' }, h('span', { class: 'rg-end', text: t('g.gauge.low') }), h('div', { class: 'rg-track' }, fill), h('span', { class: 'rg-end', text: t('g.gauge.high') }))
@@ -223,13 +256,23 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
     let fired = false;
     let heldAt = 0;
     let samples: [number, number, number][] = [];
-    const fire = (aim: { x: number; y: number } | null): void => {
+    const fire = (aim: ThrowAim | null, extra: Partial<Extract<Action, { type: 'Roll' }>> = {}): void => {
       if (fired) return;
       fired = true;
       stopGauge?.();
       ctx.dice.shake(false);
       ctx.dice.aim(aim);
-      ctx.act(gauge === undefined ? roll : { ...roll, gauge });
+      ctx.act(gauge === undefined ? { ...roll, ...extra } : { ...roll, ...extra, gauge });
+    };
+    /** A strategy roll from the pad's state (the keyboard: 보통 with the chosen stride). */
+    const fireSkill = (keyboard: boolean): void => {
+      if (!skill) return;
+      if (keyboard) {
+        fire(null, { stride: skill.stride });
+        return;
+      }
+      const r = skill.release();
+      fire(r.throwAim, { stride: r.stride, accuracy: r.accuracy, ...(r.aim ? { aim: r.aim } : {}) });
     };
     const bind = (el: HTMLElement, flick: boolean): void => {
       el.addEventListener('pointerdown', (e) => {
@@ -240,6 +283,7 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
         samples = [[e.clientX, e.clientY, e.timeStamp]];
         ctx.dice.stopInvite();
         ctx.dice.shake(true);
+        skill?.press();
         if (gaugeOn) {
           heldAt = performance.now();
           stopGauge = onFrame((now) => {
@@ -250,22 +294,31 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
           });
         }
       });
-      if (flick) {
-        el.addEventListener('pointermove', (e) => {
-          if (active !== el) return;
-          samples.push([e.clientX, e.clientY, e.timeStamp]);
-          if (samples.length > 48) samples.splice(0, samples.length - 48);
-        });
-      }
+      el.addEventListener('pointermove', (e) => {
+        if (active !== el) return;
+        if (skill) {
+          // The arrow: the finger's way from the press point, in the stage's frame.
+          if (flick) skill.drag(ctx.stage.toLocal({ x: e.clientX - samples[0]![0], y: e.clientY - samples[0]![1] }));
+          return;
+        }
+        if (!flick) return;
+        samples.push([e.clientX, e.clientY, e.timeStamp]);
+        if (samples.length > 48) samples.splice(0, samples.length - 48);
+      });
       el.addEventListener('pointerup', (e) => {
         if (active !== el) return;
         active = null;
         el.classList.remove('is-held');
-        let aim: { x: number; y: number } | null = null;
+        if (skill) {
+          if (flick) skill.drag(ctx.stage.toLocal({ x: e.clientX - samples[0]![0], y: e.clientY - samples[0]![1] }));
+          fireSkill(false);
+          return;
+        }
+        let aim: ThrowAim | null = null;
         if (flick) {
           samples.push([e.clientX, e.clientY, e.timeStamp]);
           const v = releaseVelocity(samples);
-          if (v.x || v.y) aim = ctx.stage.toLocal(v);
+          if (v.x || v.y) aim = flickAim(ctx.stage.toLocal(v));
         }
         fire(aim);
       });
@@ -276,10 +329,13 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
         stopGauge?.();
         stopGauge = null;
         gauge = undefined;
+        skill?.cancel();
         ctx.dice.shake(false);
       });
       el.addEventListener('click', (e) => {
-        if ((e as MouseEvent).detail === 0) fire(null); // keyboard: a weak toss
+        if ((e as MouseEvent).detail !== 0) return; // keyboard: a weak toss (보통)
+        if (skill) fireSkill(true);
+        else fire(null);
       });
     };
     bind(pad, true);
@@ -288,18 +344,26 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
   const tags = h('div', { class: 'pc-tags' });
   if (ph.rollAgain) tags.append(tag(t('g.doubles.again'), 'gold', 'dice-face-6'));
   if (p.expressPending) tags.append(tag(t('g.express'), 'gold', 'hub-rail'));
-  const el = h('div', { class: `pcard pc-roll${ctx.cpu ? ' is-cpu' : ''}${rollBtn ? ' has-button' : ''}` });
+  const el = h('div', { class: `pcard pc-roll${ctx.cpu ? ' is-cpu' : ''}${rollBtn ? ' has-button' : ''}${skill ? ' is-skill' : ''}` });
   if (tags.childNodes.length) el.append(tags);
+  if (skill && skill.chipsEl.childNodes.length) el.append(skill.chipsEl);
   if (rollBtn) el.append(rollBtn);
   if (gaugeEl) el.append(gaugeEl);
   if (!ctx.cpu) {
     // Where the button was: a hint strip (the button, when shown, keeps its own hint).
-    const text = rollBtn ? t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') : t('g.roll.flick');
+    const text = rollBtn ? t(gaugeOn ? 'g.gauge.hint' : 'g.roll.hold') : t(skill ? 'g.skill.hint' : 'g.roll.flick');
     const hint = h('div', { class: `roll-hint is-blink${rollBtn ? '' : ' is-strip'}`, text });
     el.append(hint);
     if (!rollBtn && gaugeOn) el.append(h('div', { class: 'roll-hint', text: t('g.gauge.hint') }));
     // "Throw me": the dice wobble (with a rattle) and the hint blinks when the human's roll comes up.
     ctx.dice.invite(hint);
+    // Strategy mode, the first time a human rolls: the three-step guide.
+    if (skill && ctx.skillGuide?.show) {
+      const done = ctx.skillGuide.seen;
+      queueMicrotask(() => {
+        if (ctx.stage.skill === skill) ctx.stage.showInfo(skillGuideCard(() => ctx.stage.hideInfo()), done);
+      });
+    }
   }
   return { el };
 }

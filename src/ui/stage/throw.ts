@@ -16,14 +16,16 @@
  * The throw's direction and strength never influence the result: the engine's seeded RNG has
  * already decided the faces (`reduce`), the throw only arrives on them.
  *
- * A flick (release speed ≥ 300 px/s) throws in its direction; its strength is the release speed
- * (`flickLaunch`): the launch speed and the roll length grow monotonically with it, between a
- * gentle minimum and a hard maximum, so a fast flick flies faster and farther (more wall hits) and
- * a slow one stays short. For a flick the walls are the SCREEN's edges (`screenWalls`: the
- * viewport in the stage's frame, so the dice fly over the board and the panels). A
- * press-and-release without a swipe (or the keyboard) is a weak toss forward on the same code
- * path, inside the dice area (`tossBox`): a short hop, at most one soft wall touch, ~1.06 s.
- * Reduced motion keeps the in-place roll (`rollMode`).
+ * A throw is aimed (`ThrowAim`): a direction and a strength 0..1. In a casual game the strength is
+ * the release speed of a flick (≥ 300 px/s, `flickStrength`); in a strategy game (the skill throw,
+ * `skill.ts`) it is the LENGTH of the aim arrow (`dragStrength`). Either way `launchOf` turns it
+ * into the launch speed and the roll length, monotonically, between a gentle minimum and a hard
+ * maximum, so a strong throw flies faster and farther (more wall hits) and a weak one stays short.
+ * For a flick the walls are the SCREEN's edges (`screenWalls`: the viewport in the stage's frame,
+ * so the dice fly over the board and the panels). A press-and-release without a swipe or drag (or
+ * the keyboard) is a weak toss forward on the same code path, inside the dice area (`tossBox`): a
+ * short hop, at most one soft wall touch, ~1.06 s. One die (stride 1) or two: every function takes
+ * the dice it is given. Reduced motion keeps the in-place roll (`rollMode`).
  */
 import { cubicBezier } from '@/ui/fx/quantize';
 
@@ -44,6 +46,16 @@ export interface Box {
 export interface Pose {
   from: [number, number];
   to: [number, number];
+}
+
+/**
+ * A throw's aim: the direction (stage px, any length) and the strength 0..1 (a casual flick's
+ * release speed, `flickStrength`, or a strategy drag's length, `dragStrength`). Null = a weak toss.
+ */
+export interface ThrowAim {
+  x: number;
+  y: number;
+  strength: number;
 }
 
 export const THROW = {
@@ -80,7 +92,7 @@ export const THROW = {
   maxClacks: 4,
   /** Rolling: cube turn per distance, as a fraction of a true roll (distance / radius). */
   rolling: 0.8,
-  /** A CPU's flick: release speed range (px/s), picked per turn (`cpuFlick`): the medium range. */
+  /** A CPU's flick in a casual game: release speed range (px/s), picked per turn (`cpuFlick`): the medium range. */
   cpuFlick: [900, 2200] as const,
   /** How far (die sizes) a lifted die may rise above the top wall's centre line. */
   liftOver: 0.15,
@@ -165,7 +177,7 @@ interface DieTrack {
 export interface Hit {
   /** ms after the throw starts. */
   t: number;
-  die: 0 | 1;
+  die: number;
   /** 0..1 (impact speed). */
   strength: number;
 }
@@ -177,10 +189,11 @@ export interface ThrowPlan {
   /** The walls (die centres) and the die size. */
   box: Box;
   ds: number;
-  dice: [DieTrack, DieTrack];
+  /** One track per thrown die (one for stride 1, else two). */
+  dice: DieTrack[];
   /** Wall clacks to play (≤ THROW.maxClacks). */
   hits: Hit[];
-  /** Launch direction (unit) and the launch speed (px/s): a flick's from its release speed (`flickLaunch`). */
+  /** Launch direction (unit) and the launch speed (px/s): a flick's from its strength (`launchOf`). */
   dir: Vec;
   speed: number;
   /** Scale of the landing bounce's lift. */
@@ -224,13 +237,13 @@ interface Launch {
 
 interface Sim {
   tracks: { xs: number[]; ys: number[]; bounces: number; rest: Vec }[];
-  hits: { t: number; die: 0 | 1; speed: number }[];
+  hits: { t: number; die: number; speed: number }[];
 }
 
 /** Speed profile: 1 at launch, 0 (at rest) at the end of the roll. */
 const profile = (u: number): number => (u >= 1 ? 0 : (1 - Math.max(0, u)) ** 2);
 
-function simulate(box: Box, homes: Vec[], ds: number, launches: Launch[], e: number = THROW.restitution): Sim {
+function simulate(box: Box, homes: readonly Vec[], ds: number, launches: Launch[], e: number = THROW.restitution): Sim {
   const dt = THROW.stepMs;
   const nd = homes.length;
   let end = 0;
@@ -257,13 +270,13 @@ function simulate(box: Box, homes: Vec[], ds: number, launches: Launch[], e: num
       // Walls: reflect the normal component (restitution), keep most of the tangential one.
       if ((x < box.left && wx[i]! < 0) || (x > box.right && wx[i]! > 0)) {
         tracks[i]!.bounces++;
-        hits.push({ t, die: i as 0 | 1, speed: Math.abs(wx[i]!) * fi });
+        hits.push({ t, die: i, speed: Math.abs(wx[i]!) * fi });
         wx[i] = -wx[i]! * e;
         wy[i] = wy[i]! * keep;
       }
       if ((y < box.top && wy[i]! < 0) || (y > box.bottom && wy[i]! > 0)) {
         tracks[i]!.bounces++;
-        hits.push({ t, die: i as 0 | 1, speed: Math.abs(wy[i]!) * fi });
+        hits.push({ t, die: i, speed: Math.abs(wy[i]!) * fi });
         wy[i] = -wy[i]! * e;
         wx[i] = wx[i]! * keep;
       }
@@ -338,7 +351,7 @@ function rolling(xs: number[], ys: number[], ds: number): [Float64Array, Float64
 }
 
 /** Grow `box` to hold the homes (a cramped layout never puts a die outside its own walls). */
-function fitBox(box: Box, homes: [Vec, Vec]): Box {
+function fitBox(box: Box, homes: readonly Vec[]): Box {
   const b = { ...box };
   for (const h of homes) {
     b.left = Math.min(b.left, h.x);
@@ -350,21 +363,26 @@ function fitBox(box: Box, homes: [Vec, Vec]): Box {
 }
 
 /** Flick strength 0..1 of a release speed (px/s): linear from `flickMin` to `flickMax`, clamped. */
-function flickStrength(speed: number): number {
+export function flickStrength(speed: number): number {
   return Math.min(1, Math.max(0, (speed - THROW.flickMin) / (THROW.flickMax - THROW.flickMin)));
 }
 
-/** Is a release velocity a flick (else a weak toss)? */
+/** Is a release velocity a flick (else a weak toss)? (casual games) */
 export function isFlick(v: Vec | null): boolean {
   return !!v && len(v) >= THROW.flickMin;
 }
 
+/** A casual flick's aim: its direction and the strength of its release speed; null = a toss. */
+export function flickAim(v: Vec | null): ThrowAim | null {
+  return v && isFlick(v) ? { x: v.x, y: v.y, strength: flickStrength(len(v)) } : null;
+}
+
 /**
- * The launch of a flick released at `speed` px/s: its strength, launch speed (die sizes / s) and
- * roll length (ms at speed 1). Monotonic in the release speed, clamped at both ends.
+ * The launch of a throw of `strength` (0..1): launch speed (die sizes / s) and roll length (ms at
+ * speed 1). Monotonic in the strength, clamped at both ends.
  */
-export function flickLaunch(speed: number): { strength: number; speed: number; roll: number } {
-  const s = flickStrength(speed);
+export function launchOf(strength: number): { strength: number; speed: number; roll: number } {
+  const s = Math.min(1, Math.max(0, Number.isFinite(strength) ? strength : 0));
   return {
     strength: s,
     speed: THROW.launch[0] + (THROW.launch[1] - THROW.launch[0]) * s,
@@ -373,29 +391,38 @@ export function flickLaunch(speed: number): { strength: number; speed: number; r
 }
 
 /**
- * Plan a throw: `v` = release velocity (px/s, stage frame) or null; `homes` = the dice's places in
- * the pair; `poses` = start and final cube rotations; `box` = a flick's walls (die centres: the
- * screen's edges, `screenWalls`), `tossBox` = a toss's (the dice area; default `box`).
- * Deterministic for a given `rand`.
+ * The launch of a flick released at `speed` px/s (casual games): `launchOf` its strength.
  */
-export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: number; v: Vec | null; poses: [Pose, Pose]; rand?: () => number }): ThrowPlan {
+export function flickLaunch(speed: number): { strength: number; speed: number; roll: number } {
+  return launchOf(flickStrength(speed));
+}
+
+/**
+ * Plan a throw: `aim` = direction (stage frame) + strength, or null (a toss); `homes` = the
+ * dice's places in the pair (one die or two); `poses` = start and final cube rotations, one per
+ * die; `box` = a flick's walls (die centres: the screen's edges, `screenWalls`), `tossBox` = a
+ * toss's (the dice area; default `box`). Deterministic for a given `rand`.
+ */
+export function planThrow(o: { box: Box; tossBox?: Box; homes: readonly Vec[]; ds: number; aim: ThrowAim | null; poses: readonly Pose[]; rand?: () => number }): ThrowPlan {
   const rand = o.rand ?? Math.random;
   const ds = o.ds;
-  const flick = isFlick(o.v);
+  const nd = o.homes.length;
+  const aim = o.aim && len(o.aim) > 1e-9 ? o.aim : null;
+  const flick = !!aim;
   const box = fitBox(flick ? o.box : (o.tossBox ?? o.box), o.homes);
-  const speedIn = o.v ? len(o.v) : 0;
   // Small per-throw variety (look only): the two dice leave a little apart, one a bit slower.
   const jitter = (rand() - 0.5) * 4;
   const spread: [number, number] = [-2.5 + jitter, 2.5 + jitter];
   const slow = 0.92 + rand() * 0.04;
-  let best: { sim: Sim; launches: [Launch, Launch]; cost: number } | null = null;
+  let best: { sim: Sim; launches: Launch[]; cost: number } | null = null;
   let dir: Vec;
   let speed: number;
-  if (flick) {
-    dir = { x: o.v!.x / speedIn, y: o.v!.y / speedIn };
-    const L = flickLaunch(speedIn);
+  if (aim) {
+    const al = len(aim);
+    dir = { x: aim.x / al, y: aim.y / al };
+    const L = launchOf(aim.strength);
     const roll = L.roll;
-    // The launch speed is the flick's (monotonic in the release speed): the planner only picks
+    // The launch speed is the throw's (monotonic in its strength): the planner only picks
     // the angles (within ~10 degrees) and the trailing die's small slowdown, for the throw whose
     // dice come to rest nearest home (the shortest roll back).
     const w0 = L.speed * ds;
@@ -403,7 +430,7 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: n
     const scale = (d: Vec, k: number): Vec => ({ x: d.x * k, y: d.y * k });
     const homeMiss = (t: Sim['tracks'][number], h: Vec): number => len({ x: t.rest.x - h.x, y: t.rest.y - h.y }) / ds;
     // The die ahead in the flick's direction leaves first (the other would run into it).
-    const trail = (o.homes[1].x - o.homes[0].x) * dir.x + (o.homes[1].y - o.homes[0].y) * dir.y >= 0 ? 0 : 1;
+    const trail = nd < 2 ? -1 : (o.homes[1]!.x - o.homes[0]!.x) * dir.x + (o.homes[1]!.y - o.homes[0]!.y) * dir.y >= 0 ? 0 : 1;
     const launch = (i: number, m: number, off: number): Launch => ({ w: scale(rot(dir, off), w0 * m), delay: i === trail ? THROW.delay : 0, roll: i === trail ? roll * 0.97 : roll });
     const solo = (i: number, want: { m: number; off: number }, ms: readonly number[], offs: readonly number[]): { m: number; off: number; cost: number }[] => {
       const out: { m: number; off: number; cost: number }[] = [];
@@ -419,17 +446,25 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: n
     };
     // The leading die at the flick's speed, within 8 degrees of its spread; the trailing one a
     // little slower, near its spread from the leader (wider if that keeps the two apart).
-    const lead = 1 - trail;
-    const leads = solo(lead, { m: 1, off: spread[lead]! }, [1], [0, 4, -4, 8, -8]);
-    const trails = solo(trail, { m: slow, off: leads[0]!.off + spread[trail]! - spread[lead]! }, [1, 0.96, 1.04], [0, 3, -3, 6, -6, 10, -10]);
-    for (const a of leads.slice(0, 3)) {
-      for (const b of trails) {
-        const launches = [] as unknown as [Launch, Launch];
-        launches[lead] = launch(lead, a.m, a.off);
-        launches[trail] = launch(trail, b.m, b.off);
-        const sim = simulate(box, o.homes, ds, launches, THROW.edgeRestitution);
-        const cost = sim.tracks.reduce((c, t, i) => c + homeMiss(t, o.homes[i]!), 0) + (a.cost + b.cost) * 0.5;
-        if (!best || cost < best.cost) best = { sim, launches, cost };
+    if (nd < 2) {
+      // One die (stride 1): within 8 degrees of the aim, nothing to keep apart.
+      const a = solo(0, { m: 1, off: jitter * 0.5 }, [1], [0, 4, -4, 8, -8])[0]!;
+      const launches = [launch(0, a.m, a.off)];
+      best = { sim: simulate(box, o.homes, ds, launches, THROW.edgeRestitution), launches, cost: a.cost };
+    } else {
+      const tr = trail as 0 | 1;
+      const lead = 1 - tr;
+      const leads = solo(lead, { m: 1, off: spread[lead]! }, [1], [0, 4, -4, 8, -8]);
+      const trails = solo(tr, { m: slow, off: leads[0]!.off + spread[tr] - spread[lead]! }, [1, 0.96, 1.04], [0, 3, -3, 6, -6, 10, -10]);
+      for (const a of leads.slice(0, 3)) {
+        for (const b of trails) {
+          const launches: Launch[] = [];
+          launches[lead] = launch(lead, a.m, a.off);
+          launches[tr] = launch(tr, b.m, b.off);
+          const sim = simulate(box, o.homes, ds, launches, THROW.edgeRestitution);
+          const cost = sim.tracks.reduce((c, t, i) => c + homeMiss(t, o.homes[i]!), 0) + (a.cost + b.cost) * 0.5;
+          if (!best || cost < best.cost) best = { sim, launches, cost };
+        }
       }
     }
   } else {
@@ -437,11 +472,11 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: n
     dir = rot({ x: 0, y: -1 }, (rand() - 0.5) * 8);
     let w0 = (3 * THROW.tossTravel * ds) / (THROW.tossRoll / 1000);
     for (let k = 0; k < 8; k++) {
-      const launches = [0, 1].map((i) => ({
-        w: ((d) => ({ x: d.x * w0 * (i ? slow : 1), y: d.y * w0 * (i ? slow : 1) }))(rot(dir, (i ? 7 : -7) + jitter)),
+      const launches: Launch[] = o.homes.map((_, i) => ({
+        w: ((d) => ({ x: d.x * w0 * (i ? slow : 1), y: d.y * w0 * (i ? slow : 1) }))(rot(dir, nd < 2 ? jitter : (i ? 7 : -7) + jitter)),
         delay: i ? THROW.delay : 0,
         roll: THROW.tossRoll,
-      })) as [Launch, Launch];
+      }));
       const sim = simulate(box, o.homes, ds, launches);
       best = { sim, launches, cost: 0 };
       if (sim.tracks.every((t) => t.bounces <= THROW.tossBounces)) break;
@@ -451,7 +486,7 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: n
   }
   const { sim, launches } = best!;
   const from = flick ? THROW.homeFrom : THROW.tossHomeFrom;
-  const dice = [0, 1].map((i) => {
+  const dice = o.homes.map((_, i) => {
     const tr = sim.tracks[i]!;
     const l = launches[i]!;
     const home = o.homes[i]!;
@@ -489,7 +524,7 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: n
       bounces: tr.bounces,
       spin: [axisSpin(pose.from[0], pose.to[0], R[0]!), axisSpin(pose.from[1], pose.to[1], R[1]!)],
     } satisfies DieTrack;
-  }) as [DieTrack, DieTrack];
+  });
   const total = Math.max(...dice.map((d) => d.delay + d.roll));
   // Clacks: the first wall hits that are heard, spaced out, at most `maxClacks`.
   const hits: Hit[] = [];
@@ -508,8 +543,8 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: [Vec, Vec]; ds: n
 }
 
 /** One die's state `t` ms into the throw, before the pair's separation (`samplePair`). */
-function sampleDie(plan: ThrowPlan, i: 0 | 1, t: number): DieState {
-  const d = plan.dice[i];
+function sampleDie(plan: ThrowPlan, i: number, t: number): DieState {
+  const d = plan.dice[i]!;
   const u = Math.min(1, Math.max(0, (t - d.delay) / d.roll));
   const n = d.xs.length;
   const fk = Math.min(n - 1, Math.max(0, t / THROW.stepMs));
@@ -530,9 +565,11 @@ function sampleDie(plan: ThrowPlan, i: 0 | 1, t: number): DieState {
   return { x, y, rx: sx0.from + R[0]! * sx0.scale + sx0.fix * s, ry: sy0.from + R[1]! * sy0.scale + sy0.fix * s, ty: lift, sx, sy };
 }
 
-/** Both dice `t` ms into the throw; while steering home they are kept from overlapping. */
-export function samplePair(plan: ThrowPlan, t: number): [DieState, DieState] {
-  const p: [DieState, DieState] = [sampleDie(plan, 0, t), sampleDie(plan, 1, t)];
+/** Every thrown die `t` ms into the throw; while steering home two dice are kept from overlapping. */
+export function samplePair(plan: ThrowPlan, t: number): DieState[] {
+  const all = plan.dice.map((_, i) => sampleDie(plan, i, t));
+  if (all.length < 2) return all;
+  const p = all as [DieState, DieState];
   const minD = plan.ds * 1.02;
   const dx = p[1].x - p[0].x;
   const dy = p[1].y - p[0].y;
@@ -551,8 +588,8 @@ export function samplePair(plan: ThrowPlan, t: number): [DieState, DieState] {
 }
 
 /** One die's state `t` ms into the throw. */
-export function sampleThrow(plan: ThrowPlan, i: 0 | 1, t: number): DieState {
-  return samplePair(plan, t)[i];
+export function sampleThrow(plan: ThrowPlan, i: number, t: number): DieState {
+  return samplePair(plan, t)[i]!;
 }
 
 /** Bounding box of every die centre over the throw (stage px). */
@@ -608,6 +645,18 @@ export function frameFrom(homes: [Vec, Vec], centres: [Vec, Vec]): Frame {
   if (Math.abs(a - q) < 2) a = q === -180 ? 180 : q;
   const r = rot(homes[0], a);
   return { ox: centres[0].x - s * r.x, oy: centres[0].y - s * r.y, a, s };
+}
+
+/**
+ * The frame from ONE die (stride 1): its home, its measured screen centre, the Stage's turn
+ * (degrees, quarter turns) and the scale (screen px per pair px: the die's measured size / its
+ * layout size). One point carries no turn, so the Stage's own angle is used.
+ */
+export function frameFromOne(home: Vec, centre: Vec, angle: number, s: number): Frame {
+  let a = ((((angle + 180) % 360) + 360) % 360) - 180;
+  if (a === -180) a = 180;
+  const r = rot(home, a);
+  return { ox: centre.x - s * r.x, oy: centre.y - s * r.y, a, s };
 }
 
 /** A pair-px point on the screen. */

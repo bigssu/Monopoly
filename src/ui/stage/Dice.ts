@@ -20,7 +20,8 @@ import { haptic } from '@/ui/audio/haptics';
 import { anim, D, headless, isHeld, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
 import { h, isDevHook } from '@/ui/game/util';
-import { bounceAt, frameFrom, isFlick, planThrow, rollMode, sampleThrow, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowPlan, type Vec } from './throw';
+import { rolledFaces } from './skill';
+import { bounceAt, frameFrom, frameFromOne, planThrow, rollMode, sampleThrow, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowAim, type ThrowPlan, type Vec } from './throw';
 
 const PIPS: Record<number, Array<[number, number]>> = {
   1: [[50, 50]],
@@ -327,9 +328,10 @@ export interface ThrowRecord {
   mode: 'instant' | 'inplace' | 'throw';
   path: DicePath | null;
   kind: 'flick' | 'toss' | null;
-  /** The release velocity the throw was aimed with (stage px/s), if any. */
-  aim: Vec | null;
-  faces: [number, number];
+  /** The aim the throw was thrown with (direction in stage px + strength 0..1), if any. */
+  aim: ThrowAim | null;
+  /** The faces shown: one for stride 1, else two. */
+  faces: number[];
   /** Planned length (ms at speed 1) and the measured start / end (performance.now). */
   planMs: number;
   startedAt: number;
@@ -399,7 +401,9 @@ export class Dice {
   private shakeTimer = 0;
   private pair: HTMLElement;
   private stopTumble: (() => void) | null = null;
-  private aimV: Vec | null = null;
+  private aimV: ThrowAim | null = null;
+  /** Dice in play: 1 (stride 1, the second die hidden, the first centred) or 2. */
+  private count: 1 | 2 = 2;
   private inviteStop: (() => void) | null = null;
   /**
    * Set by the Stage: the dice area's walls (die edges) in the pair's own px, measured when a throw
@@ -417,9 +421,10 @@ export class Dice {
 
   show(values: [number, number] | null): void {
     this.stopTumble?.();
-    const [a, b] = values ?? [5, 2];
-    this.dice[0].set(a);
-    this.dice[1].set(b);
+    // A one-die roll (rules v3, stride 1) is `[die, 0]`: one die shows, centred.
+    const faces = rolledFaces(values ?? [5, 2]);
+    this.setCount(faces.length === 1 ? 1 : 2);
+    faces.forEach((n, i) => this.dice[i]!.set(n));
     this.el.classList.remove('is-doubles');
   }
 
@@ -436,10 +441,32 @@ export class Dice {
     }
   }
 
-  /** The next roll is thrown with this release velocity (stage px/s); null = a weak toss forward. */
-  aim(v: Vec | null): void {
-    this.aimV = v;
+  /** The next roll is thrown with this aim (direction in stage px + strength); null = a weak toss forward. */
+  aim(a: ThrowAim | null): void {
+    this.aimV = a;
   }
+
+  /**
+   * One die or two (strategy mode's stride chips; a one-die roll). One: the second die is hidden
+   * (`.is-single`) and the first stands centred where the pair stood.
+   */
+  setCount(n: 1 | 2): void {
+    if (n === this.count) return;
+    this.count = n;
+    this.el.classList.toggle('is-single', n === 1);
+  }
+
+  get diceCount(): 1 | 2 {
+    return this.count;
+  }
+
+  /** The dice in play (the hidden second die is not thrown). */
+  private get live(): Die[] {
+    return this.dice.slice(0, this.count);
+  }
+
+  /** The Stage's turn (degrees): a one-die throw's frame (one point carries no turn). Set by the Stage. */
+  turn: (() => number) | null = null;
 
   /**
    * A human's turn: the pair wobbles three times (~1.2 s), each lean with a soft rattle, and the
@@ -513,7 +540,10 @@ export class Dice {
     this.inviteStop = null;
   }
 
-  async roll(a: number, b: number, doubles: boolean): Promise<void> {
+  /** Throw the dice in play onto `faces` (one face for one die, else two). */
+  async roll(faces: readonly number[], doubles: boolean): Promise<void> {
+    this.setCount(faces.length === 1 ? 1 : 2);
+    const fs = faces.slice(0, this.count);
     this.shake(false);
     this.stopInvite();
     this.el.classList.remove('is-doubles');
@@ -525,11 +555,11 @@ export class Dice {
     const edges = live && !reducedMotion() ? (this.arena?.() ?? null) : null;
     const mode = rollMode({ headless: !live, reduced: reducedMotion(), measured: !!edges });
     const rec: ThrowRecord | null = diceDev
-      ? { mode, path: null, kind: null, aim, faces: [a, b], planMs: 0, startedAt: performance.now(), endedAt: null, bounces: [], clacks: 0, travel: 0, box: null, bounds: null, view: null, screen: null, homes: null, speed: 0, pathLen: 0 }
+      ? { mode, path: null, kind: null, aim, faces: [...fs], planMs: 0, startedAt: performance.now(), endedAt: null, bounces: [], clacks: 0, travel: 0, box: null, bounds: null, view: null, screen: null, homes: null, speed: 0, pathLen: 0 }
       : null;
     if (rec) diceDev!.log.push(rec);
-    if (mode === 'throw') await this.throwDice(a, b, aim, edges!, rec);
-    else await this.tumble([this.dice[0].plan(a, 0, 1), this.dice[1].plan(b, 60, -1)]);
+    if (mode === 'throw') await this.throwDice(fs, aim, edges!, rec);
+    else await this.tumble(fs.map((n, i) => this.dice[i]!.plan(n, i * 60, i ? -1 : 1)));
     if (rec) rec.endedAt = performance.now();
     sfx.play('dice-land');
     haptic('light');
@@ -552,25 +582,23 @@ export class Dice {
   }
 
   /**
-   * Throw both dice (throw.ts) onto faces a, b: a flick off the screen's edges (in a flight layer,
-   * `openFlight`), a toss inside `edges` (the dice area's die-edge walls, pair px).
+   * Throw the dice in play (throw.ts) onto `faces`: a flick off the screen's edges (in a flight
+   * layer, `openFlight`), a toss inside `edges` (the dice area's die-edge walls, pair px).
    */
-  private throwDice(a: number, b: number, aim: Vec | null, edges: Box, rec: ThrowRecord | null): Promise<void> {
+  private throwDice(faces: readonly number[], aim: ThrowAim | null, edges: Box, rec: ThrowRecord | null): Promise<void> {
     this.stopTumble?.();
     const { ds, gap } = this.sizes();
-    const homes: [Vec, Vec] = [
-      { x: ds / 2, y: ds / 2 },
-      { x: ds * 1.5 + gap, y: ds / 2 },
-    ];
+    // One die stands alone in the pair (the second is hidden): its home is the pair's only place.
+    const homes: Vec[] = faces.map((_, i) => ({ x: ds / 2 + i * (ds + gap), y: ds / 2 }));
     // A toss's walls for the die CENTRES: half a die in, a little more at the top (the landing
     // bounce's lift stays under the round line) and the bottom (the contact shadow).
     const tossBox: Box = { left: edges.left + ds / 2, right: edges.right - ds / 2, top: edges.top + ds * 0.75, bottom: edges.bottom - ds * 0.7 };
-    const poses = [a, b].map((n, i) => {
+    const poses = faces.map((n, i) => {
       const from = this.dice[i]!.startPose();
       return { from, to: this.dice[i]!.land(n) };
-    }) as [{ from: [number, number]; to: [number, number] }, { from: [number, number]; to: [number, number] }];
-    const flight = isFlick(aim) ? this.openFlight(homes, ds) : null;
-    const plan = planThrow({ box: flight?.walls ?? tossBox, tossBox, homes, ds, v: aim, poses });
+    });
+    const flight = aim ? this.openFlight(homes, ds) : null;
+    const plan = planThrow({ box: flight?.walls ?? tossBox, tossBox, homes, ds, aim, poses });
     if (rec) {
       rec.path = this.path;
       rec.kind = plan.kind;
@@ -604,18 +632,17 @@ export class Dice {
    * layout read when the throw starts); the screen walls are the layer's box less a small margin.
    * Removed at the landing.
    */
-  private openFlight(homes: [Vec, Vec], ds: number): Flight | null {
+  private openFlight(homes: Vec[], ds: number): Flight | null {
     const root = this.el.closest('.game') ?? document.body;
     const layer = h('div', { class: 'dice-fly', 'aria-hidden': 'true' });
     const frame = h('div', { class: 'dice-fly-frame' });
     layer.append(frame);
     root.append(layer);
     const lr = layer.getBoundingClientRect();
-    const centres = this.dice.map((d) => {
-      const r = d.el.getBoundingClientRect();
-      return { x: r.left + r.width / 2 - lr.left, y: r.top + r.height / 2 - lr.top };
-    }) as [Vec, Vec];
-    const f = frameFrom(homes, centres);
+    const rects = this.live.map((d) => d.el.getBoundingClientRect());
+    const centres = rects.map((r) => ({ x: r.left + r.width / 2 - lr.left, y: r.top + r.height / 2 - lr.top }));
+    // Two dice give the turn and the scale; one die gives the scale, the Stage the turn.
+    const f = homes.length > 1 ? frameFrom([homes[0]!, homes[1]!], [centres[0]!, centres[1]!]) : frameFromOne(homes[0]!, centres[0]!, this.turn?.() ?? 0, rects[0]!.width / ds);
     if (!(lr.width > ds && lr.height > ds && f.s > 0 && Number.isFinite(f.s + f.ox + f.oy))) {
       layer.remove();
       return null;
@@ -685,7 +712,7 @@ export class Dice {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${hgt}px`;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || typeof ctx.roundRect !== 'function') return this.flyDom(plan, plan.dice.map((d) => d.home) as [Vec, Vec], ds, flight, rec);
+    if (!ctx || typeof ctx.roundRect !== 'function') return this.flyDom(plan, plan.dice.map((d) => d.home), ds, flight, rec);
     const sp = sprites(ds, 1);
     let dirty: [number, number, number, number][] = [];
     const draw = (t: number): void => {
@@ -693,7 +720,7 @@ export class Dice {
       ctx.globalAlpha = 1;
       for (const [x, y, dw, dh] of dirty) ctx.clearRect(x, y, dw, dh);
       dirty = [];
-      for (const i of [0, 1] as const) {
+      for (let i = 0; i < plan.dice.length; i++) {
         const s = sampleThrow(plan, i, t);
         dirty.push(drawCube(ctx, sp, s.rx, s.ry, s.x - left, s.y - top + s.ty * ds, s.sx, s.sy));
       }
@@ -717,13 +744,14 @@ export class Dice {
    * moved (translate + the landing squash) on the 30 Hz clock: one layer per die while flying,
    * no canvas at all.
    */
-  private flyDom(plan: ThrowPlan, homes: [Vec, Vec], ds: number, flight: Flight | null, rec: ThrowRecord | null): Promise<void> {
+  private flyDom(plan: ThrowPlan, homes: Vec[], ds: number, flight: Flight | null, rec: ThrowRecord | null): Promise<void> {
+    const live = this.live;
     if (rec) rec.path = 'dom';
     // A flick: the two cubes move up into the flight layer (at their homes in its frame); an
     // invisible stand-in of the same size keeps each one's place in the pair.
     const moved: [HTMLElement, HTMLElement][] = [];
     if (flight) {
-      this.dice.forEach((d, i) => {
+      live.forEach((d, i) => {
         const ph = h('div', { class: 'die die-ph' });
         d.el.replaceWith(ph);
         d.el.style.left = `${(homes[i]!.x - ds / 2).toFixed(2)}px`;
@@ -733,10 +761,10 @@ export class Dice {
       });
     }
     const draw = (t: number): void => {
-      for (const i of [0, 1] as const) {
+      for (let i = 0; i < live.length; i++) {
         const s = sampleThrow(plan, i, t);
-        const die = this.dice[i];
-        die.el.style.transform = `translate(${(s.x - homes[i].x).toFixed(1)}px, ${(s.y - homes[i].y + s.ty * ds).toFixed(1)}px) scale(${s.sx.toFixed(3)}, ${s.sy.toFixed(3)})`;
+        const die = live[i]!;
+        die.el.style.transform = `translate(${(s.x - homes[i]!.x).toFixed(1)}px, ${(s.y - homes[i]!.y + s.ty * ds).toFixed(1)}px) scale(${s.sx.toFixed(3)}, ${s.sy.toFixed(3)})`;
         die.pose(s.rx, s.ry);
       }
     };
@@ -751,7 +779,7 @@ export class Dice {
           el.style.top = '';
         }
         flight?.layer.remove();
-        for (const d of this.dice) {
+        for (const d of live) {
           d.el.style.transform = '';
           d.set(d.value);
         }
@@ -767,7 +795,7 @@ export class Dice {
    * showing the final faces, reappear when the canvas goes away. It also plays under reduced
    * motion: the roll is the game's key reveal (time.ts policy).
    */
-  private tumble(spins: [Spin, Spin]): Promise<void> {
+  private tumble(spins: Spin[]): Promise<void> {
     this.stopTumble?.();
     if (headless() || typeof document === 'undefined') return Promise.resolve();
     const { ds, gap } = this.sizes();
@@ -777,7 +805,8 @@ export class Dice {
     const padX = ds * 0.6;
     const padTop = ds * 1.9;
     const padBottom = ds * 0.8;
-    const w = ds * 2 + gap + padX * 2;
+    const n = spins.length;
+    const w = ds * n + gap * (n - 1) + padX * 2;
     const hgt = ds + padTop + padBottom;
     const canvas = document.createElement('canvas');
     canvas.className = 'dice-canvas';
@@ -795,7 +824,7 @@ export class Dice {
     let dirty: [number, number, number, number][] = [];
     // ~1 s of tumbling before the result shows.
     const duration = D(1000);
-    const centres = [0, 1].map((i) => padX + ds / 2 + i * (ds + gap));
+    const centres = spins.map((_, i) => padX + ds / 2 + i * (ds + gap));
     const cy = padTop + ds / 2;
     let elapsed = 0;
     let last = -1;
@@ -843,7 +872,7 @@ export class Dice {
 
   /** Client centres of the two dice (fx `diceLand`); one layout read, only at the landing. */
   clientCenters(): { x: number; y: number }[] {
-    return this.dice.map((d) => {
+    return this.live.map((d) => {
       const r = d.el.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     });
@@ -852,6 +881,11 @@ export class Dice {
   /** Client rect of the pair (the CPU hand presses the dice). */
   pairRect(): DOMRect {
     return this.pair.getBoundingClientRect();
+  }
+
+  /** Die size and gap (layout px): the skill ring's geometry. */
+  layoutSizes(): { ds: number; gap: number } {
+    return this.sizes();
   }
 
   /** The pair element (the Stage measures the dice area relative to it). */

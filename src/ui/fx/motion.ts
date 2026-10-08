@@ -86,6 +86,13 @@ export const HAND = {
   holdRoll: 160,
   /** A roll's flick: the short stroke toward the board centre that throws the dice (tween). */
   flick: 110,
+  /**
+   * Strategy mode (the skill throw): the needle runs at least this long (ring ms) before the CPU
+   * stops it at its accuracy (then up to one more lap: ~0.45–1.85 s at the default pace), and the
+   * drag that draws the arrow into the AI's zone (tween).
+   */
+  ringLead: 450,
+  drag: 380,
   /** Lift and leave (tweens, not waited for). */
   lift: 90,
   exit: 240,

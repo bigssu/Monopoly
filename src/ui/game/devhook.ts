@@ -17,6 +17,7 @@ import type { GameController } from './controller';
 import { isDevHook } from './util';
 import { handDev, type HandRecord } from '@/ui/stage/CpuHand';
 import { diceDev, type ThrowRecord } from '@/ui/stage/Dice';
+import { skillDev, type SkillResult } from '@/ui/stage/SkillPad';
 
 let current: GameController | null = null;
 
@@ -59,6 +60,8 @@ interface LotAndRollHook {
   cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; release(): void; frozen(): boolean };
   /** The dice: every roll so far (how it was shown, and the throw's plan). */
   dice(): { log: ThrowRecord[]; rattles: number[]; clear(): void };
+  /** Strategy mode: every skill roll the pad sent (zone, aim, accuracy, stride, the throw). */
+  skill(): { rolls: SkillResult[]; clear(): void };
 }
 
 declare global {
@@ -137,6 +140,12 @@ export function installDevHook(): void {
       },
       // A hand is being held at its press right now.
       frozen: () => !!handDev?.release,
+    }),
+    skill: () => ({
+      rolls: skillDev?.rolls ?? [],
+      clear: () => {
+        if (skillDev) skillDev.rolls.length = 0;
+      },
     }),
     dice: () => ({
       log: diceDev?.log ?? [],

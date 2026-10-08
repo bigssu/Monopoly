@@ -7,7 +7,10 @@
  * animation. A roll presses the dice on the roll pad, holds them while they rattle and flicks a
  * short stroke toward the board centre: the throw follows the stroke (`Dice.aim`), at a medium
  * strength picked per turn (`cpuFlick`: seeded by the game and the turn, so some CPU throws reach
- * the screen's edges and some stay short). Which control
+ * the screen's edges and some stay short). In strategy mode (the skill throw) the hand acts out
+ * exactly the engine AI's `Roll { stride, aim, accuracy }`: it switches to one die if the AI chose
+ * stride 1 (the reachable spaces light up), presses (the ring runs), lets the needle reach the
+ * phase of its accuracy, drags the arrow into the zone of its aim, and releases. Which control
  * each action maps to: `handTarget.ts`. Timings: `HAND` in fx/motion.ts.
  *
  * Coordinates: the hand lives in a board-sized layer rotated to the CPU's drawn seat (SEAT_ANGLE
@@ -26,13 +29,14 @@
  * when no hand is out; the layer exists only while a hand is.
  */
 import type { Action, GameState, Seat } from '@/engine';
-import { anim, frame, gamePace, headless, isHeld, noMotion, onFrame, sleep } from '@/ui/fx/time';
+import { anim, D, frame, gamePace, headless, isHeld, noMotion, onFrame, sleep } from '@/ui/fx/time';
 import { EASE, HAND } from '@/ui/fx/motion';
 import { h, isDevHook, SEAT_ANGLE, svgNode } from '@/ui/game/util';
 import type { Board } from '@/ui/board/Board';
 import type { Stage } from './Stage';
 import { cpuHandTarget, type HandTarget } from './handTarget';
-import { cpuFlick } from './throw';
+import { cpuFlick, flickStrength } from './throw';
+import { zoneLength } from './skill';
 
 /** Fingertip in the 64×64 art (scripts/icons-src/buildings.mjs, 'cpu-hand'), as fractions. */
 const TIP_X = 23.5 / 64;
@@ -222,6 +226,10 @@ export class CpuHand {
 
     // 3. Press: the hand squashes onto it; the control shows its pressed state, a ring ripples
     //    out of it, a board space is outlined in the CPU's color; a roll shakes the dice.
+    // Strategy mode: the AI's roll, acted out on the skill pad.
+    const roll = isPad && o.action.type === 'Roll' ? o.action : null;
+    const skill = roll && typeof roll.accuracy === 'number' ? this.stage.skill : null;
+    if (skill && roll!.stride === 1 && skill.stride !== 1) skill.setStride(1, true);
     if (rollBtn) rollBtn.classList.add('is-held');
     else el?.classList.add('is-pressed');
     if (isRoll) stopShake = this.shakeDice();
@@ -237,7 +245,10 @@ export class CpuHand {
       rec.tipInside = t.x >= r.x - 2 && t.x <= r.x + r.width + 2 && t.y >= r.y - 2 && t.y <= r.y + r.height + 2;
       rec.pending = o.alive();
     }
-    await sleep(isRoll ? HAND.holdRoll : HAND.hold);
+    if (skill) {
+      // The needle runs, and stops where the AI's accuracy is (before or after the top, by turn).
+      await skill.cpuRun(roll!.accuracy!, HAND.ringLead, o.state.turn % 2 ? 1 : -1);
+    } else await sleep(isRoll ? HAND.holdRoll : HAND.hold);
     if (handDev?.freeze) {
       await new Promise<void>((res) => (handDev!.release = res));
       handDev.release = null;
@@ -248,7 +259,44 @@ export class CpuHand {
     //     hand; the throw goes the way of the stroke (a little variety in its angle).
     let lifted = down;
     let rest = up;
-    if (isPad) {
+    if (skill) {
+      // Drag the arrow into the aim's zone, toward the board centre (a seeded few degrees off).
+      const st = o.state;
+      const pick = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
+      const L = zoneLength(roll!.aim) * this.stage.dice.layoutSizes().ds;
+      const pa = (pick.angle * Math.PI) / 180;
+      // In the hand's (seat) frame "up" is (0, -1); on the screen that is turned by the seat's angle.
+      const hx = Math.sin(pa) * L;
+      const hy = -Math.cos(pa) * L;
+      const a = rad * -1 + pa;
+      const u = this.stage.toLocal({ x: Math.sin(a), y: -Math.cos(a) });
+      const ul = Math.hypot(u.x, u.y) || 1;
+      const vx = (u.x / ul) * L;
+      const vy = (u.y / ul) * L;
+      const dur = D(HAND.drag);
+      await new Promise<void>((done) => {
+        let el = 0;
+        let last = -1;
+        onFrame((now) => {
+          if (last >= 0 && !isHeld()) el += now - last;
+          last = now;
+          const k = dur > 0 ? Math.min(1, el / dur) : 1;
+          const e = k * k * (3 - 2 * k);
+          hand.style.transform = at(qx + hx * e, qy + hy * e, TILT + 4 * e, 0.86);
+          skill.drag({ x: vx * e, y: vy * e });
+          if (k >= 1 || !o.alive()) {
+            done();
+            return false;
+          }
+          return true;
+        });
+      });
+      if (!o.alive()) return this.drop();
+      const r = skill.release();
+      this.stage.dice.aim(r.throwAim);
+      lifted = at(qx + hx, qy + hy, TILT + 4, 0.86);
+      rest = at(qx + hx, qy + hy - H * 0.2, TILT + 4, 1);
+    } else if (isPad) {
       const flick = at(qx, qy - H * 0.55, TILT + 6, 0.9);
       hand.style.transform = flick;
       await anim(hand, [{ transform: down }, { transform: flick }], { duration: HAND.flick, easing: EASE.anticipate });
@@ -257,7 +305,8 @@ export class CpuHand {
       const pick = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
       const a = rad * -1 + (pick.angle * Math.PI) / 180;
       // Layer "up" (0, -1) on screen: the layer is rotated by `angle` about the board centre.
-      this.stage.dice.aim(this.stage.toLocal({ x: Math.sin(a) * pick.speed, y: -Math.cos(a) * pick.speed }));
+      const v = this.stage.toLocal({ x: Math.sin(a), y: -Math.cos(a) });
+      this.stage.dice.aim({ ...v, strength: flickStrength(pick.speed) });
       lifted = flick;
       rest = at(qx, qy - H * 0.7, TILT + 4, 1);
     }

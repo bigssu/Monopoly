@@ -26,6 +26,23 @@ import { saveGame } from '@/ui/shell/persist';
 import { prefs } from '@/ui/shell/prefs';
 
 /** Settings "굴리기 버튼 보이기" (prefs may be unavailable in tests). */
+/** The skill throw's guide (strategy mode) was shown on this install. */
+function skillGuideSeen(): boolean {
+  try {
+    return prefs.get().skillGuideSeen;
+  } catch {
+    return true;
+  }
+}
+
+function markSkillGuideSeen(): void {
+  try {
+    prefs.set({ skillGuideSeen: true });
+  } catch {
+    /* storage blocked: shown again next time */
+  }
+}
+
 function rollButtonPref(): boolean {
   try {
     return prefs.get().rollButton;
@@ -274,6 +291,7 @@ export class GameController {
       dice: stage.dice,
       stage,
       rollButton: rollButtonPref(),
+      skillGuide: { show: !p.isCpu && !skillGuideSeen(), seen: () => markSkillGuideSeen() },
     });
     if (PROMPT_STATS && res) {
       // Dev (?dev=1): prompt build cost for scripts/perf*.mjs and docs/PERFORMANCE.md.

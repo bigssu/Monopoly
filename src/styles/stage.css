@@ -440,7 +440,7 @@ body > .dice-fly { position: fixed; }
 :root:not([data-motion="reduced"]) .pc-roll .roll-hint.is-blink { will-change: opacity; }
 /* The roll card lets presses through to the pad under it (only its own controls take them). */
 .pc-roll { pointer-events: none; }
-.pc-roll .roll-btn, .pc-roll .timer-ring { pointer-events: auto; }
+.pc-roll .roll-btn, .pc-roll .timer-ring, .pc-roll .stride-chips { pointer-events: auto; }
 /* The throw pad (Stage.armPad): transparent, over the dice area and the roll card's strip, under
    the card and under the dice in paint order (the dice ignore pointers, so presses reach it): it
    paints nothing and never sits over the wobbling pair (no overlap layer, no idle cost); keyboard
@@ -796,3 +796,173 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
 
 /* Late toll (rules ≥ normal): the round line turns hot over the last five rounds. */
 .st-round.is-late { color: #FFB4A8; font-weight: 900; }
+
+/* ---------------------------------------------------------------------------------------------
+   Skill throw (strategy mode; src/ui/stage/SkillPad.ts, docs/DESIGN.md "Skill throw").
+   Static at rest: the ring's track and green band. Only while pressed does anything step (the
+   needle, the readout, the arrow), on the shared 30 Hz clock.
+   --------------------------------------------------------------------------------------------- */
+.dice { position: relative; }
+/* One die (stride 1): the second hides, the first stands centred where the pair stood. */
+.dice.is-single .dice-pair > .die:nth-child(2) { display: none; }
+.skill-ring { position: absolute; overflow: visible; max-width: none; max-height: none; pointer-events: none; }
+.skill-ring path { fill: none; stroke-width: var(--sw, 12px); }
+.skill-ring .sr-track { stroke: rgba(255, 255, 255, 0.2); }
+.skill-ring .sr-band { stroke: #2EE07F; }
+.skill-ring .sr-band-glow { stroke: rgba(46, 224, 127, 0.35); stroke-width: calc(var(--sw, 12px) * 2.1); }
+.skill-ring .sr-mark { stroke: #0B3B24; stroke-width: calc(var(--sw, 12px) * 1.05); }
+.skill-ring .sr-fill, .skill-ring .sr-needle, .skill-ring .sr-needle-rim { visibility: hidden; }
+.skill-ring .sr-fill { stroke: rgba(255, 214, 107, 0.85); stroke-width: calc(var(--sw, 12px) * 0.5); }
+.skill-ring .sr-needle-rim { stroke: #062330; stroke-width: calc(var(--sw, 12px) * 2.5); stroke-linecap: round; }
+.skill-ring .sr-needle { stroke: #fff; stroke-width: calc(var(--sw, 12px) * 1.75); stroke-linecap: round; }
+.skill-ring.is-live .sr-fill, .skill-ring.is-live .sr-needle, .skill-ring.is-live .sr-needle-rim { visibility: visible; }
+.skill-ring.is-locked .sr-needle { stroke: #FFE58A; }
+/* Reduced motion (the app setting): no ring while pressed; the readout alone counts (text). */
+.skill-ring.is-live.is-rm { visibility: hidden; }
+.skill-ring.is-live.is-rm path { visibility: hidden; }
+.skill-ring.is-gone, .skill-acc.is-gone { display: none; }
+.skill-acc {
+  position: absolute;
+  display: none;
+  white-space: nowrap;
+  padding: calc(var(--u) * 0.18) calc(var(--u) * 0.5);
+  border-radius: var(--r-pill);
+  background: #062330;
+  box-shadow: 0 0 0 max(1.5px, calc(var(--u) * 0.07)) rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-family: var(--font-num);
+  font-size: max(13px, calc(var(--u) * 0.72));
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.skill-acc.is-on { display: block; }
+.skill-acc[data-tier="hi"] { background: #0E7A43; }
+.skill-acc[data-tier="mid"] { background: #7A5A0E; }
+.skill-acc[data-tier="lo"] { background: #5B2A26; }
+.skill-acc.is-locked { box-shadow: 0 0 0 max(2px, calc(var(--u) * 0.12)) #FFE58A; }
+.skill-acc.is-rm { font-size: max(16px, calc(var(--u) * 1)); }
+/* Stride chips (above the hint in the roll card; the card lets presses through, the chips take them). */
+.stride-chips { display: flex; gap: calc(var(--u) * 0.3); pointer-events: auto; }
+.stage .stride-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+  min-height: max(40px, calc(var(--u) * 1.8));
+  padding: 0 calc(var(--u) * 0.7);
+  border: max(1.5px, calc(var(--u) * 0.07)) solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--r-pill);
+  background: rgba(6, 35, 48, 0.75);
+  color: #D9EAE8;
+  font: inherit;
+  font-size: max(13px, calc(var(--u) * 0.66));
+  cursor: pointer;
+}
+.stride-chip b { font-weight: 900; }
+.stride-chip .num { font-weight: 700; opacity: 0.85; }
+.stage .stride-chip[aria-pressed="true"] { background: #FFD15C; border-color: #FFD15C; color: #3A2600; }
+.stride-chip:disabled { cursor: default; }
+.stride-chip:disabled:not([aria-pressed="true"]) { opacity: 0.6; }
+.stride-chip:focus-visible { outline: max(2px, calc(var(--u) * 0.1)) solid #fff; outline-offset: 2px; }
+/* The aim arrow: a top-level layer only while dragging, its frame turned like the Stage. */
+.skill-aim-layer { position: absolute; top: var(--safe-t); right: var(--safe-r); bottom: var(--safe-b); left: var(--safe-l); z-index: 38; pointer-events: none; }
+body > .skill-aim-layer { position: fixed; }
+.skill-aim-frame { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.skill-aim { position: absolute; left: 0; top: 0; overflow: visible; max-width: none; }
+.skill-aim .sa-seg { stroke-opacity: 0.7; stroke-linecap: round; }
+.skill-aim .sa-tick { stroke: rgba(255, 255, 255, 0.8); }
+.skill-aim .sa-shaft { stroke-linecap: round; }
+.skill-aim-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  white-space: nowrap;
+  padding: 0.2em 0.65em;
+  border-radius: var(--r-pill);
+  background: var(--zc, #C3CDD6);
+  color: #0B2230;
+  box-shadow: 0 0 0 2px rgba(6, 35, 48, 0.85), 0 3px 10px rgba(0, 0, 0, 0.35);
+  font-family: var(--font-display);
+  font-size: max(15px, calc(var(--u) * 0.95));
+  line-height: 1.2;
+}
+.skill-chev { width: 1em; height: 1em; flex: none; }
+/* The result line under the dice (Stage.rollResult). */
+.roll-result {
+  position: absolute;
+  top: calc(100% + var(--u) * 0.5);
+  left: 50%;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  white-space: nowrap;
+  padding: 0.3em 0.85em;
+  border-radius: var(--r-pill);
+  background: #062330;
+  box-shadow: 0 0 0 max(1.5px, calc(var(--u) * 0.07)) rgba(255, 255, 255, 0.3), var(--sh-2);
+  color: #E6F2F0;
+  font-weight: 800;
+  font-size: max(13px, calc(var(--u) * 0.7));
+  z-index: 3;
+}
+.roll-result .rr-sep, .roll-result .rr-arrow { opacity: 0.7; }
+.roll-result.tone-low .rr-aim { color: #8CCBFF; }
+.roll-result.tone-high .rr-aim { color: #FFBE7A; }
+.roll-result .rr-verdict { padding: 0.05em 0.5em; border-radius: var(--r-pill); font-weight: 900; }
+.roll-result .rr-verdict.is-hit { background: #2EE07F; color: #06301A; }
+.roll-result .rr-verdict.is-miss { background: #E8564F; color: #fff; }
+/* The skill throw's guide (first roll in strategy mode on the stage; Settings; the rules page). */
+.skill-guide {
+  width: min(calc(var(--u) * 20), 96%);
+  max-height: 96%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.35);
+  padding: calc(var(--u) * 0.6) calc(var(--u) * 0.7);
+  border-radius: calc(var(--u) * 0.9);
+  background: #fff;
+  border-top: calc(var(--u) * 0.32) solid #2EE07F;
+  box-shadow: var(--sh-3);
+  color: var(--ink);
+  font-size: max(12px, calc(var(--u) * 0.62));
+}
+.skill-guide-dlg .skill-guide { width: min(640px, 92vw); max-height: 88vh; font-size: 15px; }
+.sg-kicker { font-size: 0.85em; font-weight: 800; color: #1D7340; letter-spacing: 0.04em; }
+.sg-head { margin: 0; font-family: var(--font-display); font-size: 1.5em; font-weight: 400; }
+.sg-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(var(--u) * 0.4); width: 100%; }
+.sg-step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.25em; padding: 0.5em 0.4em; border-radius: 0.8em; background: #0A3847; color: #E6F2F0; text-align: center; }
+.sg-num { position: absolute; left: 0.4em; top: 0.3em; width: 1.5em; height: 1.5em; display: grid; place-items: center; border-radius: 50%; background: #FFD15C; color: #3A2600; font-weight: 900; font-size: 0.9em; }
+.sg-art { width: 100%; max-width: 7em; aspect-ratio: 1; display: grid; place-items: center; }
+.sg-art > svg { width: 100%; height: 100%; }
+.sg-title { font-size: 1.05em; font-weight: 900; }
+.sg-desc { margin: 0; font-size: 0.88em; line-height: 1.35; color: #C9DFDB; }
+.sg-note { margin: 0; font-size: 0.85em; color: var(--ink-2); text-align: center; line-height: 1.35; }
+.sg-ok { min-width: 8em; }
+.sg-art path { fill: none; stroke-width: 7; }
+.sg-art .sg-track { stroke: rgba(255, 255, 255, 0.2); }
+.sg-art .sg-band { stroke: #2EE07F; }
+.sg-art .sg-fill { stroke: rgba(255, 214, 107, 0.85); stroke-width: 3.5; }
+.sg-art .sg-needle { stroke: #fff; stroke-width: 11; stroke-linecap: round; }
+.sg-art .sg-die { fill: #fff; }
+.sg-art .sg-pip { fill: #2B3245; }
+.sg-art .sg-finger { fill: rgba(255, 214, 107, 0.55); stroke: #FFD15C; stroke-width: 2; }
+.sg-zones { width: 100%; display: flex; flex-direction: column; justify-content: center; gap: 0.45em; }
+.sg-zone { display: flex; align-items: center; gap: 0.3em; }
+.sg-arrow { position: relative; height: 0.45em; border-radius: 0.2em; background: var(--zc); flex: none; }
+.sg-arrow::after { content: ''; position: absolute; right: -0.45em; top: 50%; translate: 0 -50%; border: 0.42em solid transparent; border-left: 0.5em solid var(--zc); border-right: 0; }
+.sg-zone-label { display: inline-flex; align-items: center; gap: 0.1em; margin-left: 0.55em; padding: 0 0.4em; border-radius: var(--r-pill); background: var(--zc); color: #0B2230; font-weight: 900; font-size: 0.82em; white-space: nowrap; }
+.rp-skill .sg-steps { margin-top: 0.6em; }
+.skill-guide:focus { outline: none; }
+.sg-zones { font-size: 0.85em; }
+/* A short screen (a phone on its side): the steps keep their pictures and titles; the long lines
+   stay on the rules page and in Settings. */
+@media (max-height: 560px) {
+  .st-pop .skill-guide .sg-desc, .st-pop .skill-guide .sg-note, .st-pop .skill-guide .sg-kicker { display: none; }
+  .st-pop .skill-guide .sg-art { max-width: 4.6em; }
+}

@@ -8,9 +8,11 @@ import type { GameState, Player, Seat } from '@/engine';
 import { lateTollMultiplier, ranking } from '@/engine';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, eventHoldMs, eventStretch, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
+import { anim, DEFAULT_PACE, eventHoldMs, eventStretch, gamePace, gridTimeout, headless, onFrame, sleep } from '@/ui/fx/time';
 import { cardIcon, h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
+import type { SkillPad } from './SkillPad';
+import type { Aim } from './skill';
 import { screenToStage, type Box, type Vec } from './throw';
 import { EASE } from '@/ui/fx/motion';
 
@@ -18,6 +20,9 @@ export type Tone = 'info' | 'good' | 'bad' | 'gold';
 
 /** Level → building icon (0 = empty lot: shown as the villa). */
 const BUILDING_ICONS = ['villa', 'villa', 'building', 'hotel', 'landmark'] as const;
+
+/** The skill throw's result line: read time (ms at the default pace; `sleep` scales by the pace). */
+const RESULT_MS = 1500;
 
 /** Toast motion (ms): pop in, fade out. */
 const TOAST_IN = 260;
@@ -66,6 +71,10 @@ export class Stage {
   private pad: HTMLButtonElement | null = null;
   /** Top of the dice area in the stage's own px (the pad starts there), from `measureDice`. */
   private padTop = -1;
+  /** Strategy mode: the roll's skill pad (stride chips, ring, arrow), while a roll prompt is up. */
+  skill: SkillPad | null = null;
+  private infoClose: (() => void) | null = null;
+  private resultEl: HTMLElement | null = null;
 
   constructor() {
     this.dice = new Dice();
@@ -84,6 +93,7 @@ export class Stage {
     // The backdrop (`.stage-bg`) belongs to the board (Board.ts): pop-out buildings sit on it, under this.
     this.el = h('div', { class: 'stage' }, this.rot);
     this.dice.arena = () => this.measureArena();
+    this.dice.turn = () => this.angle;
     this.popLayer.addEventListener('click', () => this.hideInfo());
     this.popLayer.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
@@ -166,6 +176,50 @@ export class Stage {
     const r = this.el.getBoundingClientRect();
     const k = r.width > 0 ? this.el.offsetWidth / r.width : 1;
     return screenToStage(v, this.angle, k);
+  }
+
+  /**
+   * The dice's screen centre (client px), the Stage's turn (degrees) and its scale (screen px per
+   * layout px): the frame the skill arrow is drawn in (one layout read, at the drag's start).
+   */
+  diceFrame(): { cx: number; cy: number; angle: number; s: number } | null {
+    const r = this.el.getBoundingClientRect();
+    const w = this.el.offsetWidth;
+    if (!(r.width > 0 && w > 0)) return null;
+    const p = this.dice.pairRect();
+    let a = ((((this.angle + 180) % 360) + 360) % 360) - 180;
+    if (a === -180) a = 180;
+    return { cx: p.left + p.width / 2, cy: p.top + p.height / 2, angle: a, s: r.width / w };
+  }
+
+  /**
+   * Strategy mode: the aimed throw's result line under the dice ("정확 92% · 작게 노림 → 성공 (4)"),
+   * read for ~1.5 s × pace, then it fades. UI feedback, not an event presentation (no
+   * EVENT_EXTEND), and nothing waits for it.
+   */
+  async rollResult(r: { accuracy: number; aim: Aim; hit: boolean; total: number }): Promise<void> {
+    this.resultEl?.remove();
+    if (headless()) return;
+    const verdict = h('b', { class: `rr-verdict ${r.hit ? 'is-hit' : 'is-miss'}`, text: t(r.hit ? 'g.skill.hit' : 'g.skill.miss', { n: r.total }) });
+    const el = h(
+      'div',
+      { class: `roll-result tone-${r.aim}`, role: 'status', 'data-hit': String(r.hit) },
+      h('span', { class: 'rr-acc', text: t('g.skill.acc', { n: r.accuracy }) }),
+      h('span', { class: 'rr-sep', text: '·' }),
+      h('span', { class: 'rr-aim', text: t('g.skill.aimed', { aim: t(`g.aim.${r.aim}`) }) }),
+      h('span', { class: 'rr-arrow', text: '→' }),
+      verdict,
+    );
+    // The whole sentence for assistive tech (and tests): "정확 92% · 작게 노림 → 성공 (4)".
+    el.setAttribute('aria-label', `${t('g.skill.acc', { n: r.accuracy })} · ${t('g.skill.aimed', { aim: t(`g.aim.${r.aim}`) })} → ${verdict.textContent}`);
+    this.resultEl = el;
+    this.dice.el.append(el);
+    await anim(el, [{ opacity: 0, transform: 'translateY(-30%) scale(.9)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: EASE.overshoot });
+    await sleep(RESULT_MS / DEFAULT_PACE);
+    if (this.resultEl !== el) return;
+    await anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 });
+    if (this.resultEl === el) this.resultEl = null;
+    el.remove();
   }
 
   /**
@@ -364,6 +418,8 @@ export class Stage {
     // A held roll button may vanish without a pointerup (timer / dispatch): stop the shake loop.
     this.dice.shake(false);
     this.dice.stopInvite();
+    this.skill?.dispose();
+    this.skill = null;
     this.pad?.remove();
     this.pad = null;
     this.promptSlot.innerHTML = '';
@@ -497,8 +553,12 @@ export class Stage {
     card.remove();
   }
 
-  /** Space info dialog. Backdrop, close control, and Escape all return focus to the board space. */
-  showInfo(content: HTMLElement): void {
+  /**
+   * Space info dialog (also the skill throw's first-roll guide). Backdrop, close control, and Escape
+   * all return focus to the board space; `onClose` runs when it goes.
+   */
+  showInfo(content: HTMLElement, onClose?: () => void): void {
+    this.infoClose = onClose ?? null;
     const active = document.activeElement;
     this.infoInvoker = active instanceof HTMLElement || active instanceof SVGElement ? active : null;
     this.popLayer.innerHTML = '';
@@ -521,6 +581,9 @@ export class Stage {
     const invoker = this.infoInvoker;
     this.infoInvoker = null;
     if (invoker?.isConnected) invoker.focus({ preventScroll: true });
+    const close = this.infoClose;
+    this.infoClose = null;
+    close?.();
   }
 
   // -------------------------------------------------------------------------
@@ -602,6 +665,9 @@ export class Stage {
   }
 
   dispose(): void {
+    this.skill?.dispose();
+    this.skill = null;
+    this.resultEl?.remove();
     this.dropCloseUp();
     this.fitRo?.disconnect();
     this.fitRo = null;

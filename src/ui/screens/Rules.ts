@@ -1,5 +1,5 @@
 /**
- * Illustrated, swipeable rules (8 pages). Also usable as an overlay from the game menu:
+ * Illustrated, swipeable rules (9 pages). Also usable as an overlay from the game menu:
  *   import { openRulesOverlay } from '@/ui/screens/Rules';  openRulesOverlay();
  */
 import { GROUP_COLORS } from '@/content/board';
@@ -12,6 +12,7 @@ import { iconEl } from '@/ui/game/util';
 import { goBackTo, setBackTarget } from '@/ui/shell/nav';
 import { openDialog } from '@/ui/shell/dialog';
 import { tokenAvatar } from '@/ui/shell/widgets';
+import { skillGuideSteps } from '@/ui/stage/skillGuide';
 
 function svgIcon(id: string, cls: string): HTMLElement {
   return h('span', { class: `art-ico ${cls}`, html: icon(id), 'aria-hidden': 'true' });
@@ -309,6 +310,24 @@ const PAGES: Page[] = [
         ),
       );
     },
+  },
+  {
+    // Strategy mode (advanced rules): the stride choice and the skill throw (the same three steps
+    // as the first-roll guide, src/ui/stage/skillGuide.ts).
+    id: 'skill',
+    build: () =>
+      h(
+        'div',
+        { class: 'rp-card is-grid rp-skill' },
+        h(
+          'div',
+          { class: 'rp-grid-head' },
+          h('span', { class: 'rp-num num' }, '9'),
+          h('h2', { class: 'rp-title' }, t('rules.skill.title')),
+          h('p', { class: 'rp-grid-sub' }, t('rules.skill.body')),
+        ),
+        skillGuideSteps(),
+      ),
   },
 ];
 

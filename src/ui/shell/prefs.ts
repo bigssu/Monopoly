@@ -50,6 +50,8 @@ export interface Prefs {
   defaultsRev: number;
   /** Show the roll button beside the throw pad (off: press, hold and flick the dice). */
   rollButton: boolean;
+  /** The skill throw's guide (strategy mode) has been shown once on this install. */
+  skillGuideSeen: boolean;
 }
 
 export const MONEY_RES_PREFS = ['auto', 'high', 'low'] as const;
@@ -135,7 +137,7 @@ export function migrateDefaults(p: Prefs, rev: unknown): Prefs {
 }
 
 export function defaultPrefs(): Prefs {
-  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 30, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto', rollButton: false, defaultsRev: DEFAULTS_REV };
+  return { lang: detectLang(), sound: true, haptics: true, volume: 0.8, promptTimer: 30, lastSetup: null, batterySaver: true, fxQuality: 'low', gamePace: 2, turnPause: 1500, dealer: 'normal', music: true, fxNative: false, motion: 'full', moneyRes: 'auto', money3d: 'auto', rollButton: false, skillGuideSeen: false, defaultsRev: DEFAULTS_REV };
 }
 
 function sanitize(raw: unknown): Prefs {
@@ -160,6 +162,7 @@ function sanitize(raw: unknown): Prefs {
     moneyRes: MONEY_RES_PREFS.includes(r.moneyRes as MoneyResPref) ? (r.moneyRes as MoneyResPref) : d.moneyRes,
     money3d: MONEY_3D_PREFS.includes(r.money3d as Money3dPref) ? (r.money3d as Money3dPref) : d.money3d,
     rollButton: r.rollButton === true,
+    skillGuideSeen: r.skillGuideSeen === true,
     defaultsRev: DEFAULTS_REV,
   };
 }

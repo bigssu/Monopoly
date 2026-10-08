@@ -49,6 +49,7 @@ import * as M from './money';
 import { SEAT_CYCLE } from '@/ui/orientation';
 import { festivalMultiplier } from '@/engine';
 import { CARD_STRETCH } from '@/ui/stage/Stage';
+import { rolledFaces, resultParts } from '@/ui/stage/skill';
 
 type Alive = () => boolean;
 const boardOf = (state: GameState) => getBoardInfo(state.settings.spacesPerSide ?? 7).board;
@@ -320,7 +321,11 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
         await runSteps(view, planFx(ev, ctx).filter((s) => s.wait));
         return;
       }
-      await stage.dice.roll(ev.dice[0], ev.dice[1], ev.isDouble);
+      // A one-die roll (rules v3, stride 1) is `[die, 0]`: one die is thrown.
+      await stage.dice.roll(rolledFaces(ev.dice, ev.stride), ev.isDouble);
+      // Strategy mode: what the aimed throw did, under the dice (UI feedback: not waited for).
+      const res = resultParts(ev);
+      if (res) void stage.rollResult(res);
       const hs = fire(view, planFx(ev, ctx));
       // Timing: the total, huge, held so it can be read before anything else happens.
       await stage.bigTotal(ev.total, BEAT.diceRead);

@@ -16,6 +16,7 @@ import { clearSavedGame, savedGameSummary } from '@/ui/shell/persist';
 import { DEALER_PREFS, fxQualityOn, GAME_PACES, MONEY_3D_PREFS, MONEY_RES_PREFS, MOTION_PREFS, prefs, TURN_PAUSES, type DealerPref, type Money3dPref, type MoneyResPref, type MotionPref, type FxQualityPref, type GamePacePref, type TurnPausePref } from '@/ui/shell/prefs';
 import { isNative } from '@/ui/shell/capacitor';
 import { segmented, switcher } from '@/ui/shell/widgets';
+import { skillGuideCard } from '@/ui/stage/skillGuide';
 import licensesMd from '../../../docs/THIRD_PARTY_LICENSES.md?raw';
 import { version } from '../../../package.json';
 
@@ -182,6 +183,12 @@ function mountSettings(host: HTMLElement, onClose: () => void): () => void {
       row('timer', t('settings.rest'), rest, t('settings.restHint')),
       row(SPARKLE_SVG, t('settings.motion'), motion, t('settings.motionHint')),
       row('dice-face-5', t('settings.rollButton'), h('div', { class: 'set-inline' }, switcher(p.rollButton, (v) => prefs.set({ rollButton: v }), t('settings.rollButton'))), t('settings.rollButtonHint')),
+      row(
+        'dice-face-5',
+        t('settings.skillTut'),
+        button(t('settings.skillTutOpen'), () => openDialog((close) => skillGuideCard(close), { cls: 'skill-guide-dlg', label: t('g.skill.tut.title') }), { cls: 'btn-ghost', attrs: { 'data-action': 'skill-guide' } }),
+        t('settings.skillTutHint'),
+      ),
       row('timer', t('settings.timer'), timer, t('settings.timerHint')),
       row(
         BATTERY_SVG,
