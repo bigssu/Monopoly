@@ -227,3 +227,144 @@ Watch item: in 2-player games more money means more instant set wins (line 10 �
 that would complete a winning set for either side is not offered (before that rule: line 26 %); the
 rest comes from players simply affording more cities. If 2-player games end on a line too often at
 the table, the lever is the line rule (count hubs on the side, or require a built side).
+
+## Rules version 3 — strategy mode (2026-10-08)
+
+Why: `docs/research/10-strategy-depth.md` (the diagnosis and the package), `docs/research/11-skill-throw.md`
+(the throw). Rules: `docs/DESIGN.md` §4.3. The setup screen now offers **캐주얼** (= `normal`, unchanged:
+every casual row below is identical to version 2, same seeds, same numbers) and **전략** (= `advanced` +
+version 3). Measured with `npm run skill` (`scripts/skill.ts`, the research scripts cleaned up):
+`table` (normal CPU vs normal CPU), `matchups` (one normal CPU in a rotating seat vs others), `expert`
+(a search player). 2,000 seeds per row, 30 rounds, start cash 3,000, seeds 1…2,000.
+
+### Before (version 2) and after (strategy mode) vs the research-10 targets
+
+"v2 normal" is the old default table (now casual), "v2 adv" the old advanced level; v3 = strategy mode.
+
+| metric (2 players) | v2 normal | v2 adv | **v3** | target | hit? |
+|---|---:|---:|---:|---|---|
+| normal CPU vs "always yes" | 65.2 % | 67.9 % | **83.0 %** | ≥ 75 % | yes |
+| normal CPU vs easy CPU | 60.5 % | 58.2 % | **63.6 %** | ≥ 65 % | no (−1.4 pp) |
+| normal CPU vs the same CPU ignoring the new choices ("plain") | – | – | **70.1 %** | ≥ 58 % | yes |
+| search player vs normal CPU (K=32 rollouts, 3 moves, switch at +3 wins, 200 games) | 55.0 % (110 / 200) | – | **50.0 % (100 / 200)** | ≥ 55 % | no (±6.9 pp either way) |
+| set ("instant") wins | 46.4 % | 47.8 % | **20.8 %** | 20–30 % | yes |
+| set win round min / p10 / median | 4 / 12 / 21 | 4 / 12 / 21 | 7 / 12 / 22 | p10 ≥ 15 | no |
+| set win before round 10 (share of games) | 2.0 % | 2.2 % | **0.5 %** | ≤ 0.5 % | yes |
+| mean rounds | 24.38 | 24.09 | **26.80 (+9.9 %)** | ±15 % | yes |
+| last at R10 wins | 40.5 % | 39.0 % | **38.8 %** | 33–40 % | yes |
+| leader at R5 / R10 / R15 wins | 53.4 / 59.5 / 65.3 % | 54.6 / 61.0 / 66.5 % | 52.9 / **61.2** / 64.8 % | R10 60–67 % | yes |
+| lead changes / game | 4.16 | 4.05 | 3.89 | – | |
+| seat 1 / seat 2 wins | 51.0 / 49.0 % | 53.2 / 46.8 % | 51.5 / 48.5 % | 47–53 % | yes |
+| decisions / turn | 1.60 | 1.70 | **2.77** (1.70 without the roll) | ≤ 2.4 | no (the roll is a choice now) |
+| dull turns | 9.8 % | 9.4 % | **0.4 %** | ≤ 10 % | yes |
+| takeovers / game, leader : trailer | 1.18 : 0.62 | 1.25 : 0.70 | **0.61 : 0.51** | trailer ≥ leader | no (1.9 : 1 → 1.2 : 1) |
+| vault paid out / game | 2,999 | 3,064 | **981** | ≤ 1,000 | yes |
+| "paid less toll" wins | 78.9 % | 80.7 % | 81.5 % | ≤ 70 % | no |
+
+3 and 4 players (no research targets; fair shares 33 / 25 %):
+
+| metric | 3p v2 normal → v3 | 4p v2 normal → v3 |
+|---|---|---|
+| normal CPU vs "always yes" | 50.1 → **66.9 %** | 37.6 → **53.9 %** |
+| normal CPU vs easy | 47.4 → 46.4 % | 41.2 → 36.4 % |
+| normal CPU vs "plain" | – → **51.5 %** | – → **39.6 %** |
+| set wins | 39.8 → 14.1 % | 22.9 → 5.2 % |
+| mean rounds | 22.38 → 24.39 (+9.0 %) | 19.66 → 20.68 (+5.2 %) |
+| last at R10 wins | 19.9 → 19.9 % | 11.6 → 10.0 % |
+| leader at R10 wins | 49.1 → 49.5 % | 42.6 → 45.6 % |
+| lead changes / game | 6.55 → 5.76 | 8.36 → 7.20 |
+| seat wins | 36.5 / 32.9 / 30.6 → 33.7 / 34.0 / 32.3 % | 25.6 / 28.4 / 25.1 / 20.9 → 27.9 / 25.0 / 24.3 / 22.8 % |
+| takeovers leader : trailer | 3.01 : 1.94 → 1.49 : 1.31 | 4.88 : 3.60 → 2.69 : 2.36 |
+| decisions / turn · dull turns | 1.58 · 8.8 % → 2.70 · 0.2 % | 1.56 · 8.2 % → 2.67 · 0.1 % |
+| vault / game | 3,309 → 1,235 | 3,367 → 1,351 |
+
+What the strategy mode does at the table (2p, normal CPUs): 34.7 % of rolls use one die, 88.4 % aim
+(29.0 % of rolls are decided by the assist), 3.3 start investments per game, 0.48 set alerts per game of
+which 53.6 % are broken (499 of 515 breaks by a block-buy; 0.25 block-buys per game, + 0.03 stopped by a
+shield). Set wins now come mostly from buying the last piece (342 of 416), not after a travel move (5 %;
+was 56 %).
+
+### Ablation (2 players, strategy mode, one flag off, 2,000 seeds)
+
+| off | rounds | set wins | last at R10 wins | vault / game | takeovers L : T | vs "always yes" | vs "plain" |
+|---|---:|---:|---:|---:|---|---:|---:|
+| (all on) | 26.80 | 20.8 % | 38.8 % | 981 | 0.61 : 0.51 | 83.0 % | 70.1 % |
+| strideChoice | 25.46 | 19.5 % | 37.1 % | 1,020 | 0.58 : 0.53 | 78.7 % | 63.9 % |
+| skillThrow | 26.22 | 19.8 % | 37.6 % | 951 | 0.60 : 0.54 | 76.0 % | 58.8 % |
+| startInvest | 27.08 | 27.1 % | 38.1 % | 978 | 0.90 : 0.72 | 83.3 % | 68.1 % |
+| monopolyNotice | 24.94 | 36.0 % | 39.3 % | 904 | 0.39 : 0.33 | 82.1 % | 68.1 % |
+| chaseTakeover | 26.67 | 22.4 % | 37.1 % | 971 | 0.62 : **0.37** | 83.5 % | 71.0 % |
+| newsForecast | 26.60 | 24.1 % | 39.3 % | 960 | 0.55 : 0.48 | 81.0 % | 69.2 % |
+| vaultCap | 26.58 | 23.4 % | 41.0 % | **3,256** | 0.95 : 0.71 | 80.9 % | 70.2 % |
+
+Reading it: the stride and the aimed throw carry most of the skill gain (vs "always yes" −4.3 / −7.0 pp
+without them); the set alert is what halves the set wins (36.0 → 20.8 %); start investment makes cities
+dearer to take (takeovers 1.62 → 1.12 per game) and so also lowers set wins; the chase multiplier is the
+one that moves takeovers toward the trailer (0.37 → 0.51 per game, +38 %); the vault cap is the vault.
+
+### SKILL_CAP (2 players, strategy mode, 2,000 seeds)
+
+| SKILL_CAP | rolls the assist decides | vs "always yes" | vs "plain" | vs easy | set wins | rounds | leader at R10 wins |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 (stride only) | 0 % | 76.0 % | 58.8 % | 52.3 % | 19.8 % | 26.22 | 62.4 % |
+| 0.4 | 19.1 % | 79.0 % | 65.7 % | 59.3 % | 22.3 % | 26.52 | 62.8 % |
+| **0.6** | 29.0 % | 83.0 % | 70.1 % | 63.6 % | 20.8 % | 26.80 | 61.2 % |
+| 0.72 | 35.3 % | 84.8 % | 71.4 % | 66.3 % | 23.4 % | 26.64 | 59.9 % |
+
+**0.6 stays the default.** Each step up adds skill gap, but 0.4 → 0.6 is worth +4.0 pp against
+"always yes" and 0.6 → 0.72 only +1.8 pp, while the assist then decides a third of all rolls (a perfect
+two-dice low throw lands 2–5 about 80 % of the time instead of 71 %): the dice would stop being the
+drama the research wanted to keep. Length, set wins and comebacks do not move with the cap (within
+noise), so the choice is skill gain against dice control, and 0.6 is the knee.
+
+### Tuned constants (`src/engine/economy.ts`, CPU knobs `AI_TUNING` in `src/engine/ai.ts`)
+
+| constant | value | how it was chosen |
+|---|---|---|
+| `SKILL_CAP` | 0.6 | table above |
+| `blockSurcharge` | 2 (× value, paid to the owner) | 2p set wins with block-buy at the takeover price only: 10–13 %; + 1 × value 13–19 %, + 2 × 20.8 %, + 2.5 × 22.3 % (owner-paid). 2 is the smallest that reaches the 20 % floor. |
+| `blockHubFee` | 0 | hub wins stay 5.4 % of 2p games without a fee (v2: 17.7 %); a 500 fee only added 1.6 pp of hub wins — not needed |
+| `chaseBase` / `chaseRange` / `chaseSpan` | 2 / 0.5 / 2 | the 1.5–2.5 × range is the research's; span 1.5 or 4 changed takeovers by < 0.03 per game, so the round "half / twice the assets" scale stays |
+| `chaseSaleRate` | 0.75 | keeps the sale headline's 1.5 × at equal assets |
+| `investMaxLevel` | 3 (hotel) | the research's rule; villa-only (1) raised set wins (10.1 → 16.3 % before the surcharge was tuned) but left a nearly empty choice (1.9 invests a game) |
+| `vaultCap` / `vaultSeedCapped` | 500 / 20 | cap 800 + 50 → 1,445 a game; 500 + 30 → 1,111; 500 + 20 → 981; 400 + 0 → 614 |
+| `AI_TUNING.investFactor` / `investReserve` | 3 / 2 | the CPU invests only with 3 × the cost in hand and 2 × its toll reserve left: 3.3 invests a game instead of 10.7, and as strong (49.3 % head to head against the eager CPU, 2,000 seeds) while leaving cities cheap enough to take (set wins 13.0 → 19.1 % at a 1 × surcharge) |
+| `AI_TUNING.chaseTake` | 1.9 | the CPU takes over a built city for its value when the chase multiplier is ≤ 1.9 × (trailer takeovers 0.41 → 0.52; strength unchanged, 49.5 %) |
+| `AI_TUNING.doublesValue` | 60 | value of rolling doubles in the stride choice |
+
+### Not reached, and why
+
+* **vs easy ≥ 65 %** (63.6 %): the easy CPU uses the stride too (only for a clear gain) and aims with
+  accuracy 0.25; the gap is +3.1 pp over v2 normal. Making easy weaker would reach it, but the target is
+  about the normal CPU's skill, not about weakening the opponent.
+* **Set win p10 ≥ round 15** (12): sets are still completed early when the dice line up; the alert now
+  gives the opponents a turn, and only 0.5 % of games end on a set before round 10.
+* **Decisions per turn ≤ 2.4** (2.77): every roll is a choice now (stride × aim); without the roll the
+  rate is 1.70, and dull turns fell from 9.8 to 0.4 %.
+* **Takeovers by the trailer ≥ the leader** (0.51 vs 0.61): the trailer has less cash; the chase price
+  and the CPU's chase takeovers moved the ratio from 1.9 : 1 to 1.2 : 1.
+* **"Paid less toll" wins ≤ 70 %** (81.5 %): dodging tolls with the stride is now a skill, so paying
+  less toll is partly the better player's doing — it predicts the winner as much as before.
+* **3 and 4 players**: set wins fall to 14 % / 5 % (from 40 / 23 %): with two or three opponents each
+  allowed a block-buy, few alerts survive. No target was set for them; a per-player-count surcharge is
+  the lever if tables find sets too hard to win.
+* **Search player ≥ 55 %** (50.0 % ± 6.9 over 200 games; version 2: 55.0 % ± 6.9, the research's run
+  50.5 %): a search on top of the CPU still finds no clear headroom. It changed the CPU's move on 13.8 % of
+  decisions (version 2: 7.3 %) and won no more. What the new choices reward is measured instead by the
+  "plain" CPU, the same CPU blind to them: 70.1 % (2p), 51.5 % (3p, fair 33 %), 39.6 % (4p, fair 25 %).
+  Two pitfalls found on the way: (1) reducing a tried move with the game's own seed lets the search see
+  the roll each stride / aim is about to get (85.6 % with that peek) — the script now reseeds every tried
+  move; (2) a noisy search (12 rollouts, switch at +1 win) plays strategy mode worse than the CPU (≈ 31 %
+  over the first ~210 games, version 2 at the same settings 52.8 % / 400): six roll options a turn with
+  close values turn noise into wrong strides. Only the 32-rollout, +3-wins search is reported.
+
+### Reproduce
+
+```sh
+npm run skill -- table --players 2 --seeds 2000                         # strategy mode (advanced, v3)
+npm run skill -- table --players 2 --seeds 2000 --rules normal --rules-version 2   # the old default
+npm run skill -- matchups --players 2 --seeds 2000 --policies yes,plain,easy,normal
+npm run skill -- table --off startInvest                                  # ablation
+npm run skill -- matchups --cap 0.72 --policies yes,plain,easy            # SKILL_CAP sweep
+npm run skill -- expert --seeds 200 --k 32 --cands 3 --margin 3             # search player
+```
