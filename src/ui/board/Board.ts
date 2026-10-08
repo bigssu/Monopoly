@@ -424,6 +424,9 @@ export class Board {
   private building = new Set<number>();
   private rings = new Map<number, HTMLElement>();
   private pickEls: HTMLElement[] = [];
+  /** Monopoly warning outlines (rules version 3): the set's spaces, in the owner's colour. */
+  private noticeEls: HTMLElement[] = [];
+  private noticeSig = '';
   private focusEl: HTMLElement | null = null;
   private dimEl: HTMLElement | null = null;
   private svgEl: SVGSVGElement;
@@ -721,8 +724,32 @@ export class Board {
         }
       }
     }
+    this.renderNotice(vs);
     this.renderTokens(vs);
     this.ensureBase();
+  }
+
+  /**
+   * Monopoly warnings (rules version 3, `pendingWins`): a dashed outline in the owner's colour on
+   * every space of the announced set until it wins or breaks. It blinks three times when it
+   * appears (a finite animation: nothing runs while the table waits) and then stays still.
+   */
+  private renderNotice(vs: GameState): void {
+    const list = vs.pendingWins ?? [];
+    const sig = list.map((w) => `${w.playerId}:${w.members.join(',')}`).join('|');
+    if (sig === this.noticeSig) return;
+    this.noticeSig = sig;
+    for (const el of this.noticeEls) el.remove();
+    this.noticeEls = [];
+    for (const w of list) {
+      const color = playerColor(vs.players[w.playerId]!.colorId).hex;
+      for (const i of w.members) {
+        const el = this.outline(i, 'bm-notice', 12);
+        el.style.setProperty('--nc', color);
+        el.dataset.notice = String(w.playerId);
+        this.noticeEls.push(el);
+      }
+    }
   }
 
   /**

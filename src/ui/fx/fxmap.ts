@@ -202,6 +202,11 @@ export const EVENT_FX: { [K in GameEventType]: Planner<K> } = {
   // Rules version 2 (docs/research/08-fun-analysis.md).
   BonusCard: (ev) => [step('ringPulse', { at: { panel: ev.playerId }, color: PURPLE, double: true, sparkles: 6 })],
   NewsFlash: () => [step('ringPulse', { at: { stage: true }, color: AMBER, double: true, sparkles: 8 })],
+  // Rules version 3 (docs/research/10-strategy-depth.md): the forecast is a quiet pulse; a monopoly
+  // warning runs the chain over the whole set in the owner's colour; a broken one puffs.
+  NewsForecast: () => [step('ringPulse', { at: { stage: true }, color: AMBER, sparkles: 4 })],
+  MonopolyNotice: (ev) => [step('groupChain', { spaces: ev.members, player: ev.playerId, color: AMBER }, { wait: 'block' })],
+  MonopolyBroken: () => [step('puff', { at: { stage: true }, smoke: 2, scale: 1.1 })],
   Gambled: (ev, c) => {
     const tax = getBoardInfo(c.vs.settings.spacesPerSide ?? 7).board.find((sp) => sp.kind === 'tax')!.index;
     return ev.win

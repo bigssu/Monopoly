@@ -257,9 +257,13 @@ export class Stage {
     const late = lateTollMultiplier(state);
     // News flash (rules version 2): the headline in force this round.
     const news = state.news && state.news.round === state.round && ['tollFever', 'buildBoom', 'takeoverSale'].includes(state.news.id) ? state.news.id : null;
-    const tail = (state.endsAfterRound ? ` · ${t('g.finalRound')}` : late > 1 ? ` · ${t('g.lateToll', { m: late })}` : '') + (news ? ` · ${t(`g.news.tail.${news}`)}` : '');
+    // Rules version 3: next round's forecast headline, and a standing monopoly warning.
+    const forecast = state.newsForecast && state.newsForecast.round > state.round ? state.newsForecast.id : null;
+    const notice = state.pendingWins?.[0] ? state.players[state.pendingWins[0].playerId] : undefined;
+    const tail = (state.endsAfterRound ? ` · ${t('g.finalRound')}` : late > 1 ? ` · ${t('g.lateToll', { m: late })}` : '') + (news ? ` · ${t(`g.news.tail.${news}`)}` : '') +
+      (forecast ? ` · ${t('g.forecast.tail', { title: t(`g.news.title.${forecast}`) })}` : '') + (notice ? ` · ${t('g.notice.tail', { name: notice.name })}` : '');
     this.round.textContent = (limit ? t('g.round.of', { n: state.round, max: limit }) : t('g.round', { n: state.round })) + tail;
-    this.round.classList.toggle('is-late', late > 1 || !!state.endsAfterRound || news !== null);
+    this.round.classList.toggle('is-late', late > 1 || !!state.endsAfterRound || news !== null || !!notice);
     this.setRanking(state);
   }
 

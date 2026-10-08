@@ -43,7 +43,7 @@ describe('dealer catalog', () => {
   });
 
   it('uses no name from the reference games in what the dealer says (docs/research/02 §2)', () => {
-    const banned = /올림픽|Olympic|랜드마크|Monopoly|Chance|황금열쇠|우주여행|사회복지기금|세계여행|마블/;
+    const banned = /올림픽|Olympic|랜드마크|Monopoly|Chance|찬스|황금열쇠|우주여행|사회복지기금|세계여행|마블/;
     for (const l of DEALER_LINES) expect(`${l.ko} ${l.en}`, l.id).not.toMatch(banned);
   });
 

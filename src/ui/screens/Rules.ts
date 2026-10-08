@@ -274,6 +274,48 @@ const PAGES: Page[] = [
     },
   },
   {
+    // Rules version 3 (docs/research/10-strategy-depth.md): the strategy mode's package.
+    id: 'strategy',
+    build: () => {
+      const items: [string, string][] = [
+        ['dice-face-1', 'stride'],
+        ['dice-face-6', 'aim'],
+        ['building', 'invest'],
+        ['cards-shield', 'notice'],
+        ['restart', 'chase'],
+        ['timer', 'forecast'],
+      ];
+      return h(
+        'div',
+        { class: 'rp-card is-grid' },
+        h(
+          'div',
+          { class: 'rp-grid-head' },
+          h('span', { class: 'rp-num num' }, '8'),
+          h('h2', { class: 'rp-title' }, t('rules.strategy.title')),
+          h('p', { class: 'rp-grid-sub' }, t('rules.strategy.body')),
+        ),
+        h(
+          'div',
+          { class: 'rp-grid g3' },
+          items.map(([iconId, key], i) =>
+            h(
+              'div',
+              { class: 'rp-tile is-level is-advanced', '--i': String(i) },
+              svgIcon(iconId, 'rp-tile-ico'),
+              h(
+                'div',
+                { class: 'rp-tile-text' },
+                h('h3', { class: 'rp-tile-title' }, t(`rules.strategy.${key}`), h('em', { class: 'rp-level' }, t('rules.levels.advanced'))),
+                h('p', { class: 'rp-tile-desc' }, t(`rules.strategy.${key}.d`)),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  },
+  {
     id: 'win',
     build: () => {
       const chips = (colors: string[], cls: string) =>
@@ -292,7 +334,7 @@ const PAGES: Page[] = [
         h(
           'div',
           { class: 'rp-grid-head' },
-          h('span', { class: 'rp-num num' }, '8'),
+          h('span', { class: 'rp-num num' }, '9'),
           h('h2', { class: 'rp-title' }, t('rules.win.title')),
           h('p', { class: 'rp-grid-sub' }, t('rules.win.body')),
         ),

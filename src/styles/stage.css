@@ -470,6 +470,26 @@ body > .dice-fly { position: fixed; }
 .roll-pad:focus-visible { outline: max(2px, calc(var(--u) * 0.1)) dashed rgba(255, 214, 107, 0.35); outline-offset: calc(var(--u) * -0.4); }
 .pc-roll .timer-ring { position: absolute; right: calc(var(--u) * -1.2); top: auto; bottom: calc(var(--u) * 1.6); }
 
+/* Block-buy strip (rules version 3): under the turn's prompt while an opponent's monopoly warning
+   stands. White card, bordered in the warning owner's colour; takes presses (the roll card does not). */
+.pc-block {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.25);
+  margin-top: calc(var(--u) * 0.3);
+  padding: calc(var(--u) * 0.3) calc(var(--u) * 0.4);
+  border-radius: calc(var(--u) * 0.6);
+  background: #FFFFFF;
+  box-shadow: inset 0 0 0 max(2px, calc(var(--u) * 0.1)) var(--pc, #E8564F), 0 4px 12px rgba(0, 0, 0, 0.18);
+  color: var(--ink);
+  pointer-events: auto;
+  text-align: left;
+}
+.pc-roll .pc-block { width: min(100%, calc(var(--u) * 15)); }
+.pc-block .pcb-head { display: flex; align-items: center; gap: calc(var(--u) * 0.3); font-weight: 800; font-size: 0.9em; }
+.pc-block .pick-list { flex: none; max-height: calc(var(--u) * 6.5); }
+.pc-block .pcb-open { align-self: stretch; }
+
 /* Lists (festival / upgrade / debt) */
 .pick-list {
   display: flex;

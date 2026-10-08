@@ -26,11 +26,11 @@ export type HandTarget =
 
 /** Phases whose prompt shows a "Pass" (or decline / stop / pay) button. */
 const PASS_BUTTON: ReadonlySet<Phase['kind']> = new Set<Phase['kind']>([
-  'buy', 'build', 'takeover', 'festival', 'freeUpgrade', 'travel', 'auction', 'doubleUp', 'useCard', 'gamble',
+  'buy', 'build', 'takeover', 'festival', 'freeUpgrade', 'travel', 'auction', 'doubleUp', 'useCard', 'gamble', 'invest',
 ]);
 
 /** Board-pick actions: the hand taps the space on the board. */
-const BOARD_PICK: ReadonlySet<ActionType> = new Set<ActionType>(['ChooseTravel', 'SetFestival', 'FreeUpgrade', 'ChooseTarget']);
+const BOARD_PICK: ReadonlySet<ActionType> = new Set<ActionType>(['ChooseTravel', 'SetFestival', 'FreeUpgrade', 'ChooseTarget', 'Invest', 'Counterbuy']);
 
 /** The phase each action is offered in (`legalActions`). */
 const OFFERED_IN: Record<ActionType, ReadonlyArray<Phase['kind']>> = {
@@ -51,6 +51,9 @@ const OFFERED_IN: Record<ActionType, ReadonlyArray<Phase['kind']>> = {
   DoubleUpGuess: ['doubleUp'],
   ChooseTarget: ['target'],
   Gamble: ['gamble'],
+  // Rules version 3: the start investment's list, and the block-buy strip under the turn's prompt.
+  Invest: ['invest'],
+  Counterbuy: ['preRoll', 'island', 'travel'],
   Pass: [...PASS_BUTTON],
 };
 

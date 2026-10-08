@@ -75,6 +75,8 @@ const EXTENDED: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
   'AuctionStarted', 'AuctionEnded', 'GameOver',
   // Rules version 2 (docs/research/08-fun-analysis.md).
   'NewsFlash', 'BonusCard', 'Gambled', 'CitySwapped',
+  // Rules version 3 (docs/research/10-strategy-depth.md).
+  'NewsForecast', 'MonopolyNotice', 'MonopolyBroken',
 ]);
 
 /** News flash headline icons (rules version 2). */
@@ -399,6 +401,7 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
     // --- Rules version 2 (docs/research/08-fun-analysis.md) ---------------------------------------
     case 'NewsFlash': {
       vs.news = { id: ev.id, round: ev.round, ...(ev.group ? { group: ev.group } : {}) };
+      delete vs.newsForecast;
       render(view, vs);
       const hs = fire(view, planFx(ev, ctx), ext);
       if (fast) return;
@@ -407,6 +410,41 @@ async function step(view: GameView, vs: GameState, ev: GameEvent, fast: boolean,
       await stage.stamp(t(`g.news.title.${ev.id}`), ev.id === 'quake' ? 'bad' : 'gold', ext);
       const group = ev.group ? loc(GROUP_NAMES[ev.group]) : '';
       await Promise.all([...hs, stage.toast(`${t('g.news.kicker')} · ${t(`g.news.${ev.id}`, { group })}`, 1400, ev.id === 'quake' ? 'bad' : 'gold', NEWS_ICON[ev.id], ext)]);
+      return;
+    }
+    // --- Rules version 3 (docs/research/10-strategy-depth.md) -------------------------------------
+    case 'NewsForecast': {
+      // A forecast: the round line shows it until it runs; a toast says it now.
+      vs.newsForecast = { id: ev.id, round: ev.round, ...(ev.group ? { group: ev.group } : {}) };
+      render(view, vs);
+      stage.setTurn(vs.players[vs.current]!, vs);
+      const hs = fire(view, planFx(ev, ctx), ext);
+      if (fast) return;
+      await Promise.all([...hs, stage.toast(t('g.forecast.toast', { title: t(`g.news.title.${ev.id}`) }), 1200, 'gold', NEWS_ICON[ev.id], ext)]);
+      return;
+    }
+    case 'MonopolyNotice': {
+      const notice = { playerId: ev.playerId, victory: ev.victory, members: [...ev.members], round: ev.round, blocked: [] as number[], ...(ev.side ? { side: ev.side } : {}), ...(ev.groups ? { groups: [...ev.groups] } : {}) };
+      vs.pendingWins = [...(vs.pendingWins ?? []).filter((w) => w.playerId !== ev.playerId), notice];
+      render(view, vs);
+      stage.setTurn(vs.players[vs.current]!, vs);
+      const hs = fire(view, planFx(ev, ctx), ext);
+      if (fast) return;
+      const p = vs.players[ev.playerId]!;
+      view.playSfx('warning');
+      await stage.stamp(t('g.notice.stamp'), 'bad', ext);
+      const set = t(`g.notice.set.${ev.victory}`, { side: ev.side ?? '' });
+      await Promise.all([...hs, stage.toast(t('g.notice.toast', { name: p.name, set }), 1600, 'bad', 'trophy', ext)]);
+      return;
+    }
+    case 'MonopolyBroken': {
+      vs.pendingWins = (vs.pendingWins ?? []).filter((w) => w.playerId !== ev.playerId);
+      if (vs.pendingWins.length === 0) delete vs.pendingWins;
+      render(view, vs);
+      stage.setTurn(vs.players[vs.current]!, vs);
+      const hs = fire(view, planFx(ev, ctx), ext);
+      if (fast) return;
+      await Promise.all([...hs, stage.toast(t('g.notice.broken', { name: vs.players[ev.playerId]!.name }), 1200, 'good', 'cards-shield', ext)]);
       return;
     }
     case 'BonusCard':
@@ -615,7 +653,7 @@ function startScene(view: GameView, vs: GameState, sc: MoneyScene, keep: boolean
     case 'build':
       return M.build(st, {
         ...me(sc.player), spaceIndex: sc.spaceIndex, cost: sc.cost, level: Math.max(1, Math.min(4, sc.level)) as 1 | 2 | 3 | 4, free: sc.free, keep,
-        ...(sc.free ? { title: t('m.upgrade') } : {}),
+        ...(sc.free ? { title: t('m.upgrade') } : sc.invest ? { title: t('g.invest.kicker') } : {}),
       });
     case 'toll': {
       const mult = sc.festival ? festivalMultiplier(vs) : 1;
@@ -688,6 +726,7 @@ async function playMoney(view: GameView, vs: GameState, events: readonly GameEve
   if (sc.kind === 'purchase') await groupMoment(view, vs, sc.player, sc.spaceIndex, fast);
   else if (sc.kind === 'takeover') {
     if (sc.winBack && !fast) await view.stage.stamp(t('g.takeover.winBackDone'), 'gold', true);
+    else if (sc.block && !fast) await view.stage.stamp(t('g.block.done'), 'bad', true);
     await groupMoment(view, vs, sc.buyer, sc.spaceIndex, fast);
   }
   else if (sc.kind === 'bankruptcy' && !fast) await view.panel(sc.debtor)?.breakApart();

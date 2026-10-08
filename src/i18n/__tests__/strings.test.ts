@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOARD } from '@/content/board';
 import { KEEPABLE_CARD_IDS } from '@/content/cards';
-import { t } from '@/i18n';
+import { STRING_TABLES as TABLES, t } from '@/i18n';
 import '@/i18n/game';
 import '@/i18n/shell';
 
@@ -19,5 +19,10 @@ describe('game strings', () => {
     }
     // t() returns the key itself when it is missing.
     expect([...keys].filter((k) => t(k) === k)).toEqual([]);
+  });
+
+  it('uses no name from the reference games in any ko / en string (docs/research/02 §2)', () => {
+    const banned = /올림픽|Olympic|랜드마크|Monopoly|Chance|찬스|황금열쇠|우주여행|사회복지기금|세계여행|마블|Community Chest/;
+    for (const l of ['ko', 'en'] as const) for (const [k, v] of Object.entries(TABLES[l])) expect(v, `${l} ${k}`).not.toMatch(banned);
   });
 });

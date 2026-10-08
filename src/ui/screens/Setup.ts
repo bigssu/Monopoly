@@ -5,7 +5,7 @@
 import { BOARD_SIDE_OPTIONS, getBoard, GROUP_COLORS, HUB_COLOR, type SpacesPerSide } from '@/content/board';
 import { icon, LOGO_SVG } from '@/content/icons';
 import { PLAYER_COLORS, TOKEN_IDS } from '@/content/palette';
-import { PROMPT_TIMER_OPTIONS, ROUND_LIMIT_OPTIONS, RULE_LEVELS, START_CASH_OPTIONS, type Seat } from '@/engine';
+import { PROMPT_TIMER_OPTIONS, ROUND_LIMIT_OPTIONS, START_CASH_OPTIONS, type Seat } from '@/engine';
 import { fmtMoney, onLangChange, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
@@ -21,9 +21,12 @@ import {
   buildSettings,
   cleanName,
   defaultDraft,
+  GAME_MODES,
+  modeOf,
   NAME_MAX,
   normalizeDraft,
   pick,
+  rulesFor,
   seatNumber,
   toggleSeat,
   validateDraft,
@@ -368,6 +371,37 @@ registerScreen('setup', (root) => {
 
   // ------------------------------------------------------------------ options + start
 
+  /**
+   * The chosen mode's one-line description and a "?" speech bubble listing what it includes. Tap
+   * "?" to open or close it; a tap anywhere else closes it too.
+   */
+  function modeNote(mode: 'casual' | 'strategy'): HTMLElement {
+    const items = t(`setup.modeList.${mode}`).split(' · ');
+    const bubble = h(
+      'div',
+      { class: 'mode-bubble', role: 'tooltip', id: 'mode-bubble', hidden: true },
+      h('b', { class: 'mode-bubble-title' }, t('setup.modeHelp', { mode: t(`setup.mode.${mode}`) })),
+      h('ul', null, items.map((x) => h('li', null, x))),
+    );
+    const help = h('button', { class: 'mode-help', type: 'button', 'aria-expanded': 'false', 'aria-controls': 'mode-bubble', 'aria-label': t('setup.modeHelp', { mode: t(`setup.mode.${mode}`) }), 'data-focus-key': 'mode-help' }, '?');
+    const onDoc = (e: Event): void => {
+      if (!bubble.isConnected) return document.removeEventListener('pointerdown', onDoc, true);
+      if (e.target instanceof Node && (bubble.contains(e.target) || help.contains(e.target))) return;
+      setOpen(false);
+    };
+    const setOpen = (open: boolean): void => {
+      bubble.hidden = !open;
+      help.setAttribute('aria-expanded', String(open));
+      if (open) document.addEventListener('pointerdown', onDoc, true);
+      else document.removeEventListener('pointerdown', onDoc, true);
+    };
+    help.addEventListener('click', () => {
+      sfx.play('tap');
+      setOpen(help.getAttribute('aria-expanded') !== 'true');
+    });
+    return h('div', { class: 'opt-mode-note' }, h('p', { class: 'opt-level-note' }, t(`setup.modeDesc.${mode}`)), help, bubble);
+  }
+
   function renderSide(): HTMLElement {
     const back = iconButton('chevron-left', t('shell.back'), () => go('title', {}));
     const head = h(
@@ -387,20 +421,20 @@ registerScreen('setup', (root) => {
       { class: 'opt-card' },
       h('h2', { class: 'opt-card-title' }, t('setup.rules')),
       row(
-        t('setup.level'),
+        t('setup.mode'),
         'trophy',
         segmented(
-          RULE_LEVELS.map((value) => ({ value, label: t(`setup.level.${value}`) })),
-          draft.rules,
+          GAME_MODES.map((value) => ({ value, label: t(`setup.mode.${value}`) })),
+          modeOf(draft.rules),
           (value) => {
-            draft.rules = value;
+            draft.rules = rulesFor(value);
             save();
             renderAll();
           },
-          { label: t('setup.level'), focusKey: 'level' },
+          { label: t('setup.mode'), focusKey: 'mode' },
         ),
       ),
-      h('p', { class: 'opt-level-note' }, t(`setup.levelDesc.${draft.rules}`)),
+      modeNote(modeOf(draft.rules)),
       row(
         t('setup.spacesPerSide'),
         'landmark',

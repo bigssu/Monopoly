@@ -5,7 +5,9 @@ import {
   buildSettings,
   rotateStart,
   defaultDraft,
+  modeOf,
   normalizeDraft,
+  rulesFor,
   pick,
   seatNumber,
   toggleSeat,
@@ -112,5 +114,20 @@ describe('rotateStart', () => {
     expect(rotateStart(ring, () => 0.99)).toEqual(['W', 'S', 'E', 'N']);
     expect(rotateStart([], () => 0.5)).toEqual([]);
     expect(ring).toEqual(['S', 'E', 'N', 'W']);
+  });
+});
+
+describe('game modes (casual / strategy)', () => {
+  it('maps the two modes onto the rule levels; a fresh setup is casual; a stored easy setup is casual', () => {
+    expect(rulesFor('casual')).toBe('normal');
+    expect(rulesFor('strategy')).toBe('advanced');
+    expect(modeOf('easy')).toBe('casual');
+    expect(modeOf('normal')).toBe('casual');
+    expect(modeOf('advanced')).toBe('strategy');
+    expect(modeOf(defaultDraft().rules)).toBe('casual');
+    expect(normalizeDraft({ ...defaultDraft(), rules: 'easy' }).rules).toBe('normal');
+    expect(normalizeDraft({ ...defaultDraft(), rules: 'advanced' }).rules).toBe('advanced');
+    const strategy = buildSettings({ ...defaultDraft(), rules: 'advanced' }, name, () => 0.5).settings;
+    expect(strategy).toMatchObject({ rules: 'advanced', rulesVersion: 3 });
   });
 });

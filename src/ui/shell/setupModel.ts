@@ -78,6 +78,23 @@ export function defaultDraft(): SetupDraft {
   };
 }
 
+/**
+ * Game modes on the setup screen (owner, 2026-10-08): 캐주얼 = the 'normal' rule level (light and
+ * quick, plays exactly as rules version 2), 전략 = 'advanced' (everything, with the rules version 3
+ * strategy package). The engine keeps its three levels for saves; 'easy' is no longer offered and a
+ * stored 'easy' setup shows (and starts) as casual.
+ */
+export type GameMode = 'casual' | 'strategy';
+export const GAME_MODES: readonly GameMode[] = ['casual', 'strategy'];
+
+export function modeOf(rules: RuleLevel): GameMode {
+  return rules === 'advanced' ? 'strategy' : 'casual';
+}
+
+export function rulesFor(mode: GameMode): RuleLevel {
+  return mode === 'strategy' ? 'advanced' : 'normal';
+}
+
 export function activeSeats(d: SetupDraft): Seat[] {
   return SEAT_CYCLE.filter((s) => d.seats[s].on);
 }
@@ -108,7 +125,8 @@ export function normalizeDraft(raw: unknown): SetupDraft {
     auction: typeof r.auction === 'boolean' ? r.auction : def.auction,
     endOnFirstBankruptcy: typeof r.endOnFirstBankruptcy === 'boolean' ? r.endOnFirstBankruptcy : def.endOnFirstBankruptcy,
     promptTimer: PROMPT_TIMER_OPTIONS.includes(r.promptTimer as 0 | 15 | 30) ? (r.promptTimer as 0 | 15 | 30) : def.promptTimer,
-    rules: RULE_LEVELS.includes(r.rules as RuleLevel) ? (r.rules as RuleLevel) : def.rules,
+    // Two modes on screen: a stored 'easy' setup is casual ('normal').
+    rules: RULE_LEVELS.includes(r.rules as RuleLevel) ? rulesFor(modeOf(r.rules as RuleLevel)) : def.rules,
   };
   const seats = (r.seats ?? {}) as Partial<Record<Seat, Partial<SeatDraft>>>;
   for (const s of SEAT_CYCLE) {

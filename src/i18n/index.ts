@@ -11,6 +11,8 @@ export type Lang = 'ko' | 'en';
 type StringTable = Record<string, string>;
 
 const tables: Record<Lang, StringTable> = { ko: {}, en: {} };
+/** Every registered string (read-only; tests scan it for banned names). */
+export const STRING_TABLES: Readonly<Record<Lang, Readonly<StringTable>>> = tables;
 let current: Lang = 'ko';
 const listeners = new Set<(lang: Lang) => void>();
 const warned = new Set<string>();

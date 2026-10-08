@@ -32,10 +32,10 @@ import type { GameEvent, GameEventType, GameState, Level, MoneyReason, PlayerId 
 
 export type MoneyScene =
   | { kind: 'purchase'; player: PlayerId; spaceIndex: number; price: number; via: 'buy' | 'auction' }
-  | { kind: 'build'; player: PlayerId; spaceIndex: number; level: Level; cost: number; free: boolean }
+  | { kind: 'build'; player: PlayerId; spaceIndex: number; level: Level; cost: number; free: boolean; invest?: boolean }
   | { kind: 'toll'; payer: PlayerId; owner: PlayerId; spaceIndex: number; amount: number; festival: boolean; multiplier: number }
   | { kind: 'tollWaived'; payer: PlayerId; owner: PlayerId; spaceIndex: number }
-  | { kind: 'takeover'; buyer: PlayerId; seller: PlayerId; spaceIndex: number; price: number; winBack?: boolean }
+  | { kind: 'takeover'; buyer: PlayerId; seller: PlayerId; spaceIndex: number; price: number; winBack?: boolean; block?: boolean }
   | { kind: 'collectFromAll'; receiver: PlayerId; payers: Array<{ id: PlayerId; amount: number }>; cardId: CardId | null }
   | { kind: 'payAll'; payer: PlayerId; receivers: Array<{ id: PlayerId; amount: number }>; cardId: CardId | null }
   | { kind: 'transfer'; from: PlayerId; to: PlayerId; amount: number; reason: MoneyReason; cardId: CardId | null }
@@ -134,7 +134,7 @@ export function planMoney(events: readonly GameEvent[]): MoneyGroup[] {
       }
       case 'Built':
         // A paid build's MoneyChanged comes before it (and is grouped from there); a lone Built is free.
-        add({ kind: 'build', player: e.playerId, spaceIndex: e.spaceIndex, level: e.level, cost: e.cost, free: e.free }, [i]);
+        add({ kind: 'build', player: e.playerId, spaceIndex: e.spaceIndex, level: e.level, cost: e.cost, free: e.free, ...(e.via === 'invest' ? { invest: true } : {}) }, [i]);
         break;
       case 'TollPaid': {
         if (e.waived) {
@@ -149,7 +149,7 @@ export function planMoney(events: readonly GameEvent[]): MoneyGroup[] {
       case 'TakenOver': {
         const a = find(i, (x) => isMC(x, 'takeover') && x.playerId === e.buyerId);
         const b = find(i, (x) => isMC(x, 'takeover') && x.playerId === e.sellerId);
-        add({ kind: 'takeover', buyer: e.buyerId, seller: e.sellerId, spaceIndex: e.spaceIndex, price: e.price, ...(e.winBack ? { winBack: true } : {}) }, [i, a, b]);
+        add({ kind: 'takeover', buyer: e.buyerId, seller: e.sellerId, spaceIndex: e.spaceIndex, price: e.price, ...(e.winBack ? { winBack: true } : {}), ...(e.block ? { block: true } : {}) }, [i, a, b]);
         break;
       }
       case 'PassedStart': {
@@ -260,7 +260,7 @@ function planMoneyChanged(
       }
       if (k >= 0) {
         const b = events[k] as Extract<GameEvent, { type: 'Built' }>;
-        add({ kind: 'build', player: b.playerId, spaceIndex: b.spaceIndex, level: b.level, cost: -e.delta, free: false }, [i, k]);
+        add({ kind: 'build', player: b.playerId, spaceIndex: b.spaceIndex, level: b.level, cost: -e.delta, free: false, ...(b.via === 'invest' ? { invest: true } : {}) }, [i, k]);
       } else add({ kind: 'pay', player: e.playerId, amount: -e.delta, sink: 'fine', cardId: null, spaceIndex: e.spaceIndex ?? null }, [i]);
       return;
     }

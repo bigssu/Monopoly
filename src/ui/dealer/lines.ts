@@ -699,7 +699,7 @@ export const SITUATIONS: Record<string, Situation> = {
   'news.shareDay': { level: 'min', priority: P.big, expr: 'laugh', takes: [['뉴스 속보! 나눔의 날이에요! 1등이 꼴찌에게 돈을 나눠요!', 'News flash! Share day — the leader shares with the last player!']] },
   'news.vaultBoom': { level: 'min', priority: P.big, expr: 'cheer', takes: [['뉴스 속보! 기부함이 두 배로! 출발 칸에 딱 멈추면 대박이에요!', 'News flash! The donation pot doubles — land exactly on Start to grab it!']] },
   'bonus.card': { level: 'normal', priority: P.event, expr: 'present', takes: [['더블 보너스! 카드 한 장 더 뽑아요!', 'Doubles bonus! Draw an extra card!']] },
-  'comeback.offer': { level: 'normal', priority: P.advice, expr: 'point', takes: [['역전 찬스! 꼴찌에게만 오는 특별한 카드예요!', 'Comeback chance! A special card just for the last player!']] },
+  'comeback.offer': { level: 'normal', priority: P.advice, expr: 'point', takes: [['역전 기회! 꼴찌에게만 오는 특별한 카드예요!', 'Comeback shot! A special card just for the last player!']] },
   'card.swap': { level: 'normal', priority: P.event, expr: 'point', takes: [['땅 맞교환 카드! 상대의 도시를 노려 봐요!', "Land Swap! Go after an opponent's city!"]] },
   'card.raid': { level: 'normal', priority: P.event, expr: 'laugh', takes: [['선두 습격! 1등의 지갑을 털어요!', "Leader Raid! Raid the leader's wallet!"]] },
   'swap.pick': { level: 'normal', priority: P.advice, expr: 'point', takes: [['어느 도시를 가져올까요? 비싼 도시가 좋겠죠?', 'Which city do you want? A pricey one, maybe?']] },
@@ -711,6 +711,16 @@ export const SITUATIONS: Record<string, Situation> = {
   'winback.advice': { level: 'normal', priority: P.advice, expr: 'point', takes: [['빼앗긴 땅을 되찾을 기회예요! 지금은 반값이에요!', 'A chance to win back your city — at half the usual price!']] },
   'winback.done': { level: 'min', priority: P.big, expr: 'cheer', takes: [['되찾았어요! 역시 내 땅은 내 땅!', 'Won it back! Home sweet home!']] },
   'jackpot.win': { level: 'min', priority: P.big, expr: 'cheer', takes: [['기부함 잭팟! 쌓인 돈을 몽땅 가져가요!', 'Jackpot! The whole donation pot is yours!']] },
+
+  // --- Rules version 3: strategy mode (docs/research/10-strategy-depth.md) ------------------------
+  'notice.warn': { level: 'min', priority: P.big, expr: 'nervous', takes: [['독점 예고! 다음 차례까지 막지 못하면 그대로 승리예요!', 'Set alert! Stop it before their next turn, or they win!']] },
+  'notice.broken': { level: 'min', priority: P.big, expr: 'surprised', takes: [['독점이 깨졌어요! 승부는 아직 몰라요!', "The set is broken! It's anyone's game again!"]] },
+  'block.advice': { level: 'normal', priority: P.advice, expr: 'point', takes: [['지금 견제 매입으로 독점을 막을 수 있어요! 한 번뿐이에요!', 'You can block-buy one of their cities right now — just once!']] },
+  'block.done': { level: 'min', priority: P.big, expr: 'cheer', takes: [['견제 매입 성공! 길목을 막았어요!', 'Block-buy! You cut them off!']] },
+  'invest.prompt': { level: 'normal', priority: P.advice, expr: 'thinking', takes: [['출발 투자예요! 상대가 자주 밟을 도시를 키워 보세요.', 'Start investment! Grow a city your rivals will land on.']] },
+  'invest.done': { level: 'normal', priority: P.event, expr: 'cheer', takes: [['멀리서도 쑥쑥! 출발 투자 완료!', 'Built from afar — nice investment!']] },
+  'forecast': { level: 'normal', priority: P.event, expr: 'point', takes: [['다음 라운드 예보가 떴어요! 미리 준비해 두세요.', "Next round's forecast is out — plan ahead!"]] },
+  'chase.advice': { level: 'normal', priority: P.advice, expr: 'point', takes: [['자산 차이 덕분에 이번 인수는 할인이에요!', 'Being behind makes this takeover cheaper!']] },
 
   // --- Rule explanations (first landing on a kind) ---------------------------------------------
   'explain.sets': {
@@ -771,6 +781,8 @@ export const VOICE_PENDING: ReadonlySet<string> = new Set([
   'news.tollFever.1', 'news.quake.1', 'news.buildBoom.1', 'news.takeoverSale.1', 'news.shareDay.1', 'news.vaultBoom.1',
   'bonus.card.1', 'comeback.offer.1', 'card.swap.1', 'card.raid.1', 'swap.pick.1', 'swap.done.1',
   'gamble.advice.roll.1', 'gamble.advice.pay.1', 'gamble.win.1', 'gamble.lose.1', 'winback.advice.1', 'winback.done.1', 'jackpot.win.1',
+  // Rules version 3 (strategy mode).
+  'notice.warn.1', 'notice.broken.1', 'block.advice.1', 'block.done.1', 'invest.prompt.1', 'invest.done.1', 'forecast.1', 'chase.advice.1',
 ]);
 
 /** Every take as a flat list (generators, integrity tests). */

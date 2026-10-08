@@ -1271,6 +1271,27 @@
 
 /* Rule level: what the chosen level turns on, right under its control. */
 .opt-level-note { margin: -.2em 0 .2em; padding: 0 .3em; font-size: .86em; font-weight: 700; line-height: 1.4; color: var(--ink-2); }
+/* Game mode (casual / strategy): the description line and a "?" speech bubble listing the rules. */
+.opt-mode-note { position: relative; display: flex; align-items: flex-start; gap: .4em; }
+.opt-mode-note .opt-level-note { flex: 1; margin: -.2em 0 .2em; }
+.mode-help {
+  flex: none; width: 1.9em; height: 1.9em; margin-top: -.25em; border: 0; border-radius: 50%;
+  font: inherit; font-weight: 900; color: var(--tone-info-ink); background: var(--tone-info-bg); cursor: pointer;
+}
+.mode-help[aria-expanded="true"] { color: #fff; background: var(--brand); }
+.mode-bubble {
+  position: absolute; z-index: 5; right: 0; top: calc(100% + .55em); width: min(26em, 92vw);
+  padding: .7em .9em; border-radius: .8em; background: #fff; color: var(--ink);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .22); font-size: .88em; line-height: 1.45;
+}
+.mode-bubble[hidden] { display: none; }
+.mode-bubble::before {
+  content: ''; position: absolute; right: .55em; top: -.45em; width: .9em; height: .9em;
+  background: #fff; transform: rotate(45deg); border-radius: .15em;
+}
+.mode-bubble-title { display: block; margin-bottom: .3em; font-weight: 900; }
+.mode-bubble ul { margin: 0; padding-left: 1.1em; }
+.mode-bubble li { margin: .1em 0; font-weight: 600; }
 
 /* Rule levels page: a small level tag next to each rule's name. */
 .rp-level { margin-left: .4em; padding: .05em .45em; border-radius: var(--r-pill); font-size: .7em; font-style: normal; font-weight: 800; vertical-align: middle; color: var(--tone-info-ink); background: var(--tone-info-bg); }

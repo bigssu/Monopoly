@@ -10,6 +10,7 @@
 import {
   chooseAction,
   citiesInGroup,
+  counterbuyOptions,
   getBoardInfo,
   groupOf,
   hubStep,
@@ -92,7 +93,7 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
     case 'CannotAfford':
       return 'buy.cant';
     case 'Built':
-      return ev.level === 4 ? 'landmark.done' : 'build.done';
+      return ev.level === 4 ? 'landmark.done' : ev.via === 'invest' ? 'invest.done' : 'build.done';
     case 'TollPaid': {
       if (ev.waived) return 'toll.waived';
       memo.tollStreak.set(ev.payerId, 0);
@@ -105,7 +106,7 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
       return !vs.players[ev.ownerId]!.isCpu && vs.players[ev.payerId]!.isCpu ? 'toll.receive' : 'toll.small';
     }
     case 'TakenOver':
-      return ev.winBack ? 'winback.done' : 'takeover.done';
+      return ev.winBack ? 'winback.done' : ev.block ? 'block.done' : 'takeover.done';
     case 'TakeoverBlocked':
       return 'takeover.blocked';
     case 'CardDrawn':
@@ -124,6 +125,13 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
     // Rules version 2 (docs/research/08-fun-analysis.md).
     case 'NewsFlash':
       return `news.${ev.id}`;
+    // Rules version 3 (docs/research/10-strategy-depth.md).
+    case 'NewsForecast':
+      return 'forecast';
+    case 'MonopolyNotice':
+      return 'notice.warn';
+    case 'MonopolyBroken':
+      return 'notice.broken';
     case 'BonusCard':
       return 'bonus.card';
     case 'Gambled':
@@ -192,7 +200,10 @@ export function situationForPrompt(s: GameState): string | null {
   if (p.isCpu) return ph.kind === 'preRoll' ? null : 'cpu.thinking';
   switch (ph.kind) {
     case 'preRoll':
+      if (counterbuyOptions(s, p.id).length > 0) return 'block.advice';
       return ruleFlags(s.settings).diceGauge ? 'gauge.hint' : 'roll.nudge';
+    case 'invest':
+      return 'invest.prompt';
     case 'target':
       return ph.card === 'swap' ? 'swap.pick' : 'target.pick';
     case 'gamble':
@@ -207,6 +218,7 @@ export function situationForPrompt(s: GameState): string | null {
     case 'takeover':
       if (ph.ownerHasShield) return 'takeover.shield';
       if (ph.winBack) return 'winback.advice';
+      if (ph.why === 'chase' && (ph.multiplier ?? 2) < 2 && chooseAction(s, p.id).type === 'Takeover') return 'chase.advice';
       return chooseAction(s, p.id).type === 'Takeover' ? 'takeover.advice.yes' : 'takeover.advice.no';
     case 'island':
       return 'island.advice';

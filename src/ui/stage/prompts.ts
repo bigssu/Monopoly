@@ -13,7 +13,9 @@ import {
   citiesInGroup,
   citiesOnSide,
   completedGroups,
+  counterbuyOptions,
   ECONOMY,
+  nextBuildCost,
   defaultAction,
   getBoardInfo,
   hubCount,
@@ -499,6 +501,9 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
     h('div', { class: 'pc-kvs' }, kv(t('g.value'), money(propertyValue(state, i))), kv(t('g.toll'), money(tollOf(state, i)))),
   ];
   if (ph.winBack) body.push(tag(t('g.takeover.winBack'), 'gold', 'restart'));
+  // Chase takeover (rules version 3): the multiplier and why ("자산 차이로 1.8배").
+  const why = takeoverWhy(ph);
+  if (why) body.push(tag(why.text, why.tone, 'coin'));
   if (ph.ownerHasShield) body.push(tag(t('g.takeover.shield'), 'bad', 'cards-shield'));
   const hint = victoryHint(state, ph.playerId, i);
   if (hint) body.push(hint);
@@ -520,6 +525,95 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
     ),
     focus: i,
   };
+}
+
+/** The takeover multiplier line (rules version 3), or null (version 1/2 and win-backs). */
+export function takeoverWhy(ph: { multiplier?: number; why?: string }): { text: string; tone: ChipTone } | null {
+  const m = ph.multiplier;
+  if (m === undefined || ph.why === undefined || ph.why === 'winBack') return null;
+  const shown = m.toFixed(1).replace(/\.0$/, '');
+  if (ph.why === 'sale') return { text: t('g.takeover.why.sale', { m: shown }), tone: 'gold' };
+  const key = m < ECONOMY.chaseBase ? 'less' : m > ECONOMY.chaseBase ? 'more' : 'even';
+  return { text: t(`g.takeover.why.chase.${key}`, { m: shown }), tone: key === 'less' ? 'good' : key === 'more' ? 'bad' : 'info' };
+}
+
+/** Start investment (rules version 3): raise one of your cities a level from afar (list or board). */
+function investPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'invest' }>): PromptResult {
+  const pid = ph.playerId;
+  return {
+    big: true,
+    el: card(
+      'pc-invest',
+      {
+        icon: 'building',
+        kicker: t('g.invest.kicker'),
+        title: t('g.invest.title'),
+        body: [
+          h('div', { class: 'pc-note', text: t('g.invest.note') }),
+          pickList(
+            ctx,
+            ph.options,
+            (i) => ({ type: 'Invest', playerId: pid, spaceIndex: i }),
+            (i) => {
+              const l = ctx.state.properties[i]!.level;
+              return `${levelName(l)} → ${levelName(l + 1)} · ${money(nextBuildCost(ctx.state, i) ?? 0)}`;
+            },
+          ),
+        ],
+        buttons: [button(t('g.pass'), ctx, { type: 'Pass', playerId: pid })],
+      },
+      ctx,
+    ),
+  };
+}
+
+/**
+ * Block-buy (rules version 3): an opponent's monopoly warning stands. Before moving, the player may
+ * buy one city of that set from anywhere: a strip under the turn's prompt; tapping it opens the
+ * list and lights the cities on the board (tap one there or in the list). The CPU's strip opens at
+ * once (read-only) so the table sees which city it buys.
+ */
+function withBlockBuy(ctx: PromptCtx, res: PromptResult): PromptResult {
+  const ph = ctx.state.phase;
+  if (ph.kind !== 'preRoll' && ph.kind !== 'island' && ph.kind !== 'travel') return res;
+  const pid = ph.playerId;
+  const opts = counterbuyOptions(ctx.state, pid);
+  if (opts.length === 0) return res;
+  const owner = ctx.state.players[opts[0]!.ownerId]!;
+  const price = (i: number) => opts.find((o) => o.spaceIndex === i)!.price;
+  const strip = h('div', { class: 'pc-block' });
+  setPlayerVars(strip, owner.colorId);
+  const head = h('div', { class: 'pcb-head' }, tokenBadge(owner, 'tok-badge pc-owner-tok'), h('span', { class: 'pcb-title', text: t('g.block.title', { name: owner.name }) }));
+  strip.append(head);
+  const open = (): void => {
+    strip.classList.add('is-open');
+    toggle.remove();
+    strip.append(
+      h('div', { class: 'pc-note', text: t('g.block.hint') }),
+      pickList(
+        ctx,
+        opts.map((o) => o.spaceIndex),
+        (i) => ({ type: 'Counterbuy', playerId: pid, spaceIndex: i }),
+        (i) => money(price(i)),
+      ),
+    );
+  };
+  const min = Math.min(...opts.map((o) => o.price));
+  const toggle = h('button', { class: 'pbtn tone-danger pcb-open', type: 'button', 'data-action': 'block-open' });
+  toggle.append(iconEl('cards-shield', 'ico pbtn-ico'), h('span', { class: 'pbtn-label', text: t('g.block.open') }), h('span', { class: 'pbtn-sub', text: t('g.block.openSub', { amount: money(min) }) }));
+  if (ctx.cpu) {
+    strip.append(toggle);
+    open();
+  } else {
+    toggle.addEventListener('click', () => {
+      sfx.play('tap');
+      open();
+    });
+    strip.append(toggle);
+  }
+  res.el.append(strip);
+  res.el.classList.add('has-block');
+  return res;
 }
 
 /** Double-up (rules = advanced): odd or even for what is on the line, or bank it. */
@@ -881,11 +975,13 @@ export function buildPromptFor(ctx: PromptCtx): PromptResult | null {
   const ph = ctx.state.phase;
   switch (ph.kind) {
     case 'preRoll':
-      return rollPrompt(ctx, ph);
+      return withBlockBuy(ctx, rollPrompt(ctx, ph));
     case 'island':
-      return islandPrompt(ctx, ph);
+      return withBlockBuy(ctx, islandPrompt(ctx, ph));
     case 'travel':
-      return travelPrompt(ctx, ph);
+      return withBlockBuy(ctx, travelPrompt(ctx, ph));
+    case 'invest':
+      return investPrompt(ctx, ph);
     case 'buy':
       return buyPrompt(ctx, ph);
     case 'build':
@@ -958,8 +1054,9 @@ export function spaceInfo(state: GameState, i: number): HTMLElement {
     }
     if (state.festival === i) el.append(tag(t('g.toll.festival'), 'gold', 'festival-marker'));
   } else {
-    const key = sp.kind === 'tax' && ruleFlags(state.settings).allOrNothing ? 'g.info.tax.gamble' : `g.info.${sp.kind}`;
-    el.append(h('div', { class: 'pc-note', text: t(key, { pot: fmtMoney(state.pot) }) }));
+    const flags = ruleFlags(state.settings);
+    const key = sp.kind === 'tax' && flags.allOrNothing ? 'g.info.tax.gamble' : sp.kind === 'start' && flags.vaultCap ? 'g.info.start.v3' : `g.info.${sp.kind}`;
+    el.append(h('div', { class: 'pc-note', text: t(key, { pot: fmtMoney(state.pot), cap: fmtMoney(ECONOMY.vaultCap) }) }));
   }
   el.append(h('button', { class: 'info-close', type: 'button', 'data-action': 'close-info', text: t('shell.close') }));
   return el;
