@@ -282,6 +282,79 @@ Instead of a roll button, the human's turn invites a throw and the dice are thro
   keyboard, cancel, canvas path, the setting, reduced motion, the wobble with its rattles and the
   hint's blink, a press stopping them). Filmstrip of a fast flick: `docs/assets/dice-flick-filmstrip.png`.
 
+#### Skill throw (strategy mode; owner request 2026-10-08; research `docs/research/11-skill-throw.md`)
+
+In a **strategy** game (`ruleFlags().skillThrow` / `strideChoice`: advanced rules, version 3) the throw
+also carries the player's skill: the press is timing, the drag is the aim, the release throws. In a
+**casual** game nothing below appears: the throw above stays exactly as it was (press, shake,
+flick; the strength cosmetic). Code: `src/ui/stage/skill.ts` (pure rules), `SkillPad.ts` (the
+ring, the readout, the arrow, the chips), `prompts.ts` `rollPrompt` (the pointer), `CpuHand.ts`
+(the CPU acting it out), `skillGuide.ts` (the guide), `Stage.rollResult` (the result line).
+
+* **Stride chips** `하나 1–6` / `둘 2–12` (default 둘) in the roll card, above the hint; a tap
+  switches. One die: the second die hides and the first stands centred where the pair stood.
+  A switch lights the reachable spaces (1–6 or 2–12 ahead; an express ticket doubles) for 1.2 s ×
+  pace with the board's static highlight outline (`Board.highlight`, in the player's colour; gone
+  after, no layer stays).
+* **Press = timing.** A ring (SVG stadium around the dice in the pair, so it turns with the Stage)
+  shows a track and a **green band at the top** at rest. While held, a needle runs one lap per
+  **1.4 s × pace / 2** (1.4 s at the default pace "보통", 2.1 s at the slowest, never below 1 s),
+  starting at the bottom, clockwise, the lap so far filled in gold. **Band = ±12 % of the lap**
+  around the top (86° of the ring, ~336 ms of a 1.4 s lap); accuracy = 1 at the band's centre,
+  falling linearly to 0 at its edges, 0 outside (`accuracyAt`). The live accuracy reads beside the
+  ring (`정확 73%`, green ≥ 75 %, amber ≥ 35 %, red above 0). It **freezes** the moment the drag
+  leaves the dead zone (or at the release of a tap): the needle stops there, the readout gets a
+  gold rim. The value sent is the one shown (stepped on the 30 Hz clock).
+* **Drag = aim.** An arrow from the ring's edge in the drag's direction, as long as the drag
+  (stage px), in a top-level layer (`.skill-aim-layer`, z 38, created at the drag, faded out 0.32 s
+  after the release; its frame turned and scaled like the Stage, so the label reads upright for
+  the acting seat and a long arrow may reach over the board). Behind it the guide shows the three
+  zones with ticks at the thresholds; the tip label names the aim and its band:
+
+  | drag length (die sizes; the die ≈ 100 px at 1600×1000, ≈ 43 px at 800×450) | zone | colour | label | sends |
+  |---|---|---|---|---|
+  | < 0.35 (at least 16 px) | dead zone = a tap | — | — | no aim (a weak toss) |
+  | 0.35 – 1.5 | 작게 | blue `#5BB2FF`, ▼ | `작게 2–5` (one die `작게 1–2`) | `aim: 'low'` |
+  | 1.5 – 2.7 | 보통 | grey `#C3CDD6` | `보통` | no aim |
+  | ≥ 2.7 (the arrow stops at 3.6) | 크게 | orange `#FF9A3D`, ▲ | `크게 9–12` (one die `크게 5–6`) | `aim: 'high'` |
+
+  The label is kept on the screen (pulled back along the arrow near an edge).
+* **Release = throw.** `Roll { playerId, stride, accuracy, aim? }` (no aim for 보통 or a tap). The
+  throw goes the arrow's way; its **strength is the arrow's length** (`dragStrength`: linear from
+  the dead zone to 3.6 die sizes → `launchOf`, the same launch table as a casual flick's), so
+  작게 throws soft and short and 크게 hard and far, off the screen's edges. One die: one cube is
+  thrown (`planThrow` takes one or two dice; the frame of a lone die takes the Stage's turn,
+  `frameFromOne`) and lands on the engine's face (`DiceRolled.dice = [die, 0]`).
+* **Result line** under the dice after the landing, from `DiceRolled { stride, aim, accuracy }`:
+  `정확 92% · 작게 노림 → 성공 (4)` (green) / `… → 빗나감 (6)` (red); hit = the total is in the
+  aimed band. Nothing for 보통, a tap, the island roll or casual mode. Read 1.5 s × pace / 2, then a
+  0.2 s fade; UI feedback (no `EVENT_EXTEND`), nothing waits for it.
+* **Keyboard** Enter / Space on the focused pad: 보통 with the chosen stride. The chips are buttons.
+* **Reduced motion** (the app's setting): the ring does not run; the readout alone counts the
+  accuracy as text on the same timing (bigger); the arrow and its label still show; the throw is
+  the in-place roll.
+* **First roll guide**: the first time a human rolls in a strategy game on this install (pref
+  `skillGuideSeen`), a card on the Stage (facing that player): 누르기 → 초록에서 끌기 → 길이로 노리기,
+  a small DOM/SVG picture each (no canvas), a line on the odds ("결과는 장담할 수 없어요"), 알겠어요.
+  Settings → "손맛 던지기 안내 · 다시 보기" opens it; the rules screen has it as page 9.
+* **CPU.** The engine's AI picks `stride`, `aim` and `accuracy`; the controller hands that action to
+  the hand (`CpuHand.press`), which acts out exactly it: switches to one die if the AI chose it (the
+  reachable spaces light), presses (the needle runs at least 0.45 s, then stops at the phase of the
+  AI's accuracy, before or after the top by turn, `phaseFor`), drags the arrow to the middle of the
+  AI's zone toward the board centre (0.38 s, `HAND.drag`), and releases; the result line shows as
+  for a person. A strategy CPU roll takes ~0.5–1.9 s longer than a casual one (the needle's wait).
+* **Zero idle.** At rest the ring is static SVG; the needle, the readout and the arrow step on the
+  shared 30 Hz clock only while pressed; the arrow layer exists only while dragging.
+* **B7 dice gauge** (advanced, versions 1–2) is not shown in strategy games (v3 ignores `gauge`);
+  older saves keep it.
+* Tests: `src/ui/stage/__tests__/skill.test.ts` (phase → accuracy, the band, `phaseFor`, the
+  period and the pace, length → zone / strength (monotonic) / launch, the reach set, the bands,
+  one-die faces, the result line, the mode switch), `throw.test.ts` (`launchOf`, a one-die throw,
+  `frameFromOne`), `e2e/dice-throw.spec.ts` "skill throw (strategy mode)" (casual unchanged; press
+  into the band + short drag → aim low ≥ 0.9 with the arrow, readout and result line; long → high;
+  middle and tap → no aim; keyboard; one die; the guide once + Settings; reduced motion; the CPU
+  acting out its AI roll; a 20-turn strategy CPU game). Screenshots `docs/assets/skill-throw-*.png`.
+
 ### 2.5 Screens
 
 1. **Title** — logo, "새 게임", "이어하기"(if save exists), "게임 방법", "설정".
