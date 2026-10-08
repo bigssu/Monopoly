@@ -84,7 +84,8 @@ test('control: with sound on, samples do start (the counter works)', async ({ pa
 });
 
 test('advanced rules: the double-up bonus completes from real clicks', async ({ page }) => {
-  await boot(page, { dealer: 'off' });
+  // Advanced = strategy mode: the skill-throw guide would cover the dice at the first human roll.
+  await boot(page, { dealer: 'off', skillGuideSeen: true });
   await startGame(page, 'advanced');
   await page.evaluate(() => {
     const h = window.__lotAndRoll!;
