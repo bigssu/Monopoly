@@ -13,6 +13,15 @@ import { boot, watchConsole } from './helpers';
 const SHOTS = 'e2e/__screenshots__';
 
 async function bootFast(page: Page): Promise<void> {
+  // Strategy mode shows the skill-throw guide at a human's first roll; these specs roll by keyboard.
+  await page.addInitScript(() => {
+    try {
+      const key = 'lotandroll:prefs:v1';
+      localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skillGuideSeen: true }));
+    } catch {
+      /* storage blocked */
+    }
+  });
   await boot(page, { w: 1600, h: 1000 });
   await page.evaluate(() => {
     window.__lotAndRoll!.setAnimSpeed(2);
