@@ -101,6 +101,12 @@ export interface PendingWin {
   round: number;
   /** Opponents who already used their block-buy on this notice. */
   blocked: PlayerId[];
+  /**
+   * Opponents whose turn has started since the notice (each had their chance to answer). When the
+   * game ends (round limit, or the round after a first bankruptcy) before the owner's next turn, a
+   * notice every solvent opponent has heard still wins.
+   */
+  heard: PlayerId[];
 }
 
 /** Win-back (rules = advanced): `from` lost the city to `by` in a takeover. */

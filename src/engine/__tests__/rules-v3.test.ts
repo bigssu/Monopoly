@@ -276,7 +276,7 @@ describe('monopoly notice and block-buy', () => {
     const r = announce();
     expect(r.state.phase.kind).not.toBe('gameOver');
     expect(r.events).toContainEqual(expect.objectContaining({ type: 'MonopolyNotice', playerId: 0, victory: 'line', side: 'A', members: [1, 2, 4, 6, 7] }));
-    expect(r.state.pendingWins).toEqual([{ playerId: 0, victory: 'line', side: 'A', members: [1, 2, 4, 6, 7], round: 1, blocked: [] }]);
+    expect(r.state.pendingWins).toEqual([{ playerId: 0, victory: 'line', side: 'A', members: [1, 2, 4, 6, 7], round: 1, blocked: [], heard: [] }]);
     expect(deserialize(serialize(r.state))).toEqual(r.state);
     // Player 1 does not answer: at player 0's next turn the line wins.
     let s = r.state.phase.kind === 'build' ? reduce(r.state, pass(0)).state : r.state;
@@ -286,6 +286,31 @@ describe('monopoly notice and block-buy', () => {
     });
     const end = run(s, roll(1), pass(1));
     expect(end.state.phase).toMatchObject({ kind: 'gameOver', result: { winnerId: 0, victory: 'line', side: 'A' } });
+  });
+
+  it('a notice every opponent has answered wins when the game ends before its owner’s next turn', () => {
+    // Player 0 completes the line in the final round; player 1 (the last seat) plays, the game ends.
+    const last = run(edit(completing(), (st) => (st.settings.roundLimit = 1)), { type: 'Roll', playerId: 0, stride: 1 }, buy(0));
+    let s = last.state.phase.kind === 'build' ? reduce(last.state, pass(0)).state : last.state;
+    expect(s.pendingWins?.[0]?.heard).toEqual([1]);
+    s = edit(s, (st) => {
+      st.players[1]!.position = 12;
+      queueDice(st, [1, 2]);
+    });
+    const end = run(s, roll(1), pass(1));
+    expect(end.state.phase).toMatchObject({ kind: 'gameOver', result: { winnerId: 0, victory: 'line' } });
+    // Completed by the last seat in the final round: nobody could answer, the assets decide.
+    const late = edit(v3(), (st) => {
+      st.settings.roundLimit = 1;
+      for (const i of [1, 4, 6, 7]) own(st, i, 1);
+      st.current = 1;
+      st.phase = { kind: 'preRoll', playerId: 1, rollAgain: false };
+      st.players[1]!.position = 0;
+      queueDice(st, [2, 1]);
+    });
+    const r = run(late, { type: 'Roll', playerId: 1, stride: 1 }, buy(1));
+    const fin = r.state.phase.kind === 'build' ? reduce(r.state, pass(1)).state : r.state;
+    expect(fin.phase).toMatchObject({ kind: 'gameOver', result: { victory: 'roundLimit' } });
   });
 
   it('casual mode still wins at once', () => {

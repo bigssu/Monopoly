@@ -563,13 +563,13 @@ function updateNotices(ctx: Ctx, by: PlayerId | null): void {
       emit(ctx, { type: 'MonopolyBroken', playerId: w.playerId, by: by ?? (s.current !== w.playerId ? s.current : null) });
       continue;
     }
-    kept.push({ playerId: w.playerId, ...noticeFields(s, v), round: w.round, blocked: w.blocked });
+    kept.push({ playerId: w.playerId, ...noticeFields(s, v), round: w.round, blocked: w.blocked, heard: w.heard });
   }
   for (const p of s.players) {
     if (p.bankrupt || kept.some((w) => w.playerId === p.id)) continue;
     const v = setVictory(s, p.id);
     if (!v) continue;
-    const w: PendingWin = { playerId: p.id, ...noticeFields(s, v), round: s.round, blocked: [] };
+    const w: PendingWin = { playerId: p.id, ...noticeFields(s, v), round: s.round, blocked: [], heard: [] };
     kept.push(w);
     emit(ctx, {
       type: 'MonopolyNotice',
@@ -619,7 +619,9 @@ function startTurn(ctx: Ctx, pid: PlayerId): void {
   s.extraRoll = false;
   p.consecutiveDoubles = 0;
   emit(ctx, { type: 'TurnStarted', playerId: pid, round: s.round, turn: s.turn });
-  // Monopoly notice (version 3): the set survived a full round of answers — it wins now.
+  // Monopoly notice (version 3): every opponent's turn is their chance to answer; the owner's own
+  // turn means the set survived them all — it wins now.
+  for (const w of s.pendingWins ?? []) if (w.playerId !== pid && !w.heard.includes(pid)) w.heard.push(pid);
   if (s.pendingWins?.some((w) => w.playerId === pid)) {
     const v = setVictory(s, pid);
     if (v) finish(ctx, { winnerId: pid, ...v });
@@ -647,6 +649,14 @@ function endTurn(ctx: Ctx): void {
     if (!player(ctx, next).bankrupt) break;
   }
   if (next <= cur) {
+    const ending = s.endsAfterRound || (s.settings.roundLimit !== null && s.round >= s.settings.roundLimit);
+    // Monopoly notice (version 3): the game ends before the owner's next turn; a notice every solvent
+    // opponent has had a turn to answer still wins.
+    if (ending) {
+      const w = (s.pendingWins ?? []).find((x) => s.players.every((q) => q.bankrupt || q.id === x.playerId || x.heard.includes(q.id)));
+      const v = w ? setVictory(s, w.playerId) : null;
+      if (w && v) finish(ctx, { winnerId: w.playerId, ...v });
+    }
     if (s.endsAfterRound) finish(ctx, { winnerId: ranking(s)[0]!.playerId, victory: 'bankruptcy' });
     if (s.settings.roundLimit !== null && s.round >= s.settings.roundLimit) finishOnRoundLimit(ctx);
     s.round += 1;

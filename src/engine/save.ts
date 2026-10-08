@@ -331,6 +331,7 @@ function validateRuleState(state: JsonObject, boardSize: number): boolean {
   if (state.pendingWins !== undefined && !(Array.isArray(state.pendingWins) && state.pendingWins.length > 0 && state.pendingWins.every((w) =>
     object(w) && integer(w.playerId, 0) && ['triple', 'line', 'hubs'].includes(w.victory as string) && Array.isArray(w.members) && w.members.length > 0 &&
     w.members.every((i) => spaceIndex(i, boardSize)) && integer(w.round, 1) && Array.isArray(w.blocked) && w.blocked.every((id) => integer(id, 0)) &&
+    Array.isArray(w.heard) && w.heard.every((id) => integer(id, 0)) &&
     (w.side === undefined || SIDE_IDS.includes(w.side as never)) &&
     (w.groups === undefined || (Array.isArray(w.groups) && w.groups.every((g) => GROUP_IDS.includes(g as never))))))) return false;
   if (state.takenFrom !== undefined && !(object(state.takenFrom) && Object.entries(state.takenFrom).every(([k, v]) =>
