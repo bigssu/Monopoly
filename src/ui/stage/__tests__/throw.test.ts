@@ -6,7 +6,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   cpuFlick,
+  flickAim,
   flickLaunch,
+  frameFromOne,
+  launchOf,
   frameFrom,
   fromScreen,
   planThrow,
@@ -65,7 +68,7 @@ function plans(): { name: string; v: Vec | null; plan: ThrowPlan; box: Box; ds: 
     for (const v of [null, ...DIRS]) {
       const faces: [number, number] = [1 + (k % 6), 1 + ((k * 5 + 2) % 6)];
       k++;
-      const plan = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, v, poses: [pose(5, faces[0]), pose(2, faces[1])], rand: seeded(k) });
+      const plan = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: flickAim(v), poses: [pose(5, faces[0]), pose(2, faces[1])], rand: seeded(k) });
       out.push({ name: `${L.name} ${v ? `${v.x},${v.y}` : 'tap'}`, v, plan, box: L.box, ds: L.ds, faces });
     }
   }
@@ -114,8 +117,8 @@ describe('planThrow', () => {
         const want = [FINAL[faces[i]]![0] - 18, FINAL[faces[i]]![1] + 24];
         expect(mod(s.rx), `${name} die ${i} rx`).toBe(mod(want[0]!));
         expect(mod(s.ry), `${name} die ${i} ry`).toBe(mod(want[1]!));
-        expect(s.x, name).toBeCloseTo(plan.dice[i].home.x, 6);
-        expect(s.y, name).toBeCloseTo(plan.dice[i].home.y, 6);
+        expect(s.x, name).toBeCloseTo(plan.dice[i]!.home.x, 6);
+        expect(s.y, name).toBeCloseTo(plan.dice[i]!.home.y, 6);
         expect(s.ty, name).toBeCloseTo(0, 6);
         expect([s.sx, s.sy], name).toEqual([1, 1]);
       }
@@ -126,8 +129,8 @@ describe('planThrow', () => {
     for (const { name, v, plan } of plans()) {
       if (!v || plan.kind !== 'flick') continue;
       // The die that leaves first; its first frames (before any wall or knock) point the flick's way.
-      const i = plan.dice[0].delay === 0 ? 0 : 1;
-      const d = plan.dice[i];
+      const i = plan.dice[0]!.delay === 0 ? 0 : 1;
+      const d = plan.dice[i]!;
       const s = sampleThrow(plan, i, 17);
       const dx = s.x - d.home.x;
       const dy = s.y - d.home.y;
@@ -141,7 +144,7 @@ describe('planThrow', () => {
     for (const L of LAYOUTS) {
       for (const v of [null, { x: 0, y: 0 }, { x: 120, y: -90 }]) {
         const homes = homesOf(L.ds, L.gap);
-        const plan = planThrow({ box: L.box, homes, ds: L.ds, v, poses: [pose(1, 3), pose(1, 4)], rand: seeded(7) });
+        const plan = planThrow({ box: L.box, homes, ds: L.ds, aim: flickAim(v), poses: [pose(1, 3), pose(1, 4)], rand: seeded(7) });
         expect(plan.kind).toBe('toss');
         // Forward = toward the board centre = up in the stage's frame.
         expect(plan.dir.y).toBeLessThan(-0.95);
@@ -167,8 +170,8 @@ describe('planThrow', () => {
 
   it('is deterministic for a given random source (the look only; the engine decides the faces)', () => {
     const L = LAYOUTS[0]!;
-    const a = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, v: { x: 900, y: -1300 }, poses: [pose(1, 2), pose(1, 5)], rand: seeded(3) });
-    const b = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, v: { x: 900, y: -1300 }, poses: [pose(1, 2), pose(1, 5)], rand: seeded(3) });
+    const a = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: flickAim({ x: 900, y: -1300 }), poses: [pose(1, 2), pose(1, 5)], rand: seeded(3) });
+    const b = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: flickAim({ x: 900, y: -1300 }), poses: [pose(1, 2), pose(1, 5)], rand: seeded(3) });
     expect(sampleThrow(a, 1, 700)).toEqual(sampleThrow(b, 1, 700));
   });
 });
@@ -223,7 +226,7 @@ describe('rollMode (time policy)', () => {
 
   it('a throw takes no time at speed 0 and scales with the animation speed', () => {
     const L = LAYOUTS[0]!;
-    const plan = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, v: { x: 0, y: -2000 }, poses: [pose(1, 2), pose(1, 5)], rand: seeded(5) });
+    const plan = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: flickAim({ x: 0, y: -2000 }), poses: [pose(1, 2), pose(1, 5)], rand: seeded(5) });
     setAnimSpeed(0);
     expect(D(plan.total)).toBe(0);
     setAnimSpeed(2);
@@ -264,7 +267,7 @@ function screenThrow(angle: number, v: Vec | null, seed = 11, faces: [number, nu
   const f = seatFrame(angle);
   const box = screenWalls(f, VIEWBOX, SCREEN.ds);
   const tossBox = { left: -220, right: 400, top: -170, bottom: 240 };
-  const plan = planThrow({ box, tossBox, homes: homesOf(SCREEN.ds, SCREEN.gap), ds: SCREEN.ds, v: v ? screenToStage(v, angle) : null, poses: [pose(5, faces[0]), pose(2, faces[1])], rand: seeded(seed) });
+  const plan = planThrow({ box, tossBox, homes: homesOf(SCREEN.ds, SCREEN.gap), ds: SCREEN.ds, aim: flickAim(v ? screenToStage(v, angle) : null), poses: [pose(5, faces[0]), pose(2, faces[1])], rand: seeded(seed) });
   return { f, plan, box };
 }
 
@@ -398,8 +401,8 @@ describe('screen walls (owner: bounce off the screen\'s edges)', () => {
           const s = sampleThrow(plan, i, plan.total);
           expect(mod(s.rx)).toBe(mod(FINAL[faces[i]]![0] - 18));
           expect(mod(s.ry)).toBe(mod(FINAL[faces[i]]![1] + 24));
-          expect(s.x).toBeCloseTo(plan.dice[i].home.x, 6);
-          expect(s.y).toBeCloseTo(plan.dice[i].home.y, 6);
+          expect(s.x).toBeCloseTo(plan.dice[i]!.home.x, 6);
+          expect(s.y).toBeCloseTo(plan.dice[i]!.home.y, 6);
         }
       }
     }
@@ -415,8 +418,8 @@ describe('screen walls (owner: bounce off the screen\'s edges)', () => {
         expect(back.y, seat).toBeCloseTo(d.y, 9);
         // And the dice go that way on the screen: their first frames move along the flick.
         const { f, plan } = screenThrow(angle, { x: d.x * 2000, y: d.y * 2000 });
-        const i = plan.dice[0].delay === 0 ? 0 : 1;
-        const a = toScreen(f, plan.dice[i].home);
+        const i = plan.dice[0]!.delay === 0 ? 0 : 1;
+        const a = toScreen(f, plan.dice[i]!.home);
         const s = sampleThrow(plan, i, 60);
         const b = toScreen(f, { x: s.x, y: s.y });
         const cos = ((b.x - a.x) * d.x + (b.y - a.y) * d.y) / Math.hypot(b.x - a.x, b.y - a.y);
@@ -459,8 +462,8 @@ describe('tap toss (unchanged by the screen walls)', () => {
     const poses: [Pose, Pose] = [pose(1, 3), pose(2, 6)];
     const screen = screenWalls(seatFrame(0), VIEWBOX, L.ds);
     for (const v of [null, { x: 100, y: -120 }]) {
-      const a = planThrow({ box: L.box, homes, ds: L.ds, v, poses, rand: seeded(9) });
-      const b = planThrow({ box: screen, tossBox: L.box, homes, ds: L.ds, v, poses, rand: seeded(9) });
+      const a = planThrow({ box: L.box, homes, ds: L.ds, aim: flickAim(v), poses, rand: seeded(9) });
+      const b = planThrow({ box: screen, tossBox: L.box, homes, ds: L.ds, aim: flickAim(v), poses, rand: seeded(9) });
       expect(b.kind).toBe('toss');
       expect(b.total).toBeCloseTo(THROW.tossRoll + THROW.delay, 6);
       expect(b.box).toEqual(a.box);
@@ -502,6 +505,71 @@ describe('cpuFlick (CPU throws: medium strength, fixed per turn)', () => {
       }
       expect(edge).toBeGreaterThan(0);
       expect(short + edge).toBe(24);
+    }
+  });
+});
+
+describe('strength = the aim arrow\'s length (strategy mode) and one-die throws', () => {
+  it('launchOf is monotonic in the strength and clamped at both ends', () => {
+    let prev = launchOf(0);
+    expect(prev).toEqual({ strength: 0, speed: THROW.launch[0], roll: THROW.flickRoll[0] });
+    for (let s = 0.05; s <= 1.0001; s += 0.05) {
+      const L = launchOf(s);
+      expect(L.speed).toBeGreaterThan(prev.speed);
+      expect(L.roll).toBeGreaterThan(prev.roll);
+      prev = L;
+    }
+    expect(launchOf(3)).toEqual(launchOf(1));
+    expect(launchOf(-1)).toEqual(launchOf(0));
+    expect(launchOf(Number.NaN)).toEqual(launchOf(0));
+    // A casual flick is the same mapping through its release speed.
+    expect(flickLaunch(THROW.flickMax)).toEqual(launchOf(1));
+  });
+
+  it('a stronger aim flies faster, farther and longer', () => {
+    const L = LAYOUTS[0]!;
+    const big = { left: -700, right: 900, top: -500, bottom: 500 };
+    const weak = planThrow({ box: big, tossBox: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: { x: 0, y: -1, strength: 0.1 }, poses: [pose(1, 2), pose(1, 5)], rand: seeded(4) });
+    const strong = planThrow({ box: big, tossBox: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: { x: 0, y: -1, strength: 0.9 }, poses: [pose(1, 2), pose(1, 5)], rand: seeded(4) });
+    expect(strong.speed).toBeGreaterThan(weak.speed * 2);
+    expect(strong.path).toBeGreaterThan(weak.path * 1.5);
+    expect(strong.total).toBeGreaterThan(weak.total + 400);
+  });
+
+  it('throws ONE die (stride 1): one track, lands home on the engine\'s face, flick and toss', () => {
+    for (const L of LAYOUTS) {
+      const home = [{ x: L.ds / 2, y: L.ds / 2 }];
+      for (const aim of [null, { x: 1, y: -1, strength: 0.6 }, { x: -1, y: 0.2, strength: 1 }]) {
+        for (const face of [1, 2, 3, 4, 5, 6]) {
+          const plan = planThrow({ box: L.box, homes: home, ds: L.ds, aim, poses: [pose(3, face)], rand: seeded(face) });
+          expect(plan.dice).toHaveLength(1);
+          expect(plan.kind).toBe(aim ? 'flick' : 'toss');
+          for (let t = 0; t <= plan.total; t += 40) {
+            const all = samplePair(plan, t);
+            expect(all).toHaveLength(1);
+            expect(all[0]!.x).toBeGreaterThanOrEqual(plan.box.left - 1e-6);
+            expect(all[0]!.x).toBeLessThanOrEqual(plan.box.right + 1e-6);
+          }
+          const s = sampleThrow(plan, 0, plan.total);
+          expect(mod(s.rx)).toBe(mod(FINAL[face]![0] - 18));
+          expect(mod(s.ry)).toBe(mod(FINAL[face]![1] + 24));
+          expect(s.x).toBeCloseTo(home[0]!.x, 6);
+          expect(s.y).toBeCloseTo(home[0]!.y, 6);
+        }
+      }
+    }
+  });
+
+  it('frameFromOne: one die\'s frame from its centre, the Stage\'s turn and the scale, round-trips', () => {
+    for (const angle of [0, 90, 180, -90, 270, 450]) {
+      const f = frameFromOne({ x: 50, y: 50 }, { x: 800, y: 500 }, angle, 0.92);
+      const c = toScreen(f, { x: 50, y: 50 });
+      expect(c.x).toBeCloseTo(800, 9);
+      expect(c.y).toBeCloseTo(500, 9);
+      const back = fromScreen(f, toScreen(f, { x: 130, y: -40 }));
+      expect(back.x).toBeCloseTo(130, 9);
+      expect(back.y).toBeCloseTo(-40, 9);
+      expect(Math.abs(f.a)).toBeLessThanOrEqual(180);
     }
   });
 });

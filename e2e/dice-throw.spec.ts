@@ -17,15 +17,15 @@
  * screen box.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { boot, watchConsole } from './helpers';
+import { boot, checkPress, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
 
 interface Rec {
   mode: string;
   path: string | null;
   kind: string | null;
-  aim: { x: number; y: number } | null;
-  faces: [number, number];
+  aim: { x: number; y: number; strength: number } | null;
+  faces: number[];
   planMs: number;
   startedAt: number;
   endedAt: number | null;
@@ -634,6 +634,373 @@ test.describe('dice throw', () => {
       expect(reach, `${seat}: reaches the edge the finger pointed at`).toBeGreaterThan(0.9);
       await checkLanded(page, seat);
     }
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Strategy mode (advanced rules, version 3): the skill throw (docs/DESIGN.md "Skill throw",
+// src/ui/stage/SkillPad.ts). Timing on the hand-driven clock (`manualClock` / `stepFrames`), so the
+// ring's phase at the drag is exact.
+// ---------------------------------------------------------------------------------------------
+
+const PREFS = 'lotandroll:prefs:v1';
+
+/** The skill guide counts as seen (only its own test shows it). */
+async function guideSeen(page: Page, seen = true): Promise<void> {
+  await page.addInitScript(
+    ({ key, seen }) => {
+      try {
+        const prev = JSON.parse(localStorage.getItem(key) ?? '{}');
+        localStorage.setItem(key, JSON.stringify({ ...prev, skillGuideSeen: seen }));
+      } catch {
+        /* storage blocked */
+      }
+    },
+    { key: PREFS, seen },
+  );
+}
+
+/** A strategy-mode game (rules advanced, v3): player `current` (a human) about to roll. */
+async function craftSkill(page: Page, dice: [number, number], o: { n?: number; current?: number; cpu?: boolean; seed?: number } = {}): Promise<void> {
+  await page.evaluate(({ dice, n, current, cpu, seed }) => {
+    const h = window.__lotAndRoll!;
+    h.setPromptTimer(0);
+    h.dice().clear();
+    h.skill().clear();
+    const st = h.demoSettings(n, false) as { rules: string; players: { isCpu: boolean; cpuLevel?: string }[] };
+    st.rules = 'advanced';
+    if (cpu) {
+      st.players[current]!.isCpu = true;
+      st.players[current]!.cpuLevel = 'normal';
+    }
+    h.startGame(st as never, seed);
+    const s = h.getState()!;
+    s.current = current;
+    s.phase = { kind: 'preRoll', playerId: current, rollAgain: false };
+    s.testHooks = { diceQueue: [dice] };
+    h.loadState(s);
+  }, { dice, n: o.n ?? 2, current: o.current ?? 0, cpu: !!o.cpu, seed: o.seed ?? 7 });
+  if (!o.cpu) await expect(page.locator('.roll-pad:not(:disabled)')).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(500);
+}
+
+/** The ring's accuracy and phase right now. */
+async function ring(page: Page): Promise<{ acc: number; phase: number; text: string }> {
+  return page.evaluate(() => {
+    const r = document.querySelector<SVGElement>('.skill-ring')!;
+    return { acc: Number(r.dataset.acc ?? 0), phase: Number(r.dataset.phase ?? 0), text: document.querySelector('.skill-acc')?.textContent ?? '' };
+  });
+}
+
+/**
+ * Press the dice on the manual clock, step until the ring's accuracy is at least `minAcc` (or `frames`
+ * frames), drag by (dx, dy) screen px, step a frame (the arrow draws), read the arrow's label, release.
+ */
+async function skillThrow(page: Page, dx: number, dy: number, o: { minAcc?: number; frames?: number } = {}): Promise<{ acc: number; label: string | null; readout: string }> {
+  const c = await pairCentre(page);
+  await page.evaluate(() => window.__lotAndRoll!.manualClock(true));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  let r = await ring(page);
+  for (let k = 0; k < (o.frames ?? 90); k++) {
+    if (o.minAcc !== undefined && r.acc >= o.minAcc) break;
+    await page.evaluate(() => window.__lotAndRoll!.stepFrames(1));
+    r = await ring(page);
+  }
+  if (dx || dy) {
+    // No clock frame between the moves: the accuracy locks at the frame read above.
+    await page.mouse.move(c.x + dx / 3, c.y + dy / 3);
+    await page.mouse.move(c.x + dx, c.y + dy);
+    await page.evaluate(() => window.__lotAndRoll!.stepFrames(1));
+  }
+  const label = await page.evaluate(() => document.querySelector('.skill-aim-label')?.textContent ?? null);
+  const readout = (await ring(page)).text;
+  await page.mouse.up();
+  await page.evaluate(() => window.__lotAndRoll!.manualClock(false));
+  return { acc: r.acc, label, readout };
+}
+
+interface SkillRoll {
+  zone: string;
+  aim?: string;
+  accuracy: number;
+  stride: number;
+  throwAim: { x: number; y: number; strength: number } | null;
+}
+
+async function lastSkill(page: Page): Promise<SkillRoll> {
+  return page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.skill().rolls.at(-1))) as SkillRoll);
+}
+
+test.describe('skill throw (strategy mode)', () => {
+  test('casual mode keeps the plain throw: no chips, no ring, no aim labels, no result line, no guide', async ({ page }) => {
+    test.setTimeout(90_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await guideSeen(page, false);
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    // demoSettings: rules 'normal' (casual).
+    await craft(page, [2, 3]);
+    await expect(page.locator('.stride-chips, .skill-ring, .skill-guide')).toHaveCount(0);
+    await flick(page, await pairCentre(page), 0, -150, 1500);
+    await checkResult(page, [2, 3], 'casual');
+    expect((await lastRec(page))!.kind).toBe('flick');
+    await expect(page.locator('.skill-aim-layer, .roll-result')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__lotAndRoll!.skill().rolls.length)).toBe(0);
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('press until the needle is on green, drag short: aim low at ≥ 90 %; the arrow, the readout and the result line', async ({ page }) => {
+    test.setTimeout(120_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await guideSeen(page);
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await craftSkill(page, [1, 3]);
+    // At rest: the chips (two dice chosen), the static ring; no needle, no readout.
+    await expect(page.locator('.stride-chip[data-stride="2"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.stride-chip[data-stride="1"]')).toHaveText(/하나\s*1–6/);
+    await expect(page.locator('.skill-ring')).toBeVisible();
+    await expect(page.locator('.skill-acc')).toBeHidden();
+    await expect(page.locator('.roll-gauge')).toHaveCount(0);
+    const ds = (await page.locator('.st-dice .die').first().boundingBox())!.height;
+    const r = await skillThrow(page, 8, -ds * 0.95, { minAcc: 0.9 });
+    expect(r.acc, 'pressed until the needle sat in the band').toBeGreaterThanOrEqual(0.9);
+    expect(r.label).toBe('작게 2–5');
+    expect(r.readout).toBe(`정확 ${Math.round(r.acc * 100)}%`);
+    const s = await lastSkill(page);
+    expect(s.zone).toBe('low');
+    expect(s.aim).toBe('low');
+    expect(s.stride).toBe(2);
+    expect(s.accuracy).toBeGreaterThanOrEqual(0.9);
+    expect(s.accuracy).toBeCloseTo(r.acc, 2);
+    await checkResult(page, [1, 3], 'aimed low');
+    // The throw went the arrow's way (up), softly.
+    const rec = (await lastRec(page))!;
+    expect(rec.kind).toBe('flick');
+    expect(rec.aim!.y).toBeLessThan(0);
+    expect(rec.aim!.strength).toBeLessThan(0.36);
+    // The result line, from the DiceRolled fields: 4 is in 2–5.
+    const line = page.locator('.st-dice .roll-result');
+    await expect(line).toHaveAttribute('aria-label', /^정확 9\d% · 작게 노림 → 성공 \(4\)$|^정확 100% · 작게 노림 → 성공 \(4\)$/, { timeout: 8000 });
+    await expect(line).toHaveCount(0, { timeout: 8000 });
+    await expect(page.locator('.skill-aim-layer')).toHaveCount(0);
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('a long drag aims high (a strong throw); a tap rolls 보통 (no aim, no result line); the keyboard too', async ({ page }) => {
+    test.setTimeout(150_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await guideSeen(page);
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await craftSkill(page, [3, 3]);
+    const ds = (await page.locator('.st-dice .die').first().boundingBox())!.height;
+    // Outside the band: 6 frames in (phase ~0.14), accuracy 0.
+    const r = await skillThrow(page, 20, -ds * 3.3, { frames: 6 });
+    expect(r.label).toBe('크게 9–12');
+    expect(r.readout).toBe('정확 0%');
+    const s = await lastSkill(page);
+    expect(s.aim).toBe('high');
+    expect(s.accuracy).toBe(0);
+    await checkResult(page, [3, 3], 'aimed high');
+    const rec = (await lastRec(page))!;
+    expect(rec.kind).toBe('flick');
+    expect(rec.aim!.strength).toBeGreaterThan(0.72);
+    await expect(page.locator('.st-dice .roll-result')).toHaveAttribute('aria-label', '정확 0% · 크게 노림 → 빗나감 (6)', { timeout: 8000 });
+
+    // A middle drag: 보통 (no aim), thrown at a medium strength.
+    await craftSkill(page, [2, 5]);
+    const m = await skillThrow(page, 0, -ds * 2.1, { frames: 3 });
+    expect(m.label).toBe('보통');
+    expect((await lastSkill(page)).aim).toBeUndefined();
+    await checkResult(page, [2, 5], 'middle');
+
+    // A tap: 보통, a weak toss.
+    await craftSkill(page, [4, 1]);
+    await skillThrow(page, 0, 0, { frames: 4 });
+    const tap = await lastSkill(page);
+    expect(tap.zone).toBe('tap');
+    expect(tap.aim).toBeUndefined();
+    expect(tap.throwAim).toBeNull();
+    await checkResult(page, [4, 1], 'tap');
+    expect((await lastRec(page))!.kind).toBe('toss');
+    await page.waitForTimeout(600);
+    await expect(page.locator('.roll-result')).toHaveCount(0);
+
+    // The keyboard: 보통 with the chosen stride (a toss).
+    await craftSkill(page, [6, 2]);
+    await expect(page.locator('.roll-pad')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await checkResult(page, [6, 2], 'keyboard');
+    expect((await lastRec(page))!.kind).toBe('toss');
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('one die: the chip shows one die and lights 1–6 ahead; the throw renders one die and lands on the engine\'s face', async ({ page }) => {
+    test.setTimeout(120_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await guideSeen(page);
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await craftSkill(page, [5, 2]);
+    const two = (await page.locator('.st-dice .dice-pair').boundingBox())!;
+    await page.locator('.stride-chip[data-stride="1"]').click();
+    await expect(page.locator('.stride-chip[data-stride="1"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.st-dice .dice')).toHaveClass(/is-single/);
+    await expect(page.locator('.st-dice .dice-pair > .die:visible')).toHaveCount(1);
+    // The six reachable spaces light up for a moment, then go.
+    await expect(page.locator('.bm-hl')).toHaveCount(6);
+    await expect(page.locator('.bm-pick')).toHaveCount(6);
+    await expect(page.locator('.bm-hl')).toHaveCount(0, { timeout: 6000 });
+    await expect(page.locator('.bm-pick')).toHaveCount(0);
+    await expect(page.locator('.bm-dim')).toHaveCount(0, { timeout: 2000 });
+    // The single die stands where the pair's centre was.
+    const one = (await page.locator('.st-dice .dice-pair').boundingBox())!;
+    expect(Math.abs(one.x + one.width / 2 - (two.x + two.width / 2))).toBeLessThan(2);
+    const ds = one.height;
+    await startSampling(page);
+    const r = await skillThrow(page, ds * 2.2, -ds * 2.2, { frames: 20 });
+    expect(r.label).toBe('크게 5–6');
+    const s = await lastSkill(page);
+    expect(s.stride).toBe(1);
+    expect(s.aim).toBe('high');
+    const smp = await samples(page);
+    // One die flew (the second, hidden, has no box).
+    expect(smp.every((f) => f.r.filter((r) => r.w > 0).length === 1)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.lastDice)).toEqual([5, 0]);
+    const rec = (await lastRec(page))!;
+    expect(rec.faces).toEqual([5]);
+    expect(rec.kind).toBe('flick');
+    await expect.poll(() => page.evaluate(() => (window.__lotAndRoll!.dice().log.at(-1)?.endedAt ?? null) !== null)).toBe(true);
+    const shown = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.st-dice .dice-pair > .die')].filter((d) => d.offsetParent !== null).map((d) => {
+        const f = [...d.querySelectorAll<HTMLElement>('.face')].find((x) => x.style.visibility !== 'hidden' && !x.classList.contains('is-side'));
+        return f ? Number(/f(\d)/.exec(f.className)![1]) : 0;
+      }),
+    );
+    expect(shown).toEqual([5]);
+    await expect(page.locator('.dice-fly')).toHaveCount(0);
+    await expect(page.locator('.die-ph')).toHaveCount(0);
+    await expect(page.locator('.st-dice .roll-result')).toHaveAttribute('aria-label', /크게 노림 → 성공 \(5\)$/, { timeout: 8000 });
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('the guide shows the first time a human rolls in strategy mode, once; Settings opens it again', async ({ page }) => {
+    test.setTimeout(90_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await craftSkill(page, [1, 2]);
+    const guide = page.locator('.st-pop .skill-guide');
+    await expect(guide).toBeVisible();
+    await expect(guide.locator('.sg-step')).toHaveCount(3);
+    await expect(guide.locator('.sg-title')).toHaveText(['누르기', '초록에서 끌기', '길이로 노리기']);
+    await guide.locator('.sg-ok').click();
+    await expect(guide).toHaveCount(0);
+    expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}').skillGuideSeen, PREFS)).toBe(true);
+    // The pad works after it.
+    await skillThrow(page, 0, 0, { frames: 2 });
+    await checkResult(page, [1, 2], 'after the guide');
+    // The next strategy roll: no guide.
+    await craftSkill(page, [2, 2]);
+    await page.waitForTimeout(300);
+    await expect(page.locator('.skill-guide')).toHaveCount(0);
+    // Settings → 손맛 던지기 안내 → 다시 보기.
+    await page.goto('/?dev=1');
+    await page.waitForFunction(() => document.getElementById('app')?.dataset.screen === 'title');
+    await page.locator('[data-action="settings"]').click();
+    await page.locator('[data-action="skill-guide"]').click();
+    await expect(page.locator('.skill-guide-dlg .skill-guide')).toBeVisible();
+    await page.locator('.skill-guide-dlg .sg-ok').click();
+    await expect(page.locator('.skill-guide-dlg')).toHaveCount(0);
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('reduced motion: no ring while held, the accuracy counts as text on the same timing; the arrow still shows', async ({ page }) => {
+    test.setTimeout(90_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await reduceMotion(page);
+    await guideSeen(page);
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await craftSkill(page, [3, 4]);
+    const c = await pairCentre(page);
+    await page.evaluate(() => window.__lotAndRoll!.manualClock(true));
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    const texts: string[] = [];
+    for (let k = 0; k < 24; k++) {
+      await page.evaluate(() => window.__lotAndRoll!.stepFrames(1));
+      texts.push(await page.locator('.skill-acc').textContent() ?? '');
+    }
+    // The ring is hidden; the readout is shown and counts up to 100 % at the band's centre (21 frames ≈ 0.5 lap).
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.skill-ring .sr-needle')!).visibility)).toBe('hidden');
+    await expect(page.locator('.skill-acc.is-rm')).toBeVisible();
+    expect(new Set(texts).size).toBeGreaterThan(3);
+    expect(texts).toContain('정확 100%');
+    const ds = (await page.locator('.st-dice .die').first().boundingBox())!.height;
+    await page.mouse.move(c.x, c.y - ds * 0.9);
+    await page.evaluate(() => window.__lotAndRoll!.stepFrames(1));
+    await expect(page.locator('.skill-aim-label')).toHaveText('작게 2–5');
+    await page.mouse.up();
+    await page.evaluate(() => window.__lotAndRoll!.manualClock(false));
+    await checkResult(page, [3, 4], 'reduced');
+    expect((await lastRec(page))!.mode).toBe('inplace');
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('a CPU acts out its AI roll: presses, the ring stops at its accuracy, it drags into its zone, releases', async ({ page }) => {
+    test.setTimeout(150_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await guideSeen(page);
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    // Watch, in the page, what the arrow and the readout showed while the CPU dragged.
+    await page.evaluate(() => {
+      const w = window as unknown as { __seen: { label: string; readout: string }[] };
+      w.__seen = [];
+      new MutationObserver(() => {
+        const label = document.querySelector('.skill-aim-label')?.textContent;
+        if (label) w.__seen.push({ label, readout: document.querySelector('.skill-acc')?.textContent ?? '' });
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+    for (const seed of [0, 1, 2]) {
+      await page.evaluate(() => window.__lotAndRoll!.cpuHand().clear());
+      await page.evaluate(() => ((window as unknown as { __seen: unknown[] }).__seen.length = 0));
+      // Seats S and N (the Stage turned 180° for N), different seeds: different AI choices.
+      await craftSkill(page, [seed + 1, seed + 3], { cpu: true, current: seed % 2, seed: 100 + seed * 17 });
+      await page.waitForFunction(() => window.__lotAndRoll!.skill().rolls.length > 0, null, { timeout: 30_000 });
+      const press = (await page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.cpuHand().log.find((r) => r.action === 'Roll')))))!;
+      checkPress(press, 'cpu skill roll');
+      const act = JSON.parse(press.act) as { stride: number; aim?: string; accuracy: number };
+      expect(typeof act.accuracy).toBe('number');
+      const s = await lastSkill(page);
+      // The pad's release is the AI's choice: its zone, its accuracy, its stride.
+      expect(s.aim).toBe(act.aim);
+      expect(s.accuracy).toBeCloseTo(act.accuracy, 2);
+      expect(s.stride).toBe(act.stride);
+      // What showed while the hand still held the dice (the arrow fades a moment after the release).
+      const seen = (await page.evaluate(() => (window as unknown as { __seen: { label: string; readout: string }[] }).__seen)).filter((x) => x.readout);
+      const want = act.aim === 'low' ? '작게' : act.aim === 'high' ? '크게' : '보통';
+      expect(seen.at(-1)!.label.startsWith(want), JSON.stringify(seen.at(-1))).toBe(true);
+      expect(seen.at(-1)!.readout).toBe(`정확 ${Math.round(act.accuracy * 100)}%`);
+      if (act.aim) await expect(page.locator('.st-dice .roll-result')).toHaveAttribute('aria-label', new RegExp(`^정확 ${Math.round(act.accuracy * 100)}% · ${want} 노림 → `), { timeout: 10_000 });
+      console.log(`[skill] CPU roll ${press.act} → arrow "${seen.at(-1)!.label}", ${seen.at(-1)!.readout}`);
+    }
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
+
+  test('a strategy-mode CPU game plays 20+ turns without errors (one-die rolls included)', async ({ page }) => {
+    test.setTimeout(300_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await page.evaluate(() => {
+      const h = window.__lotAndRoll!;
+      h.setPromptTimer(0);
+      h.setAnimSpeed(6);
+      const st = h.demoSettings(4, true) as { rules: string };
+      st.rules = 'advanced';
+      h.startGame(st as never, 20261008);
+    });
+    await page.waitForFunction(() => (window.__lotAndRoll!.getState()?.turn ?? 0) >= 21 || window.__lotAndRoll!.getState()?.phase.kind === 'gameOver', null, { timeout: 280_000, polling: 500 });
+    const rolls = await page.evaluate(() => window.__lotAndRoll!.skill().rolls.map((r) => r.stride));
+    console.log(`[skill] CPU game: ${rolls.length} skill rolls, ${rolls.filter((s) => s === 1).length} with one die`);
+    expect(rolls.length).toBeGreaterThan(10);
     expect(logs, logs.join('\n')).toEqual([]);
   });
 });
