@@ -9,12 +9,11 @@ import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, animSpeed, gridTimeout, isSkipping, noMotion, onFrame } from '@/ui/fx/time';
 import { esc } from '@/ui/shell/dom';
-import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
+import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgEl, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
 import { BLD_OUT_MAX, CARD_INSET, DEPTH, INNER, VB, buildingGeom, buildingLayout, cardFace, getBoardGeometry, tokenSpot, type BuildingGeom, type BuildingLevel, type SpaceGeom } from './geometry';
 import { EASE } from '@/ui/fx/motion';
 
-const NS = 'http://www.w3.org/2000/svg';
 
 /** Pop-out building icon per level. */
 const BUILDING_ICON: Record<BuildingLevel, string> = { 1: 'villa', 2: 'building', 3: 'hotel', 4: 'landmark' };
@@ -270,14 +269,9 @@ interface BaseStyles {
 }
 
 /** Board styles from the live stylesheet (board.css stays the one source of truth). */
-function readBaseStyles(svgEl: SVGSVGElement): BaseStyles {
-  const mk = (tag: string, cls: string): SVGElement => {
-    const e = document.createElementNS(NS, tag) as SVGElement;
-    e.setAttribute('class', cls);
-    if (tag === 'text') e.setAttribute('font-size', '100');
-    svgEl.appendChild(e);
-    return e;
-  };
+function readBaseStyles(root: SVGSVGElement): BaseStyles {
+  const mk = (tag: 'rect' | 'circle' | 'text', cls: string): SVGElement =>
+    root.appendChild(svgEl(tag, tag === 'text' ? { class: cls, 'font-size': 100 } : { class: cls }));
   const probes = {
     face: mk('rect', 'board-face'),
     rim: mk('rect', 'board-inner-rim'),
@@ -471,18 +465,13 @@ export class Board {
     // How far a pop-out building reaches into the inner area (in --u): the Stage keeps its roll
     // control clear of it (stage.css).
     this.el.style.setProperty('--bld-out', String(+((BLD_OUT_MAX * getBoardGeometry(size)[1]!.lw) / 100).toFixed(3)));
-    this.svgEl = document.createElementNS(NS, 'svg');
-    this.svgEl.setAttribute('viewBox', `0 0 ${VB} ${VB}`);
-    this.svgEl.setAttribute('class', 'board-svg');
+    this.svgEl = svgEl('svg', { viewBox: `0 0 ${VB} ${VB}`, class: 'board-svg' });
     this.svgEl.innerHTML =
       `<defs></defs>` +
       boardShellMarkup();
     this.defsEl = this.svgEl.querySelector('defs')!;
     for (let i = 0; i < this.board.length; i++) {
-      const grp = document.createElementNS(NS, 'g');
-      grp.setAttribute('class', `sp sp-${this.board[i]!.kind}`);
-      grp.setAttribute('data-i', String(i));
-      grp.setAttribute('transform', spaceTransform(i, this.geom));
+      const grp = svgEl('g', { class: `sp sp-${this.board[i]!.kind}`, 'data-i': i, transform: spaceTransform(i, this.geom) });
       this.svgEl.appendChild(grp);
       this.groups.push(grp);
       this.sigs.push('');

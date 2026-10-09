@@ -31,6 +31,7 @@ import {
   toggleSeat,
   validateDraft,
   type Controller,
+  type GameMode,
   type SetupDraft,
 } from '@/ui/shell/setupModel';
 import { colorVars, segmented, toggleChip, tokenAvatar } from '@/ui/shell/widgets';
@@ -375,7 +376,7 @@ registerScreen('setup', (root) => {
    * The chosen mode's one-line description and a "?" speech bubble listing what it includes. Tap
    * "?" to open or close it; a tap anywhere else closes it too.
    */
-  function modeNote(mode: 'casual' | 'strategy'): HTMLElement {
+  function modeNote(mode: GameMode): HTMLElement {
     const items = t(`setup.modeList.${mode}`).split(' · ');
     const bubble = h(
       'div',

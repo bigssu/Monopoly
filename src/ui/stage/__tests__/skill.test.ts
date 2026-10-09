@@ -4,10 +4,9 @@
  * spaces, one-die faces, the result line's parts, and the mode switch (strategy only).
  */
 import { describe, expect, it } from 'vitest';
-import { defaultSettings } from '@/engine';
+import { defaultSettings, ruleFlags, SKILL_BANDS } from '@/engine';
 import {
   accuracyAt,
-  aimBand,
   aimOf,
   deadZone,
   dragStrength,
@@ -18,8 +17,6 @@ import {
   ringPhase,
   rolledFaces,
   SKILL,
-  skillThrowOn,
-  strideChoiceOn,
   strideReach,
   zoneLength,
   zoneOf,
@@ -121,10 +118,10 @@ describe('stride', () => {
   });
 
   it('bands: two dice 2–5 / 9–12, one die 1–2 / 5–6', () => {
-    expect(aimBand(2, 'low')).toEqual([2, 5]);
-    expect(aimBand(2, 'high')).toEqual([9, 12]);
-    expect(aimBand(1, 'low')).toEqual([1, 2]);
-    expect(aimBand(1, 'high')).toEqual([5, 6]);
+    expect(SKILL_BANDS[2].low).toEqual([2, 5]);
+    expect(SKILL_BANDS[2].high).toEqual([9, 12]);
+    expect(SKILL_BANDS[1].low).toEqual([1, 2]);
+    expect(SKILL_BANDS[1].high).toEqual([5, 6]);
   });
 
   it('a one-die roll is [die, 0]: one face shows; a saved lastDice too', () => {
@@ -149,11 +146,11 @@ describe('the result line', () => {
 
 describe('mode', () => {
   it('strategy mode (advanced, version 3) only; casual and older saves keep the plain throw', () => {
-    expect(skillThrowOn(defaultSettings({ rules: 'advanced' }))).toBe(true);
-    expect(strideChoiceOn(defaultSettings({ rules: 'advanced' }))).toBe(true);
-    expect(skillThrowOn(defaultSettings({ rules: 'normal' }))).toBe(false);
-    expect(skillThrowOn(defaultSettings({ rules: 'easy' }))).toBe(false);
-    expect(skillThrowOn({ rules: 'advanced', rulesVersion: 2 })).toBe(false);
-    expect(skillThrowOn({ rules: 'advanced' })).toBe(false);
+    expect(ruleFlags(defaultSettings({ rules: 'advanced' })).skillThrow).toBe(true);
+    expect(ruleFlags(defaultSettings({ rules: 'advanced' })).strideChoice).toBe(true);
+    expect(ruleFlags(defaultSettings({ rules: 'normal' })).skillThrow).toBe(false);
+    expect(ruleFlags(defaultSettings({ rules: 'easy' })).skillThrow).toBe(false);
+    expect(ruleFlags({ rules: 'advanced', rulesVersion: 2 }).skillThrow).toBe(false);
+    expect(ruleFlags({ rules: 'advanced' }).skillThrow).toBe(false);
   });
 });

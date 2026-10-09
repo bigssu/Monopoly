@@ -4,7 +4,6 @@
   --bg-table-2: #16202D;        /* felt-like table background around the board */
   --bg-board: #F6F1E7;          /* warm paper board face */
   --bg-stage: #FBF8F2;
-  --bg-panel: #FFFFFF;
   --bg-panel-dim: #F1F3F7;
   --ink: #1B2430;
   --ink-2: #4B5563;
@@ -44,7 +43,6 @@
 
   /* Radii / shadows */
   --r-sm: 10px; --r-md: 16px; --r-lg: 24px; --r-pill: 999px;
-  --sh-1: 0 1px 2px rgba(20, 30, 50, .10), 0 2px 8px rgba(20, 30, 50, .08);
   --sh-2: 0 4px 12px rgba(20, 30, 50, .14), 0 12px 32px rgba(20, 30, 50, .12);
   --sh-3: 0 10px 30px rgba(20, 30, 50, .28), 0 30px 80px rgba(20, 30, 50, .22);
 

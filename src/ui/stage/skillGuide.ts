@@ -7,7 +7,7 @@
 import { t } from '@/i18n';
 import { h } from '@/ui/game/util';
 import { SKILL } from './skill';
-import { chevron, ZONE_COLOR } from './SkillPad';
+import { chevron, ZONE_COLOR, zoneText } from './SkillPad';
 
 /** A ring (circle, 0 = bottom, clockwise) with the green band at the top and the needle at `u`. */
 function ringArt(u: number | null, finger: boolean): string {
@@ -34,9 +34,9 @@ function zonesArt(): HTMLElement {
   return h(
     'div',
     { class: 'sg-zones' },
-    row('low', 12, `${t('g.aim.low')} 2–5`, 'down'),
-    row('mid', 24, t('g.aim.mid'), null),
-    row('high', 36, `${t('g.aim.high')} 9–12`, 'up'),
+    row('low', 12, zoneText('low', 2), 'down'),
+    row('mid', 24, zoneText('mid', 2), null),
+    row('high', 36, zoneText('high', 2), 'up'),
   );
 }
 

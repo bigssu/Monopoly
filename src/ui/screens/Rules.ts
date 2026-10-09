@@ -506,7 +506,7 @@ function mountRules(host: HTMLElement, onClose: () => void, startPage = 0): () =
 /** Show the rules above the current screen (e.g. from the in-game menu). */
 export function openRulesOverlay(): void {
   let cleanup: (() => void) | null = null;
-  const close = openDialog(
+  openDialog(
     (closeFn) => {
       const host = h('div', { class: 'rules-overlay' });
       cleanup = mountRules(host, closeFn);
@@ -514,7 +514,6 @@ export function openRulesOverlay(): void {
     },
     { cls: 'overlay-backdrop', dismissable: false, onClose: () => cleanup?.() },
   );
-  void close;
 }
 
 registerScreen('rules', (root, props) => {

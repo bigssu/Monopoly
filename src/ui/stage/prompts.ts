@@ -44,7 +44,6 @@ import type { Dice } from './Dice';
 import type { Stage } from './Stage';
 import { flickAim, releaseVelocity, type ThrowAim } from './throw';
 import { SkillPad } from './SkillPad';
-import { skillThrowOn, strideChoiceOn } from './skill';
 import { skillGuideCard } from './skillGuide';
 
 interface PromptCtx {
@@ -203,7 +202,8 @@ const GAUGE_MIN_MS = 300;
  *   release speed (the last 80 ms, in the stage's frame); release without one, or the keyboard
  *   (Enter / Space on the focused pad): a weak toss forward. The B7 gauge (advanced rules of
  *   versions 1–2) swings while held. The strength is cosmetic.
- * - Strategy mode (`skillThrowOn`, docs/DESIGN.md "Skill throw"): the stride chips (one die /
+ * - Strategy mode (`ruleFlags().skillThrow`: advanced rules, version 3; docs/DESIGN.md "Skill
+ *   throw"): the stride chips (one die /
  *   two), the timing ring while held (the accuracy freezes when the drag starts), the aim arrow
  *   (short = 작게, middle = 보통, long = 크게), and the release sends `Roll { stride, aim,
  *   accuracy }` (no aim for 보통 or a tap) and throws along the arrow, as hard as it is long. The
@@ -214,7 +214,8 @@ const GAUGE_MIN_MS = 300;
  */
 function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): PromptResult {
   const p = ctx.state.players[ph.playerId]!;
-  const skillOn = skillThrowOn(ctx.state.settings);
+  const flags = ruleFlags(ctx.state.settings);
+  const skillOn = flags.skillThrow;
   const pad = ctx.stage.armPad(ctx.cpu);
   if (skillOn) pad.setAttribute('aria-label', t('g.skill.pad'));
   let rollBtn: HTMLButtonElement | null = null;
@@ -235,7 +236,7 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
         express: !!p.expressPending,
         color: playerColor(p.colorId).hex,
         cpu: ctx.cpu,
-        strideChoice: strideChoiceOn(ctx.state.settings),
+        strideChoice: flags.strideChoice,
       })
     : null;
   ctx.stage.skill = skill;
@@ -243,7 +244,7 @@ function rollPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'preRoll' }>): Pr
   // Dice gauge (rules = advanced, versions 1–2; strategy mode replaces it): while held, a gauge
   // swings low ↔ high (slow at the ends); releasing after GAUGE_MIN_MS sends where it was. A quick
   // tap or the keyboard rolls neutral.
-  const gaugeOn = ruleFlags(ctx.state.settings).diceGauge && !skillOn && !ctx.cpu;
+  const gaugeOn = flags.diceGauge && !skillOn && !ctx.cpu;
   const fill = h('i', { class: 'rg-fill' });
   const gaugeEl = gaugeOn
     ? h('div', { class: 'roll-gauge', 'aria-hidden': 'true' }, h('span', { class: 'rg-end', text: t('g.gauge.low') }), h('div', { class: 'rg-track' }, fill), h('span', { class: 'rg-end', text: t('g.gauge.high') }))
@@ -528,7 +529,7 @@ function takeoverPrompt(ctx: PromptCtx, ph: Extract<Phase, { kind: 'takeover' }>
 }
 
 /** The takeover multiplier line (rules version 3), or null (version 1/2 and win-backs). */
-export function takeoverWhy(ph: { multiplier?: number; why?: string }): { text: string; tone: ChipTone } | null {
+function takeoverWhy(ph: { multiplier?: number; why?: string }): { text: string; tone: ChipTone } | null {
   const m = ph.multiplier;
   if (m === undefined || ph.why === undefined || ph.why === 'winBack') return null;
   const shown = m.toFixed(1).replace(/\.0$/, '');

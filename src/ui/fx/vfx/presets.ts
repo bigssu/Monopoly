@@ -713,7 +713,7 @@ const HITS: Record<1 | 2 | 3, { first: number; gap: number; swap: number; block:
 };
 
 /** Tier layers after the swap (cumulative white → gold → owner), pips, chimney. `s` = swap frame. */
-function tierReveal(b: B, tile: Pt, seat: Seat, owner: string, level: 1 | 2 | 3, s: number, space: number, freeShift = false): void {
+function tierReveal(b: B, tile: Pt, seat: Seat, owner: string, level: 1 | 2 | 3, s: number, space: number): void {
   const pop = TIER_POP[level];
   b.at(s, cue('swap'), dom((d) => d.pop?.(space, { from: level === 1 ? 0.6 : 0.55, c1: pop.c1, frames: pop.frames })), dom((d) => d.dim?.(space, false)));
   if (level === 1) {
@@ -749,7 +749,6 @@ function tierReveal(b: B, tile: Pt, seat: Seat, owner: string, level: 1 | 2 | 3,
   pips(b, tile, seat, 3, impact + 3);
   smoke(b, tile, impact + 8, 3, 3, SMOKE, seat);
   flag(b, tile, impact + 8, owner, 14, seat);
-  void freeShift;
 }
 
 /** Build L1–L3 (§7.2b.2–4); L4 delegates to `landmarkReveal`; `free` → `freeUpgrade`. cue `swap`. */
@@ -965,7 +964,7 @@ export function freeUpgrade(p: BuildParams, env: PresetEnv): Timeline {
   sparkles(b, tile, 6, 9, { r: 0.8, color: GREEN });
   b.area(tile, 2);
   b.at(10, burst(2, (k) => ({ anim: 'heart', x: tile.x + (k ? 0.45 : -0.45) * u, y: tile.y - 0.1 * u, vy: -1.35 * u, delay: k * 2, life: 16, s: 0.1, s1: 0.45, sT: 0.3, se1: Ease.OutBack, fadeOut: 8, layer: 3 })));
-  tierReveal(b, tile, seat, owner, lv, 8, p.space, true);
+  tierReveal(b, tile, seat, owner, lv, 8, p.space);
   b.at(lv === 3 ? 14 : 10, block());
   b.area(tile, 2.5);
   return b.build(`freeUpgrade${lv}`, lv === 3 ? 2 : 1, PRIORITY.build, { space: p.space });

@@ -20,7 +20,7 @@ import { fxCanvasFor, prefs } from '@/ui/shell/prefs';
 import { isNative } from '@/ui/shell/capacitor';
 import { anim, gridTimeout, noMotion } from '@/ui/fx/time';
 import { watchViewport } from '@/ui/layout';
-import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
+import { h, iconEl, SEAT_ANGLE, setPlayerVars, svg, svgEl, tokenBadge } from '@/ui/game/util';
 import { DUR, EASE } from '@/ui/fx/motion';
 import { orientationFor, SEAT_CYCLE } from '@/ui/orientation';
 
@@ -41,31 +41,23 @@ function assetGraph(state: GameState, finals: Map<number, number>): SVGSVGElemen
   if (rows.length < 1) return null;
   rows.push(state.players.map((p) => finals.get(p.id) ?? 0));
   const max = Math.max(1, ...rows.flat());
-  const ns = 'http://www.w3.org/2000/svg';
-  const svgEl = document.createElementNS(ns, 'svg');
-  svgEl.setAttribute('viewBox', '0 0 100 40');
-  svgEl.setAttribute('class', 'rs-graph');
-  svgEl.setAttribute('aria-hidden', 'true');
+  const graph = svgEl('svg', { viewBox: '0 0 100 40', class: 'rs-graph', 'aria-hidden': 'true' });
   for (const p of state.players) {
     const pts = rows.map((r, i) => `${((i / (rows.length - 1)) * 100).toFixed(1)},${(38 - ((r[p.id] ?? 0) / max) * 34).toFixed(1)}`).join(' ');
-    const line = document.createElementNS(ns, 'polyline');
-    line.setAttribute('points', pts);
-    line.setAttribute('stroke', playerColor(p.colorId).hex);
-    line.setAttribute('pathLength', '1');
-    svgEl.append(line);
+    graph.append(svgEl('polyline', { points: pts, stroke: playerColor(p.colorId).hex, pathLength: 1 }));
   }
   // Where the lead changed hands: a dot in the new leader's colour.
   for (const c of leadChanges(rows)) {
     const v = rows[c.at]![c.pid] ?? 0;
-    const dot = document.createElementNS(ns, 'circle');
-    dot.setAttribute('cx', ((c.at / (rows.length - 1)) * 100).toFixed(1));
-    dot.setAttribute('cy', (38 - (v / max) * 34).toFixed(1));
-    dot.setAttribute('r', '1.6');
-    dot.setAttribute('fill', playerColor(state.players[c.pid]!.colorId).hex);
-    dot.setAttribute('class', 'rs-lead');
-    svgEl.append(dot);
+    graph.append(svgEl('circle', {
+      cx: ((c.at / (rows.length - 1)) * 100).toFixed(1),
+      cy: (38 - (v / max) * 34).toFixed(1),
+      r: 1.6,
+      fill: playerColor(state.players[c.pid]!.colorId).hex,
+      class: 'rs-lead',
+    }));
   }
-  return svgEl;
+  return graph;
 }
 
 registerScreen('result', (root, { state }) => {

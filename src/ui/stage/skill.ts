@@ -12,30 +12,16 @@
  * - RELEASE = throw: `Roll { stride, aim, accuracy }`; the throw's strength is the arrow's length
  *   (`dragStrength`, monotonic), its direction the arrow's.
  *
- * The engine decides the faces (SKILL_CAP × accuracy of a chance to land in the aimed band); the
+ * The engine decides the faces (`ECONOMY.skillCap` × accuracy of a chance to land in the aimed band); the
  * UI only collects the inputs and explains the result (`resultParts`).
  */
-import { ruleFlags, type GameEvent, type Settings } from '@/engine';
+import { SKILL_BANDS, type GameEvent } from '@/engine';
 
 export type Stride = 1 | 2;
 export type Aim = 'low' | 'high';
 
 /** The skill fields of a `DiceRolled` event (rules version 3). */
-export type SkillRolled = Pick<Extract<GameEvent, { type: 'DiceRolled' }>, 'stride' | 'aim' | 'accuracy' | 'assisted'>;
-
-/**
- * Strategy mode (`ruleFlags().skillThrow`: advanced rules, version 3): the timing ring, the aim
- * zones and the result line. Casual mode keeps the plain throw (press, shake, flick; the strength
- * is cosmetic).
- */
-export function skillThrowOn(settings: Pick<Settings, 'rules' | 'rulesVersion'>): boolean {
-  return ruleFlags(settings).skillThrow;
-}
-
-/** The stride chips (one die or two) are offered (`ruleFlags().strideChoice`). */
-export function strideChoiceOn(settings: Pick<Settings, 'rules' | 'rulesVersion'>): boolean {
-  return ruleFlags(settings).strideChoice;
-}
+type SkillRolled = Pick<Extract<GameEvent, { type: 'DiceRolled' }>, 'stride' | 'aim' | 'accuracy' | 'assisted'>;
 
 export const SKILL = {
   /** One lap of the ring (ms) at the default game pace; it follows the pace, never below `minPeriodMs`. */
@@ -132,12 +118,6 @@ export function strideRange(stride: Stride): [number, number] {
   return stride === 1 ? [1, 6] : [2, 12];
 }
 
-/** The band an aim targets (engine contract §1): two dice low 2–5 / high 9–12, one die 1–2 / 5–6. */
-export function aimBand(stride: Stride, aim: Aim): [number, number] {
-  if (stride === 1) return aim === 'low' ? [1, 2] : [5, 6];
-  return aim === 'low' ? [2, 5] : [9, 12];
-}
-
 /**
  * The spaces a stride can reach from `pos` on a board of `n` spaces, moving forward (an express
  * ticket doubles the steps).
@@ -171,6 +151,6 @@ export function resultParts(ev: { total: number; dice: [number, number] } & Skil
   if (!ev.aim || typeof ev.accuracy !== 'number') return null;
   const stride: Stride = ev.stride === 1 || ev.dice[1] === 0 ? 1 : 2;
   const total = ev.total;
-  const [lo, hi] = aimBand(stride, ev.aim);
+  const [lo, hi] = SKILL_BANDS[stride][ev.aim];
   return { accuracy: pct(ev.accuracy), aim: ev.aim, hit: total >= lo && total <= hi, total };
 }

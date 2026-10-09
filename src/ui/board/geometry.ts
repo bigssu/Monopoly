@@ -4,6 +4,7 @@
  * bottom row right→left, left column bottom→top, top row left→right, right column top→bottom.
  */
 import type { SpacesPerSide } from '@/engine';
+import { SEAT_ANGLE } from '@/ui/orientation';
 
 export const VB = 3200;
 /** Ring depth = corner size. */
@@ -33,7 +34,6 @@ export interface SpaceGeom {
   lh: number;
 }
 
-const EDGE_ROT: Record<Edge, number> = { S: 0, W: 90, N: 180, E: -90 };
 /** Corners face diagonally outward. */
 const CORNER_ROT: Record<number, number> = { 0: -45, 8: 45, 16: 135, 24: -135 };
 
@@ -99,7 +99,7 @@ function build(size: SpacesPerSide): SpaceGeom[] {
       h,
       cx: x + w / 2,
       cy: y + h / 2,
-      rot: corner ? CORNER_ROT[(i * 8) / (size + 1)]! : EDGE_ROT[edge],
+      rot: corner ? CORNER_ROT[(i * 8) / (size + 1)]! : SEAT_ANGLE[edge],
       lw: corner ? DEPTH : sideW,
       lh: DEPTH,
     });
@@ -284,13 +284,13 @@ export function buildingGeom(index: number, level: BuildingLevel, size: SpacesPe
 /** Card inset of the face's background (local units). */
 export const CARD_INSET = 7;
 /** Price font size: up to 4 characters, and 5 or more. */
-export const PRICE_SIZE = { short: 70, long: 54 } as const;
+const PRICE_SIZE = { short: 70, long: 54 } as const;
 /**
  * The number font's line box (Noto Sans KR, `--font-num`: hhea ascent 1160 / descent 288 per 1000
  * em). The price's rendered box is this tall, not just its digits, so the clearance uses it.
  */
-export const NUM_ASCENT = 1.16;
-export const NUM_DESCENT = 0.288;
+const NUM_ASCENT = 1.16;
+const NUM_DESCENT = 0.288;
 /** Gap between a building's on-card part and the content moved below it (local units). */
 export const BLD_CLEAR = 6;
 /** Content offset of a card with no building standing on it (the bare look, base raster). */
@@ -305,7 +305,7 @@ export interface CardRect {
   h: number;
 }
 
-export interface CardFace {
+interface CardFace {
   /** How far the content moved down from its rest place. */
   dy: number;
   /** Group pill. */

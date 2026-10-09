@@ -78,6 +78,13 @@ export function spaceIcon(sp: SpaceDef): string {
 
 export { h };
 
+/** SVG element factory: every attr is set as an attribute. */
+export function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  return el;
+}
+
 /** Parsed icon markup (an `<svg><use/></svg>` into the sprite), cloned per use: parsing markup for
  *  every icon of every prompt card was a visible part of building a card on a slow CPU
  *  (docs/PERFORMANCE.md). */

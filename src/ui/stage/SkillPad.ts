@@ -21,18 +21,18 @@
  * The human's pointer handling is in prompts.ts (`rollPrompt`); the CPU hand drives the same pad
  * (`cpuRun`, `drag`, `release`) so a CPU's throw is seen made by the same rules.
  */
+import { SKILL_BANDS } from '@/engine';
 import { t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, animSpeed, DEFAULT_PACE, gamePace, gridTimeout, isHeld, isSkipping, onFrame, reducedMotion } from '@/ui/fx/time';
-import { h, isDevHook } from '@/ui/game/util';
+import { h, isDevHook, svgEl } from '@/ui/game/util';
 import type { Board } from '@/ui/board/Board';
 import type { Dice } from './Dice';
 import type { Stage } from './Stage';
-import { accuracyAt, aimBand, aimOf, deadZone, dragStrength, pct, phaseFor, ringPeriod, ringPhase, SKILL, strideRange, strideReach, zoneOf, type Aim, type Stride, type Zone } from './skill';
+import { accuracyAt, aimOf, deadZone, dragStrength, pct, phaseFor, ringPeriod, ringPhase, SKILL, strideRange, strideReach, zoneOf, type Aim, type Stride, type Zone } from './skill';
 import type { ThrowAim, Vec } from './throw';
 
-const NS = 'http://www.w3.org/2000/svg';
 
 /** What a release throws: the zone, the aim (none for 보통 / a tap), the accuracy, the throw itself. */
 export interface SkillResult {
@@ -50,12 +50,6 @@ export const skillDev: { rolls: SkillResult[] } | null = typeof window !== 'unde
 /** Zone colours (on the dark stage: ≥ 4.5:1 for the label ink #0B2230 on each). */
 export const ZONE_COLOR: Record<Exclude<Zone, 'tap'>, string> = { low: '#5BB2FF', mid: '#C3CDD6', high: '#FF9A3D' };
 
-function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>): SVGElementTagNameMap[K] {
-  const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-  return el;
-}
-
 /** A chevron (down = 작게, up = 크게) as an inline SVG string. */
 export function chevron(dir: 'up' | 'down'): string {
   const pts = dir === 'up' ? '8,3 14.5,12.5 1.5,12.5' : '1.5,3.5 14.5,3.5 8,13';
@@ -66,7 +60,7 @@ export function chevron(dir: 'up' | 'down'): string {
 export function zoneText(zone: Exclude<Zone, 'tap'>, stride: Stride): string {
   const aim = aimOf(zone);
   if (!aim) return t('g.aim.mid');
-  const [lo, hi] = aimBand(stride, aim);
+  const [lo, hi] = SKILL_BANDS[stride][aim];
   return `${t(`g.aim.${aim}`)} ${lo}–${hi}`;
 }
 
@@ -374,7 +368,7 @@ export class SkillPad {
     this.ringRy = (side ? rr.width : rr.height) / f.s / 2;
     const ds = this.dsOf();
     const svg = svgEl('svg', { class: 'skill-aim', width: 1, height: 1 });
-    const g = svgEl('g', {});
+    const g = svgEl('g');
     const segs = (['low', 'mid', 'high'] as const).map((z) => svgEl('line', { class: `sa-seg is-${z}`, stroke: ZONE_COLOR[z], 'stroke-width': ds * 0.16, y1: 0, y2: 0 }));
     const ticks = [0, 1].map(() => svgEl('line', { class: 'sa-tick', 'stroke-width': ds * 0.05 }));
     const shaft = svgEl('line', { class: 'sa-shaft', 'stroke-width': ds * 0.2, y1: 0, y2: 0 });

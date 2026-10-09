@@ -3,6 +3,7 @@
  * Pure (no DOM) so it is unit-tested; the draft is persisted in prefs (`lastSetup`).
  */
 import {
+  defaultPlayers,
   defaultSettings,
   PROMPT_TIMER_OPTIONS,
   ROUND_LIMIT_OPTIONS,
@@ -16,8 +17,6 @@ import {
 import { PLAYER_COLORS, TOKEN_IDS } from '@/content/palette';
 import { BOARD_SIDE_OPTIONS, type SpacesPerSide } from '@/content/board';
 import { SEAT_CYCLE } from '@/ui/orientation';
-
-/** Seat order used for turn order and for the players array. */
 
 export type Controller = 'human' | 'easy' | 'normal';
 
@@ -45,12 +44,11 @@ export interface SetupDraft {
 
 export const NAME_MAX = 10;
 
-const SEAT_DEFAULTS: Record<Seat, { tokenId: string; colorId: string }> = {
-  S: { tokenId: 'car', colorId: 'red' },
-  E: { tokenId: 'rocket', colorId: 'blue' },
-  N: { tokenId: 'cat', colorId: 'green' },
-  W: { tokenId: 'robot', colorId: 'yellow' },
-};
+/** Each seat's default token and colour: the engine's four default players (car / red at S, …). */
+const SEAT_DEFAULTS = Object.fromEntries(defaultPlayers(4).map((p) => [p.seat, { tokenId: p.tokenId, colorId: p.colorId }])) as Record<
+  Seat,
+  { tokenId: string; colorId: string }
+>;
 
 /**
  * The setup screen's defaults (owner, 2026-10-06): 30 rounds and a 30 s turn timer. The engine's

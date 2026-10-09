@@ -12,7 +12,7 @@ import { anim, DEFAULT_PACE, eventHoldMs, eventStretch, gamePace, gridTimeout, h
 import { cardIcon, h, iconEl, SEAT_ANGLE, setPlayerVars, svg, tokenBadge } from '@/ui/game/util';
 import { Dice } from './Dice';
 import type { SkillPad } from './SkillPad';
-import type { Aim } from './skill';
+import { SKILL, type Aim } from './skill';
 import { screenToStage, type Box, type Vec } from './throw';
 import { EASE } from '@/ui/fx/motion';
 
@@ -20,9 +20,6 @@ export type Tone = 'info' | 'good' | 'bad' | 'gold';
 
 /** Level → building icon (0 = empty lot: shown as the villa). */
 const BUILDING_ICONS = ['villa', 'villa', 'building', 'hotel', 'landmark'] as const;
-
-/** The skill throw's result line: read time (ms at the default pace; `sleep` scales by the pace). */
-const RESULT_MS = 1500;
 
 /** Toast motion (ms): pop in, fade out. */
 const TOAST_IN = 260;
@@ -209,7 +206,8 @@ export class Stage {
     this.resultEl = el;
     this.dice.el.append(el);
     await anim(el, [{ opacity: 0, transform: 'translateY(-30%) scale(.9)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: EASE.overshoot });
-    await sleep(RESULT_MS / DEFAULT_PACE);
+    // Read time at the default pace (`sleep` scales by the pace).
+    await sleep(SKILL.resultMs / DEFAULT_PACE);
     if (this.resultEl !== el) return;
     await anim(el, [{ opacity: 1 }, { opacity: 0 }], { duration: 200 });
     if (this.resultEl === el) this.resultEl = null;
