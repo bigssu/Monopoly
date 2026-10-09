@@ -265,7 +265,7 @@ export class CpuHand {
     const look = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
     if (skill) {
       // Drag the arrow into the aim's zone, toward the board centre (a seeded few degrees off).
-      const L = zoneLength(roll!.aim) * this.stage.dice.layoutSizes().ds;
+      const L = zoneLength(roll!.aim) * this.stage.dice.sizes().ds;
       const pa = (look.angle * Math.PI) / 180;
       // In the hand's (seat) frame "up" is (0, -1); on the screen that is turned by the seat's angle.
       const hx = Math.sin(pa) * L;

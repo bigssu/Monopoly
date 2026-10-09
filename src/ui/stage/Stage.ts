@@ -230,7 +230,7 @@ export class Stage {
    */
   private measureArena(): Box | null {
     if (!this.rot.isConnected || this.el.classList.contains('has-big')) return null;
-    const pair = this.dice.pairEl;
+    const pair = this.dice.pair;
     let x = 0;
     let y = 0;
     let n: HTMLElement | null = pair;

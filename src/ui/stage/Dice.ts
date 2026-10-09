@@ -6,14 +6,11 @@
  * motion: the in-place tumble (~1 s). `shake(on)` jitters them while the player holds the dice;
  * `invite()` wobbles them (with a soft rattle, and blinks the hint) at a human's turn ("throw me").
  *
- * Rendering (docs/DESIGN.md "Dice throw"): a flick flies in a top-level layer (`.dice-fly`, over
- * the board and the panels, created for the throw and removed at the landing; its frame is the
- * Stage's, so the dice keep their turn toward the seat). With canvas effects on (`fxQualityOn`
- * not 'off': the web build by default) the flying dice are drawn into ONE temporary software
- * canvas sized to the throw's bounding box; with them off (the Android app by default: some
- * WebViews draw canvases as white boxes) the two DOM cubes themselves move into that layer and
- * are posed and moved on the 30 Hz clock, one layer per die. Either way the landed dice are the
- * crisp DOM ones at home.
+ * Rendering (docs/DESIGN.md "Dice throw"): the DOM cubes themselves, posed and moved on the 30 Hz
+ * clock (`fly`), one layer per die while they roll; no canvas (some Android WebViews draw canvases
+ * as white boxes). A flick flies in a top-level layer (`.dice-fly`, over the board and the panels,
+ * created for the throw and removed at the landing; its frame is the Stage's, so the dice keep
+ * their turn toward the seat); a toss and the in-place roll stay in the pair.
  */
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
@@ -22,7 +19,7 @@ import { cubicBezier } from '@/ui/fx/quantize';
 import { keyAt, smoothstep } from '@/ui/fx/vfx/ease';
 import { h, isDevHook } from '@/ui/game/util';
 import { rolledFaces } from './skill';
-import { bounceAt, frameFrom, frameFromOne, planThrow, rollMode, samplePair, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowAim, type ThrowPlan, type Vec } from './throw';
+import { bounceAt, frameFrom, frameFromOne, planThrow, rollMode, samplePair, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type Hit, type ThrowAim, type Vec } from './throw';
 
 const PIPS: Record<number, Array<[number, number]>> = {
   1: [[50, 50]],
@@ -80,7 +77,7 @@ const FINAL: Record<number, [number, number]> = {
 // At rest the cube is drawn with 2D `matrix()` transforms on its six faces (hidden when facing
 // away) instead of CSS preserve-3d: a 3D-rendering context composites every face into its own GPU
 // layer (16 layers for two dice, docs/PERFORMANCE.md) while 2D transforms are plain paint. While
-// rolling, the same projection is drawn into a temporary canvas on the shared 30 Hz clock.
+// rolling, the cube is re-posed on the shared 30 Hz clock.
 
 type M3 = [number, number, number, number, number, number, number, number, number];
 const RAD = Math.PI / 180;
@@ -111,146 +108,25 @@ const FACE_ROT: Record<number, M3> = {
 };
 const r4 = (x: number): number => Math.round(x * 1e4) / 1e4;
 
-interface FacePose {
-  n: number;
-  visible: boolean;
-  /** 2D linear part (CSS matrix a, b, c, d) and face-centre offset in die sizes. */
-  m: [number, number, number, number];
-  tx: number;
-  ty: number;
-  shade: number;
-}
-
-/** Orthographic pose of every face for the cube orientation (rx, ry) in degrees. */
-function facePoses(rx: number, ry: number): FacePose[] {
+/** 2D transform + visibility + shading of every face for the cube orientation (rx, ry) in degrees. */
+function cubeFaces(rx: number, ry: number): { n: number; visible: boolean; transform: string; shade: number }[] {
   const cube = mul(rotX(rx), rotY(ry));
   return [1, 2, 3, 4, 5, 6].map((n) => {
     const a = mul(cube, FACE_ROT[n]!);
     const nz = a[8];
+    // 2D linear part (CSS matrix a, b, c, d); the face centre A · (0, 0, size/2) in die sizes.
     return {
       n,
       visible: nz > 0.02,
-      m: [a[0], a[3], a[1], a[4]],
-      // Face centre = A · (0, 0, size/2).
-      tx: a[2] / 2,
-      ty: a[5] / 2,
-      shade: Math.max(0, Math.min(1, 1 - nz)) * 0.14,
+      transform: `translate(calc(var(--ds) * ${r4(a[2] / 2)}), calc(var(--ds) * ${r4(a[5] / 2)})) matrix(${[a[0], a[3], a[1], a[4]].map(r4).join(', ')}, 0, 0)`,
+      shade: r4(Math.max(0, Math.min(1, 1 - nz)) * 0.14),
     };
   });
 }
 
-/** 2D transform + visibility + shading of every face for the cube orientation (rx, ry). */
-function cubeFaces(rx: number, ry: number): { n: number; visible: boolean; transform: string; shade: number }[] {
-  return facePoses(rx, ry).map((f) => ({
-    n: f.n,
-    visible: f.visible,
-    transform: `translate(calc(var(--ds) * ${r4(f.tx)}), calc(var(--ds) * ${r4(f.ty)})) matrix(${f.m.map(r4).join(', ')}, 0, 0)`,
-    shade: r4(f.shade),
-  }));
-}
-
-/**
- * Pre-rendered pieces of a die (same look as the DOM faces: rounded gradient face, rim, pips; a
- * dark mask for the side shading; the contact shadow), at `k` canvas px per CSS px. Drawing a
- * tumble frame is then a few affine `drawImage` calls instead of re-building gradients and paths
- * (the canvas is a software one: its cost is main-thread time).
- */
-interface Sprites {
-  ds: number;
-  k: number;
-  faces: HTMLCanvasElement[];
-  mask: HTMLCanvasElement;
-  shadow: HTMLCanvasElement;
-}
-let spriteCache: Sprites | null = null;
-
-function sprites(ds: number, k: number): Sprites {
-  if (spriteCache && spriteCache.ds === ds && spriteCache.k === k) return spriteCache;
-  const px = Math.ceil(ds * k);
-  const half = ds / 2;
-  const rad = ds * 0.22;
-  const rim = Math.max(1.5, ds * 0.018);
-  const make = (w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] => {
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const ctx = c.getContext('2d')!;
-    return [c, ctx];
-  };
-  // 160deg CSS gradient line through the face centre.
-  const dx = Math.sin((160 * Math.PI) / 180);
-  const dy = -Math.cos((160 * Math.PI) / 180);
-  const len = ds * (Math.abs(dx) + Math.abs(dy));
-  const faces = [1, 2, 3, 4, 5, 6].map((n) => {
-    const [c, ctx] = make(px, px);
-    ctx.setTransform(k, 0, 0, k, (px) / 2, (px) / 2);
-    const g = ctx.createLinearGradient((-dx * len) / 2, (-dy * len) / 2, (dx * len) / 2, (dy * len) / 2);
-    g.addColorStop(0, '#FFFFFF');
-    g.addColorStop(0.7, '#F3F5FA');
-    g.addColorStop(1, '#E3E8F1');
-    ctx.beginPath();
-    ctx.roundRect(-half, -half, ds, ds, rad);
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.lineWidth = rim;
-    ctx.strokeStyle = '#D5DCE8';
-    ctx.beginPath();
-    ctx.roundRect(-half + rim / 2, -half + rim / 2, ds - rim, ds - rim, Math.max(0, rad - rim / 2));
-    ctx.stroke();
-    const pr = ((n === 1 ? 11 : 9) / 100) * ds;
-    ctx.fillStyle = n === 1 ? '#EF5B5B' : '#2B3245';
-    for (const [x, y] of PIPS[n]!) {
-      ctx.beginPath();
-      ctx.arc((x / 100) * ds - half, (y / 100) * ds - half, pr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    return c;
-  });
-  const [mask, mctx] = make(px, px);
-  mctx.setTransform(k, 0, 0, k, px / 2, px / 2);
-  mctx.fillStyle = '#2B3245';
-  mctx.beginPath();
-  mctx.roundRect(-half, -half, ds, ds, rad);
-  mctx.fill();
-  const [shadow, sctx] = make(Math.ceil(0.84 * ds * k), Math.ceil(0.2 * ds * k));
-  sctx.setTransform(1, 0, 0, 0.2 / 0.84, shadow.width / 2, shadow.height / 2);
-  const sg = sctx.createRadialGradient(0, 0, 0, 0, 0, shadow.width / 2);
-  sg.addColorStop(0, 'rgba(60, 40, 20, 0.28)');
-  sg.addColorStop(1, 'rgba(60, 40, 20, 0)');
-  sctx.fillStyle = sg;
-  sctx.fillRect(-shadow.width / 2, -shadow.width / 2, shadow.width, shadow.width);
-  spriteCache = { ds, k, faces, mask, shadow };
-  return spriteCache;
-}
-
-/**
- * Draw one die (tumble pose rx/ry, centre cx/cy and squash sx/sy in CSS px) from its sprites.
- * Returns the canvas-px box it may have touched (for dirty-rect clearing).
- */
-function drawCube(ctx: CanvasRenderingContext2D, sp: Sprites, rx: number, ry: number, cx: number, cy: number, sx: number, sy: number): [number, number, number, number] {
-  const { ds, k } = sp;
-  const px = sp.faces[0]!.width;
-  // Contact shadow (the DOM die's ::after), squashed with the die.
-  ctx.globalAlpha = 1;
-  ctx.setTransform(k * sx, 0, 0, k * sy, cx * k, cy * k);
-  ctx.drawImage(sp.shadow, -0.42 * ds, 0.48 * ds, 0.84 * ds, 0.2 * ds);
-  for (const f of facePoses(rx, ry)) {
-    if (!f.visible) continue;
-    const [a, b, c, d] = f.m;
-    // Sprite px → face-local CSS px (1/k), then the face's affine pose.
-    ctx.setTransform(a * sx, b * sy, c * sx, d * sy, (cx + f.tx * ds * sx) * k, (cy + f.ty * ds * sy) * k);
-    ctx.drawImage(sp.faces[f.n - 1]!, -px / 2, -px / 2);
-    if (f.shade > 0.001) {
-      ctx.globalAlpha = f.shade;
-      ctx.drawImage(sp.mask, -px / 2, -px / 2);
-      ctx.globalAlpha = 1;
-    }
-  }
-  const r = ds * 0.9 * Math.max(sx, sy) * k;
-  return [cx * k - r, cy * k - r, 2 * r, 2 * r + ds * 0.3 * k];
-}
-
 const ROLL_EASE = cubicBezier(0.18, 0.7, 0.3, 1);
+/** The in-place roll's tumble per die (ms at speed 1). */
+const TUMBLE_MS = 1000;
 
 /** One die's tumble: cube rotation from (x0, y0) to (x1, y1) degrees, starting `delay` ms late. */
 interface Spin {
@@ -293,21 +169,27 @@ class Die {
     }
   }
 
+  /** One rolling frame: the cube at rotation (rx, ry), moved by (dx, dy) px and squashed (sx, sy). */
+  move(dx: number, dy: number, sx: number, sy: number, rx: number, ry: number): void {
+    this.el.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+    this.pose(rx, ry);
+  }
+
   set(n: number): void {
     this.value = n;
     [this.rx, this.ry] = FINAL[n]!;
-    this.pose(this.rx - 18, this.ry + 24);
+    this.pose(...this.restPose());
   }
 
-  /** The pose shown now (tumble start). */
-  startPose(): [number, number] {
+  /** The resting pose shown now (its face, tilted toward the viewer): a roll starts from it. */
+  restPose(): [number, number] {
     return [this.rx - 18, this.ry + 24];
   }
 
   /** Show face n (the DOM cube at its final pose) and return that pose. */
   land(n: number): [number, number] {
     this.set(n);
-    return [this.rx - 18, this.ry + 24];
+    return this.restPose();
   }
 
   /** Plan a roll onto face n (the DOM cube already shows the final pose, hidden while rolling). */
@@ -315,19 +197,16 @@ class Die {
     const [fx, fy] = FINAL[n]!;
     const spinsX = 360 * (2 + Math.floor(Math.random() * 2)) * dir;
     const spinsY = 360 * (1 + Math.floor(Math.random() * 2)) * -dir;
-    const spin = { x0: this.rx - 18, y0: this.ry + 24, x1: fx - 18 + spinsX, y1: fy + 24 + spinsY, delay };
+    const [x0, y0] = this.restPose();
+    const spin = { x0, y0, x1: fx - 18 + spinsX, y1: fy + 24 + spinsY, delay };
     this.set(n);
     return spin;
   }
 }
 
-/** How a throw is drawn: one temporary canvas (canvas effects on), or the DOM cubes themselves. */
-type DicePath = 'canvas' | 'dom';
-
 /** Dev/test record of one roll (e2e/dice-throw.spec.ts reads `window.__lotAndRoll.dice()`). */
 export interface ThrowRecord {
   mode: 'instant' | 'inplace' | 'throw';
-  path: DicePath | null;
   kind: 'flick' | 'toss' | null;
   /** The aim the throw was thrown with (direction in stage px + strength 0..1), if any. */
   aim: ThrowAim | null;
@@ -392,7 +271,8 @@ export class Dice {
   readonly el: HTMLElement;
   private dice: [Die, Die];
   private shakeTimer = 0;
-  private pair: HTMLElement;
+  /** The pair element (the Stage measures the dice area relative to it; the skill ring sits in it). */
+  readonly pair: HTMLElement;
   private stopTumble: (() => void) | null = null;
   private aimV: ThrowAim | null = null;
   /** Dice in play: 1 (stride 1, the second die hidden, the first centred) or 2. */
@@ -403,8 +283,6 @@ export class Dice {
    * starts (one layout read). Null: the in-place roll.
    */
   arena: (() => Box | null) | null = null;
-  /** How throws are drawn (GameView: canvas effects on → 'canvas', off → 'dom'). */
-  path: DicePath = 'canvas';
 
   constructor() {
     this.dice = [new Die(), new Die()];
@@ -447,10 +325,6 @@ export class Dice {
     if (n === this.count) return;
     this.count = n;
     this.el.classList.toggle('is-single', n === 1);
-  }
-
-  get diceCount(): 1 | 2 {
-    return this.count;
   }
 
   /** The dice in play (the hidden second die is not thrown). */
@@ -548,7 +422,7 @@ export class Dice {
     const edges = live && !reducedMotion() ? (this.arena?.() ?? null) : null;
     const mode = rollMode({ headless: !live, reduced: reducedMotion(), measured: !!edges });
     const rec: ThrowRecord | null = diceDev
-      ? { mode, path: null, kind: null, aim, faces: [...fs], planMs: 0, startedAt: performance.now(), endedAt: null, bounces: [], clacks: 0, travel: 0, box: null, bounds: null, view: null, screen: null, homes: null, speed: 0, pathLen: 0 }
+      ? { mode, kind: null, aim, faces: [...fs], planMs: 0, startedAt: performance.now(), endedAt: null, bounces: [], clacks: 0, travel: 0, box: null, bounds: null, view: null, screen: null, homes: null, speed: 0, pathLen: 0 }
       : null;
     if (rec) diceDev!.log.push(rec);
     if (mode === 'throw') await this.throwDice(fs, aim, edges!, rec);
@@ -565,10 +439,10 @@ export class Dice {
   }
 
   /**
-   * Die size and gap from the layout variables (--ds = max(38px, 3.3 --u), gap 1.3 --u,
-   * --u = --board / 32), so the sizes never force a synchronous layout.
+   * Die size and gap (layout px; also the skill ring's geometry) from the layout variables
+   * (--ds = max(38px, 3.3 --u), gap 1.3 --u, --u = --board / 32), so they never force a layout.
    */
-  private sizes(): { ds: number; gap: number } {
+  sizes(): { ds: number; gap: number } {
     const board = parseFloat(document.documentElement.style.getPropertyValue('--board')) || 0;
     const u = board / 32;
     return { ds: Math.max(38, u * 3.3), gap: u * 1.3 };
@@ -587,13 +461,12 @@ export class Dice {
     // bounce's lift stays under the round line) and the bottom (the contact shadow).
     const tossBox: Box = { left: edges.left + ds / 2, right: edges.right - ds / 2, top: edges.top + ds * 0.75, bottom: edges.bottom - ds * 0.7 };
     const poses = faces.map((n, i) => {
-      const from = this.dice[i]!.startPose();
+      const from = this.dice[i]!.restPose();
       return { from, to: this.dice[i]!.land(n) };
     });
     const flight = aim ? this.openFlight(homes, ds) : null;
     const plan = planThrow({ box: flight?.walls ?? tossBox, tossBox, homes, ds, aim, poses });
     if (rec) {
-      rec.path = this.path;
       rec.kind = plan.kind;
       rec.planMs = plan.total;
       rec.bounces = plan.dice.map((d) => d.bounces);
@@ -614,7 +487,29 @@ export class Dice {
         });
       }
     }
-    return this.path === 'dom' ? this.flyDom(plan, homes, ds, flight, rec) : this.flyCanvas(plan, ds, flight, rec);
+    // A flick: the cubes move up into the flight layer (at their homes in its frame); an invisible
+    // stand-in of the same size keeps each one's place in the pair.
+    const live = this.live;
+    const moved: [HTMLElement, HTMLElement][] = [];
+    if (flight) {
+      live.forEach((d, i) => {
+        const ph = h('div', { class: 'die die-ph' });
+        d.el.replaceWith(ph);
+        d.el.style.left = `${(homes[i]!.x - ds / 2).toFixed(2)}px`;
+        d.el.style.top = `${(homes[i]!.y - ds / 2).toFixed(2)}px`;
+        flight.frame.append(d.el);
+        moved.push([d.el, ph]);
+      });
+    }
+    const draw = (t: number): void => samplePair(plan, t).forEach((s, i) => live[i]!.move(s.x - homes[i]!.x, s.y - homes[i]!.y + s.ty * ds, s.sx, s.sy, s.rx, s.ry));
+    return this.fly(plan.total, plan.hits, draw, rec, () => {
+      for (const [el, ph] of moved) {
+        ph.replaceWith(el);
+        el.style.left = '';
+        el.style.top = '';
+      }
+      flight?.layer.remove();
+    });
   }
 
   /**
@@ -646,30 +541,41 @@ export class Dice {
     return { layer, frame, f, at: { x: lr.left, y: lr.top }, walls: screenWalls(f, view, ds), view };
   }
 
-  /** Step a planned throw on the shared 30 Hz clock: `draw(t)` with t in plan ms; wall clacks on the way. */
-  private fly(plan: ThrowPlan, draw: (t: number) => void, end: () => void, rec: ThrowRecord | null): Promise<void> {
-    const duration = D(plan.total);
+  /**
+   * Roll the dice in play on the shared 30 Hz clock for `total` ms (at speed 1): `draw(t)` poses
+   * them each frame (t in those ms) and the wall `hits` clack on the way; one layer per die
+   * meanwhile. At the end (`end` first) they rest on their faces, untransformed.
+   */
+  private fly(total: number, hits: readonly Hit[], draw: (t: number) => void, rec: ThrowRecord | null, end?: () => void): Promise<void> {
+    const live = this.live;
+    const duration = D(total);
     let elapsed = 0;
     let last = -1;
     let clack = 0;
+    this.el.classList.add('is-rolling', 'is-flying');
     draw(0);
     return new Promise((resolve) => {
       const done = (): void => {
         this.stopTumble = null;
-        end();
+        end?.();
+        for (const d of live) {
+          d.el.style.transform = '';
+          d.set(d.value);
+        }
+        this.el.classList.remove('is-rolling', 'is-flying');
         resolve();
       };
       const stopTick = onFrame((now) => {
         if (last >= 0) elapsed += (now - last) * (isSkipping() ? 5 : 1);
         last = now;
-        const t = duration > 0 ? (elapsed / duration) * plan.total : plan.total;
-        while (clack < plan.hits.length && plan.hits[clack]!.t <= t) {
-          const hit = plan.hits[clack++]!;
+        const t = duration > 0 ? (elapsed / duration) * total : total;
+        while (clack < hits.length && hits[clack]!.t <= t) {
+          const hit = hits[clack++]!;
           sfx.play('dice-clack', { gain: 0.3 + 0.7 * hit.strength, pitch: 0.92 + 0.16 * hit.strength });
           haptic('tick');
           if (rec) rec.clacks++;
         }
-        if (t >= plan.total || !this.el.isConnected) {
+        if (t >= total || !this.el.isConnected) {
           done();
           return false;
         }
@@ -684,181 +590,23 @@ export class Dice {
   }
 
   /**
-   * Canvas path: both dice in ONE temporary software canvas over the throw's bounding box (not the
-   * whole stage), dirty-rect cleared, 1 canvas px per CSS px (motion hides the softness; the landed
-   * dice are the crisp DOM ones again). The DOM dice, already at their final faces, reappear when
-   * the canvas goes away.
-   */
-  private flyCanvas(plan: ThrowPlan, ds: number, flight: Flight | null, rec: ThrowRecord | null): Promise<void> {
-    const b = throwBounds(plan);
-    const r = ds * 0.9 * 1.15;
-    const left = Math.floor(b.left - r);
-    const top = Math.floor(b.top - r - 1.1 * plan.lift * ds);
-    const w = Math.ceil(b.right + r - left);
-    const hgt = Math.ceil(b.bottom + r + ds * 0.3 - top);
-    const canvas = document.createElement('canvas');
-    canvas.className = 'dice-canvas';
-    canvas.width = w;
-    canvas.height = hgt;
-    canvas.style.left = `${left}px`;
-    canvas.style.top = `${top}px`;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${hgt}px`;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || typeof ctx.roundRect !== 'function') return this.flyDom(plan, plan.dice.map((d) => d.home), ds, flight, rec);
-    const sp = sprites(ds, 1);
-    let dirty: [number, number, number, number][] = [];
-    const draw = (t: number): void => {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalAlpha = 1;
-      for (const [x, y, dw, dh] of dirty) ctx.clearRect(x, y, dw, dh);
-      dirty = [];
-      for (const s of samplePair(plan, t)) dirty.push(drawCube(ctx, sp, s.rx, s.ry, s.x - left, s.y - top + s.ty * ds, s.sx, s.sy));
-    };
-    (flight?.frame ?? this.pair).append(canvas);
-    this.el.classList.add('is-rolling', 'is-canvas');
-    return this.fly(
-      plan,
-      draw,
-      () => {
-        canvas.remove();
-        flight?.layer.remove();
-        this.el.classList.remove('is-rolling', 'is-canvas');
-      },
-      rec,
-    );
-  }
-
-  /**
-   * DOM path (canvas effects off, e.g. the Android app): the two DOM cubes are posed (`pose`) and
-   * moved (translate + the landing squash) on the 30 Hz clock: one layer per die while flying,
-   * no canvas at all.
-   */
-  private flyDom(plan: ThrowPlan, homes: Vec[], ds: number, flight: Flight | null, rec: ThrowRecord | null): Promise<void> {
-    const live = this.live;
-    if (rec) rec.path = 'dom';
-    // A flick: the two cubes move up into the flight layer (at their homes in its frame); an
-    // invisible stand-in of the same size keeps each one's place in the pair.
-    const moved: [HTMLElement, HTMLElement][] = [];
-    if (flight) {
-      live.forEach((d, i) => {
-        const ph = h('div', { class: 'die die-ph' });
-        d.el.replaceWith(ph);
-        d.el.style.left = `${(homes[i]!.x - ds / 2).toFixed(2)}px`;
-        d.el.style.top = `${(homes[i]!.y - ds / 2).toFixed(2)}px`;
-        flight.frame.append(d.el);
-        moved.push([d.el, ph]);
-      });
-    }
-    const draw = (t: number): void => {
-      const all = samplePair(plan, t);
-      for (let i = 0; i < live.length; i++) {
-        const s = all[i]!;
-        const die = live[i]!;
-        die.el.style.transform = `translate(${(s.x - homes[i]!.x).toFixed(1)}px, ${(s.y - homes[i]!.y + s.ty * ds).toFixed(1)}px) scale(${s.sx.toFixed(3)}, ${s.sy.toFixed(3)})`;
-        die.pose(s.rx, s.ry);
-      }
-    };
-    this.el.classList.add('is-rolling', 'is-flying');
-    return this.fly(
-      plan,
-      draw,
-      () => {
-        for (const [el, ph] of moved) {
-          ph.replaceWith(el);
-          el.style.left = '';
-          el.style.top = '';
-        }
-        flight?.layer.remove();
-        for (const d of live) {
-          d.el.style.transform = '';
-          d.set(d.value);
-        }
-        this.el.classList.remove('is-rolling', 'is-flying');
-      },
-      rec,
-    );
-  }
-
-  /**
-   * The in-place roll (reduced motion, or no measured dice area): both dice tumble and bounce in
-   * ONE temporary canvas over the pair, stepped on the shared 30 Hz clock. The DOM dice, already
-   * showing the final faces, reappear when the canvas goes away. It also plays under reduced
-   * motion: the roll is the game's key reveal (time.ts policy).
+   * The in-place roll (reduced motion, or no measured dice area): the dice tumble and bounce where
+   * they stand (~1 s: `fly` without a path or a wall). It also plays under reduced motion: the
+   * roll is the game's key reveal (time.ts policy).
    */
   private tumble(spins: Spin[]): Promise<void> {
     this.stopTumble?.();
     if (headless() || typeof document === 'undefined') return Promise.resolve();
-    const { ds, gap } = this.sizes();
-    // Tumbling dice render at 1 canvas px per CSS px: motion hides the softness, the landed dice
-    // are the crisp DOM ones again, and a software canvas costs per pixel (draw + upload).
-    const k = 1;
-    const padX = ds * 0.6;
-    const padTop = ds * 1.9;
-    const padBottom = ds * 0.8;
-    const n = spins.length;
-    const w = ds * n + gap * (n - 1) + padX * 2;
-    const hgt = ds + padTop + padBottom;
-    const canvas = document.createElement('canvas');
-    canvas.className = 'dice-canvas';
-    canvas.width = Math.ceil(w * k);
-    canvas.height = Math.ceil(hgt * k);
-    canvas.style.left = `${-padX}px`;
-    canvas.style.top = `${-padTop}px`;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${hgt}px`;
-    // A software canvas (willReadFrequently): an accelerated one in a headless / GPU-less
-    // WebView made every commit wait on the canvas upload (15-50 ms at 4x CPU throttle).
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx || typeof ctx.roundRect !== 'function') return Promise.resolve();
-    const sp = sprites(ds, k);
-    let dirty: [number, number, number, number][] = [];
-    // ~1 s of tumbling before the result shows.
-    const duration = D(1000);
-    const centres = spins.map((_, i) => padX + ds / 2 + i * (ds + gap));
-    const cy = padTop + ds / 2;
-    let elapsed = 0;
-    let last = -1;
-    const draw = (): boolean => {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalAlpha = 1;
-      // Clear only what the previous frame drew.
-      for (const [x, y, w, h] of dirty) ctx.clearRect(x, y, w, h);
-      dirty = [];
-      let running = false;
+    const { ds } = this.sizes();
+    const live = this.live;
+    const draw = (t: number): void =>
       spins.forEach((spin, i) => {
-        const t = Math.min(1, Math.max(0, (elapsed - D(spin.delay)) / duration));
-        if (t < 1) running = true;
-        const e = ROLL_EASE(t);
-        const [ty, sx, sy] = bounceAt(t);
-        dirty.push(drawCube(ctx, sp, spin.x0 + (spin.x1 - spin.x0) * e, spin.y0 + (spin.y1 - spin.y0) * e, centres[i]!, cy + ty * ds, sx, sy));
+        const u = Math.min(1, Math.max(0, (t - spin.delay) / TUMBLE_MS));
+        const e = ROLL_EASE(u);
+        const [ty, sx, sy] = bounceAt(u);
+        live[i]!.move(0, ty * ds, sx, sy, spin.x0 + (spin.x1 - spin.x0) * e, spin.y0 + (spin.y1 - spin.y0) * e);
       });
-      return running;
-    };
-    draw();
-    this.pair.append(canvas);
-    this.el.classList.add('is-rolling', 'is-canvas');
-    return new Promise((resolve) => {
-      const done = (): void => {
-        this.stopTumble = null;
-        canvas.remove();
-        this.el.classList.remove('is-rolling', 'is-canvas');
-        resolve();
-      };
-      const stopTick = onFrame((now) => {
-        if (last >= 0) elapsed += (now - last) * (isSkipping() ? 5 : 1);
-        last = now;
-        if (!canvas.isConnected || !draw()) {
-          done();
-          return false;
-        }
-        return true;
-      });
-      this.stopTumble = () => {
-        stopTick();
-        done();
-      };
-    });
+    return this.fly(TUMBLE_MS + Math.max(...spins.map((s) => s.delay)), [], draw, null);
   }
 
   /** Client centres of the two dice (fx `diceLand`); one layout read, only at the landing. */
@@ -872,16 +620,6 @@ export class Dice {
   /** Client rect of the pair (the CPU hand presses the dice). */
   pairRect(): DOMRect {
     return this.pair.getBoundingClientRect();
-  }
-
-  /** Die size and gap (layout px): the skill ring's geometry. */
-  layoutSizes(): { ds: number; gap: number } {
-    return this.sizes();
-  }
-
-  /** The pair element (the Stage measures the dice area relative to it). */
-  get pairEl(): HTMLElement {
-    return this.pair;
   }
 
   dispose(): void {

@@ -256,18 +256,13 @@ Instead of a roll button, the human's turn invites a throw and the dice are thro
   holding one `.dice-fly-frame` turned and scaled like the Stage (a static 2D transform: no layer
   of its own), so the dice keep drawing in their own pair px and keep facing the seat. A toss
   stays in the pair, as before.
-* **Rendering paths**, chosen by the same switch as the canvas effects (`fxQualityOn`):
-  * canvas effects on (the web build by default): one temporary software canvas in the flight
-    frame, sized to the throw's bounding box (an axis-aligned box on the screen too, the turns
-    being quarter turns; up to most of the screen for a strong flick), dirty-rect cleared,
-    removed at the landing — one layer while flying, as the old tumble;
-  * canvas effects off (the **Android app by default**: the owner's Samsung tablet drew canvases
-    as white boxes): no canvas at all; the two DOM cubes move into the flight frame (an invisible
-    `.die-ph` stand-in keeps each one's place in the pair), are posed (`pose`) and translated on
-    the 30 Hz clock — one layer per die while flying — and go back to the pair at the landing.
-  Either way the overlay exists only while the dice fly (peak layers as before: two dice, or one
-  canvas), nothing runs after the landing (0 clock callbacks). Dev A/B: `?dev=1&dice=dom|canvas`.
-  Reduced motion keeps the in-place tumble (a canvas over the pair, as before).
+* **Rendering**: the DOM dice themselves, everywhere, with no canvas (the owner's Samsung tablet
+  drew canvases as white boxes; a second, canvas path for the web build was removed 2026-10-09).
+  For a flick the two cubes move into the flight frame (an invisible `.die-ph` stand-in keeps
+  each one's place in the pair) and go back to the pair at the landing; a toss and the in-place
+  tumble (reduced motion) pose them where they stand. Either way they are posed (`pose`) and
+  translated on the 30 Hz clock (`Dice.fly`): one layer per die while they roll; the overlay
+  exists only while the dice fly, and nothing runs after the landing (0 clock callbacks).
 * **Setting** "굴리기 버튼 보이기 / Show roll button" (default off): the roll button and its "꾹
   누르면 주사위를 흔들어요" hint come back beside the pad and work exactly as before.
 * **CPU.** The hand presses the dice on the pad, holds them while they rattle (`HAND.holdRoll`),
@@ -278,8 +273,8 @@ Instead of a roll button, the human's turn invites a throw and the dice are thro
 * Tests: `src/ui/stage/__tests__/throw.test.ts` (walls, faces, direction, the strength mapping and
   its monotonicity, the clamp, durations, the screen walls for every seat, the seat mapping, the
   toss unchanged, `cpuFlick`), `e2e/dice-throw.spec.ts` (flicks in four directions over the
-  screen, slow vs fast on both render paths, turned seats reaching their screen edge, the toss,
-  keyboard, cancel, canvas path, the setting, reduced motion, the wobble with its rattles and the
+  screen, slow vs fast, turned seats reaching their screen edge, the toss,
+  keyboard, cancel, no canvas, the setting, reduced motion, the wobble with its rattles and the
   hint's blink, a press stopping them). Filmstrip of a fast flick: `docs/assets/dice-flick-filmstrip.png`.
 
 #### Skill throw (strategy mode; owner request 2026-10-08; research `docs/research/11-skill-throw.md`)
