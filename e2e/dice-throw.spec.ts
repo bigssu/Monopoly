@@ -5,16 +5,15 @@
  * Checked with real mouse strokes: a flick in four directions throws the dice that way (one stroke
  * ends outside the pad: still a throw) across the SCREEN (over the board and the panels, in the
  * `.dice-fly` layer, never off the viewport), a slow and a fast flick the same way: the fast one
- * launches faster, gets farther from home, takes longer and reaches the screen's edge (both render
- * paths), a turned seat's flick toward a screen edge goes to that physical edge, a release without
+ * launches faster, gets farther from home, takes longer and reaches the screen's edge, a turned
+ * seat's flick toward a screen edge goes to that physical edge, a release without
  * a swipe is a weak toss forward that stays in the dice area, the result is always the engine's
  * dice (the throw never decides it), a throw settles within its planned time, nothing runs after
  * it (0 clock callbacks, no flight layer), the keyboard rolls, a cancelled press only stops the
  * shake, the Settings switch brings the roll button back and it works, reduced motion rolls in
  * place, and the "throw me" wobble plays (with a rattle each lean, the hint blinking) once and
- * once more after 5 s, for humans only. Positions are sampled on the DOM path (`?dice=dom`, the
- * Android default); the canvas path (the web default) is checked by its canvas and the throw's
- * screen box.
+ * once more after 5 s, for humans only. The dice are always the DOM cubes (no canvas, the in-place
+ * roll included), so their positions are sampled from the page.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { boot, checkPress, watchConsole } from './helpers';
@@ -22,7 +21,6 @@ import { reduceMotion } from './motion';
 
 interface Rec {
   mode: string;
-  path: string | null;
   kind: string | null;
   aim: { x: number; y: number; strength: number } | null;
   faces: number[];
@@ -231,7 +229,7 @@ test.describe('dice throw', () => {
   test('a flick in four directions throws the dice that way; the result is the engine\'s', async ({ page }) => {
     test.setTimeout(180_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     const DIRS: { name: string; dx: number; dy: number; dice: [number, number] }[] = [
       { name: 'up', dx: 0, dy: -150, dice: [1, 3] },
       { name: 'right', dx: 150, dy: 0, dice: [2, 5] },
@@ -251,7 +249,6 @@ test.describe('dice throw', () => {
       await checkResult(page, d.dice, d.name);
       const rec = (await lastRec(page))!;
       expect(rec.mode, d.name).toBe('throw');
-      expect(rec.path, d.name).toBe('dom');
       if (d.name.startsWith('down') && rec.kind === 'toss') {
         // A real stroke: on a loaded machine its moves can arrive too far apart for a flick
         // (releaseVelocity: the release within 0.1 s of the last move). Still a throw, not a cancel.
@@ -296,7 +293,7 @@ test.describe('dice throw', () => {
   test('a release without a swipe tosses the dice forward; the keyboard rolls; a cancel only stops the shake', async ({ page }) => {
     test.setTimeout(120_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craft(page, [2, 6]);
     const home = await page.evaluate(() => [...document.querySelectorAll('.st-dice .die')].map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
     await startSampling(page);
@@ -337,7 +334,7 @@ test.describe('dice throw', () => {
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
-  test('canvas path (web default): one canvas over the throw\'s box, gone after', async ({ page }) => {
+  test('the web build throws the DOM dice in the flight layer (no canvas), gone after', async ({ page }) => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await boot(page, { ...VIEW });
@@ -345,35 +342,27 @@ test.describe('dice throw', () => {
     const c = await pairCentre(page);
     const seen = page.evaluate(
       () =>
-        new Promise<{ n: number; w: number; h: number; x: number; y: number; inFly: boolean }>((resolve) => {
+        new Promise<{ fly: number; canvas: number }>((resolve) => {
           const t0 = performance.now();
           const tick = (): void => {
-            const cv = document.querySelectorAll('canvas.dice-canvas');
-            if (cv.length) {
-              const r = cv[0]!.getBoundingClientRect();
-              resolve({ n: cv.length, w: r.width, h: r.height, x: r.x, y: r.y, inFly: !!cv[0]!.closest('.dice-fly') });
-            } else if (performance.now() - t0 < 5000) requestAnimationFrame(tick);
-            else resolve({ n: 0, w: 0, h: 0, x: 0, y: 0, inFly: false });
+            const fly = document.querySelectorAll('.dice-fly .die').length;
+            if (fly) resolve({ fly, canvas: document.querySelectorAll('.dice-fly canvas, .st-dice canvas').length });
+            else if (performance.now() - t0 < 5000) requestAnimationFrame(tick);
+            else resolve({ fly: 0, canvas: 0 });
           };
           tick();
         }),
     );
     await flick(page, c, 160, -60, 1500);
     const cv = await seen;
-    expect(cv.n, 'one canvas').toBe(1);
-    expect(cv.inFly, 'drawn in the flight layer, over the board and the panels').toBe(true);
-    // Sized to the throw's box (not the whole screen), on the screen.
-    expect(cv.w * cv.h, 'smaller than the screen').toBeLessThan(VIEW.w * VIEW.h);
-    expect(cv.x).toBeGreaterThanOrEqual(-1);
-    expect(cv.y).toBeGreaterThanOrEqual(-1);
-    await checkResult(page, [4, 4], 'canvas');
+    expect(cv.fly, 'both dice in the flight layer, over the board and the panels').toBe(2);
+    expect(cv.canvas, 'no canvas').toBe(0);
+    await checkResult(page, [4, 4], 'web');
     const rec = (await lastRec(page))!;
-    expect(rec.path).toBe('canvas');
     expect(rec.kind).toBe('flick');
     // Doubles keep the gold treatment.
     await expect(page.locator('.st-dice .dice')).toHaveClass(/is-doubles/);
-    await expect(page.locator('canvas.dice-canvas')).toHaveCount(0);
-    await checkLanded(page, 'canvas');
+    await checkLanded(page, 'web');
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
@@ -403,7 +392,7 @@ test.describe('dice throw', () => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await reduceMotion(page);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craft(page, [6, 2]);
     // No wobble without motion.
     await page.waitForTimeout(300);
@@ -413,11 +402,28 @@ test.describe('dice throw', () => {
     await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.dice().rattles.length)).toBe(3);
     expect(await page.evaluate(() => document.querySelector('.pc-roll .roll-hint')!.getAnimations().length)).toBe(0);
     expect(await page.evaluate(() => getComputedStyle(document.querySelector('.pc-roll .roll-hint')!).opacity)).toBe('1');
+    // Watched from inside the page: the DOM dice tumble in place (transformed), no canvas.
+    const seen = page.evaluate(
+      () =>
+        new Promise<{ posed: boolean; canvas: number }>((resolve) => {
+          const out = { posed: false, canvas: 0 };
+          const t0 = performance.now();
+          const tick = (): void => {
+            out.canvas = Math.max(out.canvas, document.querySelectorAll('.st-dice canvas, .dice-fly canvas').length);
+            out.posed ||= [...document.querySelectorAll<HTMLElement>('.st-dice .die')].some((d) => d.style.transform !== '');
+            const rec = window.__lotAndRoll!.dice().log.at(-1);
+            if ((rec && rec.endedAt !== null) || performance.now() - t0 > 8000) resolve(out);
+            else requestAnimationFrame(tick);
+          };
+          tick();
+        }),
+    );
     await stroke(page, await pairCentre(page), 0, -160);
     await checkResult(page, [6, 2], 'reduced');
     const rec = (await lastRec(page))!;
     expect(rec.mode).toBe('inplace');
     expect(rec.kind).toBeNull();
+    expect(await seen, 'the DOM dice tumble, no canvas').toEqual({ posed: true, canvas: 0 });
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
@@ -541,74 +547,57 @@ test.describe('dice throw', () => {
     expect(logs, logs.join('\n')).toEqual([]);
   });
 
-  for (const path of ['dom', 'canvas'] as const) {
-    test(`a fast flick flies faster, farther and longer than a slow one, off the screen's edge (${path} path)`, async ({ page }) => {
-      test.setTimeout(120_000);
-      const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-      await boot(page, { ...VIEW, query: `&dice=${path}` });
-      const runs: { name: string; rec: Rec; reach: number; far: number; ms: number }[] = [];
-      // Slow: 450 px/s (a gentle push); fast: 6000 px/s (beyond the strongest, clamped to it).
-      for (const [name, speed, dice] of [
-        ['slow', 450, [2, 3]],
-        ['fast', 6000, [5, 1]],
-      ] as const) {
-        await craft(page, [dice[0], dice[1]]);
-        const home = await page.evaluate(() => [...document.querySelectorAll('.st-dice .die')].map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width }; }));
-        if (path === 'dom') await startSampling(page);
-        await flick(page, await pairCentre(page), 1, 0, speed);
-        const s = path === 'dom' ? await samples(page) : [];
-        await checkResult(page, [dice[0], dice[1]], `${name} ${path}`);
-        const rec = (await lastRec(page))!;
-        expect(rec.kind, name).toBe('flick');
-        expect(rec.path, name).toBe(path);
-        expect(rec.view, `${name}: walls are the screen`).not.toBeNull();
-        // How far right on the screen (a die's right edge), and how far from home.
-        let reach: number;
-        let far: number;
-        if (path === 'dom') {
-          checkOnScreen(s, `${name} ${path}`);
-          // The plan's screen box (die centres) for the reach: rAF samples can miss the frame at the wall.
-          reach = Math.max(rec.screen!.right + home[0]!.w / 2, ...s.flatMap((f) => f.r.map((r) => r.x + r.w)));
-          far = Math.max(...s.flatMap((f) => f.r.map((r, i) => Math.hypot(centreOf(r).x - home[i]!.x, centreOf(r).y - home[i]!.y))));
-        } else {
-          // The throw's screen box (die centres) lies inside the screen walls.
-          const sc = rec.screen!;
-          const v = rec.view!;
-          expect(sc.left, name).toBeGreaterThanOrEqual(v.left - 1);
-          expect(sc.right, name).toBeLessThanOrEqual(v.right + 1);
-          expect(sc.top, name).toBeGreaterThanOrEqual(v.top - 1);
-          expect(sc.bottom, name).toBeLessThanOrEqual(v.bottom + 1);
-          reach = sc.right + home[0]!.w / 2;
-          far = Math.max(sc.right - home[1]!.x, home[0]!.x - sc.left);
-        }
-        const ms = rec.endedAt! - rec.startedAt;
-        expect(ms, `${name}: settled in its time`).toBeLessThanOrEqual(rec.planMs + 200);
-        await checkLanded(page, `${name} ${path}`);
-        await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.activeTicks()), { timeout: 8000 }).toBe(0);
-        runs.push({ name, rec, reach, far, ms });
-        console.log(`[dice-throw] ${path} ${name}: release ${Math.round(Math.hypot(rec.aim!.x, rec.aim!.y))} px/s → launch ${Math.round(rec.speed)} px/s, plan ${Math.round(rec.planMs)} ms (took ${Math.round(ms)}), bounces ${rec.bounces}, clacks ${rec.clacks}, farthest ${Math.round(far)} px, right edge at ${Math.round(reach)} px`);
-      }
-      const [slow, fast] = runs as [(typeof runs)[0], (typeof runs)[0]];
-      expect(fast.rec.speed, 'launches faster').toBeGreaterThan(slow.rec.speed * 1.5);
-      expect(fast.far, 'travels farther').toBeGreaterThan(slow.far * 1.5);
-      expect(fast.rec.planMs, 'lasts longer (plan)').toBeGreaterThan(slow.rec.planMs + 300);
-      expect(fast.ms, 'lasts longer (seen)').toBeGreaterThan(slow.ms + 200);
-      // The fast one reaches the screen's right edge (within 10 %); the slow one stays short.
-      expect(fast.reach, 'reaches the screen edge').toBeGreaterThan(VIEW.w * 0.9);
-      expect(fast.reach, 'never off the screen').toBeLessThanOrEqual(VIEW.w);
-      expect(slow.reach, 'the slow one stays short').toBeLessThan(VIEW.w * 0.8);
-      expect(fast.rec.clacks, 'off the wall').toBeGreaterThanOrEqual(1);
-      expect(fast.rec.clacks).toBeLessThanOrEqual(4);
-      await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+  test('a fast flick flies faster, farther and longer than a slow one, off the screen\'s edge', async ({ page }) => {
+    test.setTimeout(120_000);
+    const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
+    await boot(page, { ...VIEW });
+    const runs: { name: string; rec: Rec; reach: number; far: number; ms: number }[] = [];
+    // Slow: 450 px/s (a gentle push); fast: 6000 px/s (beyond the strongest, clamped to it).
+    for (const [name, speed, dice] of [
+      ['slow', 450, [2, 3]],
+      ['fast', 6000, [5, 1]],
+    ] as const) {
+      await craft(page, [dice[0], dice[1]]);
+      const home = await page.evaluate(() => [...document.querySelectorAll('.st-dice .die')].map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width }; }));
+      await startSampling(page);
+      await flick(page, await pairCentre(page), 1, 0, speed);
+      const s = await samples(page);
+      await checkResult(page, [dice[0], dice[1]], name);
+      const rec = (await lastRec(page))!;
+      expect(rec.kind, name).toBe('flick');
+      expect(rec.view, `${name}: walls are the screen`).not.toBeNull();
+      // How far right on the screen (a die's right edge), and how far from home.
+      checkOnScreen(s, name);
+      // The plan's screen box (die centres) for the reach: rAF samples can miss the frame at the wall.
+      const reach = Math.max(rec.screen!.right + home[0]!.w / 2, ...s.flatMap((f) => f.r.map((r) => r.x + r.w)));
+      const far = Math.max(...s.flatMap((f) => f.r.map((r, i) => Math.hypot(centreOf(r).x - home[i]!.x, centreOf(r).y - home[i]!.y))));
+      const ms = rec.endedAt! - rec.startedAt;
+      expect(ms, `${name}: settled in its time`).toBeLessThanOrEqual(rec.planMs + 200);
+      await checkLanded(page, name);
       await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.activeTicks()), { timeout: 8000 }).toBe(0);
-      expect(logs, logs.join('\n')).toEqual([]);
-    });
-  }
+      runs.push({ name, rec, reach, far, ms });
+      console.log(`[dice-throw] ${name}: release ${Math.round(Math.hypot(rec.aim!.x, rec.aim!.y))} px/s → launch ${Math.round(rec.speed)} px/s, plan ${Math.round(rec.planMs)} ms (took ${Math.round(ms)}), bounces ${rec.bounces}, clacks ${rec.clacks}, farthest ${Math.round(far)} px, right edge at ${Math.round(reach)} px`);
+    }
+    const [slow, fast] = runs as [(typeof runs)[0], (typeof runs)[0]];
+    expect(fast.rec.speed, 'launches faster').toBeGreaterThan(slow.rec.speed * 1.5);
+    expect(fast.far, 'travels farther').toBeGreaterThan(slow.far * 1.5);
+    expect(fast.rec.planMs, 'lasts longer (plan)').toBeGreaterThan(slow.rec.planMs + 300);
+    expect(fast.ms, 'lasts longer (seen)').toBeGreaterThan(slow.ms + 200);
+    // The fast one reaches the screen's right edge (within 10 %); the slow one stays short.
+    expect(fast.reach, 'reaches the screen edge').toBeGreaterThan(VIEW.w * 0.9);
+    expect(fast.reach, 'never off the screen').toBeLessThanOrEqual(VIEW.w);
+    expect(slow.reach, 'the slow one stays short').toBeLessThan(VIEW.w * 0.8);
+    expect(fast.rec.clacks, 'off the wall').toBeGreaterThanOrEqual(1);
+    expect(fast.rec.clacks).toBeLessThanOrEqual(4);
+    await page.evaluate(() => window.__lotAndRoll!.whenIdle());
+    await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.activeTicks()), { timeout: 8000 }).toBe(0);
+    expect(logs, logs.join('\n')).toEqual([]);
+  });
 
   test('table view: a turned seat\'s flick toward a screen edge goes to that physical edge', async ({ page }) => {
     test.setTimeout(120_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     // 4 humans (S E N W): the Stage turns toward whoever rolls.
     for (const [seat, current, dx, dy] of [
       ['E', 1, 440, 0],
@@ -738,7 +727,7 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await guideSeen(page, false);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     // demoSettings: rules 'normal' (casual).
     await craft(page, [2, 3]);
     await expect(page.locator('.stride-chips, .skill-ring, .skill-guide')).toHaveCount(0);
@@ -754,7 +743,7 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(120_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await guideSeen(page);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craftSkill(page, [1, 3]);
     // At rest: the chips (two dice chosen), the static ring; no needle, no readout.
     await expect(page.locator('.stride-chip[data-stride="2"]')).toHaveAttribute('aria-pressed', 'true');
@@ -791,7 +780,7 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(150_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await guideSeen(page);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craftSkill(page, [3, 3]);
     const ds = (await page.locator('.st-dice .die').first().boundingBox())!.height;
     // Outside the band: 6 frames in (phase ~0.14), accuracy 0.
@@ -839,7 +828,7 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(120_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await guideSeen(page);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craftSkill(page, [5, 2]);
     const two = (await page.locator('.st-dice .dice-pair').boundingBox())!;
     await page.locator('.stride-chip[data-stride="1"]').click();
@@ -886,7 +875,7 @@ test.describe('skill throw (strategy mode)', () => {
   test('the guide shows the first time a human rolls in strategy mode, once; Settings opens it again', async ({ page }) => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craftSkill(page, [1, 2]);
     const guide = page.locator('.st-pop .skill-guide');
     await expect(guide).toBeVisible();
@@ -918,7 +907,7 @@ test.describe('skill throw (strategy mode)', () => {
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await reduceMotion(page);
     await guideSeen(page);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await craftSkill(page, [3, 4]);
     const c = await pairCentre(page);
     await page.evaluate(() => window.__lotAndRoll!.manualClock(true));
@@ -949,7 +938,7 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(150_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await guideSeen(page);
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     // Watch, in the page, what the arrow and the readout showed while the CPU dragged.
     await page.evaluate(() => {
       const w = window as unknown as { __seen: { label: string; readout: string }[] };
@@ -988,7 +977,7 @@ test.describe('skill throw (strategy mode)', () => {
   test('a strategy-mode CPU game plays 20+ turns without errors (one-die rolls included)', async ({ page }) => {
     test.setTimeout(300_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await boot(page, { ...VIEW, query: '&dice=dom' });
+    await boot(page, { ...VIEW });
     await page.evaluate(() => {
       const h = window.__lotAndRoll!;
       h.setPromptTimer(0);

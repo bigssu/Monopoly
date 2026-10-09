@@ -27,7 +27,9 @@
  * short hop, at most one soft wall touch, ~1.06 s. One die (stride 1) or two: every function takes
  * the dice it is given. Reduced motion keeps the in-place roll (`rollMode`).
  */
+import { mulberry32Step } from '@/engine/rng';
 import { cubicBezier } from '@/ui/fx/quantize';
+import { keyAt, smoothstep } from '@/ui/fx/vfx/ease';
 
 export interface Vec {
   x: number;
@@ -110,13 +112,7 @@ const BOUNCE: [number, number, number, number][] = [
 const BOUNCE_EASE = cubicBezier(0.3, 0.6, 0.4, 1);
 /** [translateY (die sizes), sx, sy] of the landing bounce at t in [0, 1]. */
 export function bounceAt(t: number): [number, number, number] {
-  const p = BOUNCE_EASE(Math.min(1, Math.max(0, t)));
-  let i = 0;
-  while (i < BOUNCE.length - 2 && p > BOUNCE[i + 1]![0]) i++;
-  const a = BOUNCE[i]!;
-  const b = BOUNCE[i + 1]!;
-  const u = (p - a[0]) / (b[0] - a[0]);
-  return [a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, a[3] + (b[3] - a[3]) * u];
+  return keyAt(BOUNCE, BOUNCE_EASE(Math.min(1, Math.max(0, t)))) as [number, number, number];
 }
 
 /** How a roll is shown: headless → instantly, reduced motion → the in-place roll, else thrown. */
@@ -151,7 +147,7 @@ export function releaseVelocity(samples: ReadonlyArray<readonly [number, number,
   return { x: ((last[0] - first[0]) / dt) * 1000, y: ((last[1] - first[1]) / dt) * 1000 };
 }
 
-/** One axis of a die's spin: angle(t) = from + R(t)·scale + fix·smooth(u). */
+/** One axis of a die's spin: angle(t) = from + R(t)·scale + fix·smoothstep(u). */
 interface AxisSpin {
   from: number;
   scale: number;
@@ -214,10 +210,6 @@ interface DieState {
 }
 
 const DEG = 180 / Math.PI;
-const smooth = (u: number): number => {
-  const v = Math.min(1, Math.max(0, u));
-  return v * v * (3 - 2 * v);
-};
 const smoother = (u: number): number => {
   const v = Math.min(1, Math.max(0, u));
   return v * v * v * (v * (6 * v - 15) + 10);
@@ -368,7 +360,7 @@ export function flickStrength(speed: number): number {
 }
 
 /** Is a release velocity a flick (else a weak toss)? (casual games) */
-export function isFlick(v: Vec | null): boolean {
+function isFlick(v: Vec | null): boolean {
   return !!v && len(v) >= THROW.flickMin;
 }
 
@@ -388,13 +380,6 @@ export function launchOf(strength: number): { strength: number; speed: number; r
     speed: THROW.launch[0] + (THROW.launch[1] - THROW.launch[0]) * s,
     roll: THROW.flickRoll[0] + (THROW.flickRoll[1] - THROW.flickRoll[0]) * s,
   };
-}
-
-/**
- * The launch of a flick released at `speed` px/s (casual games): `launchOf` its strength.
- */
-export function flickLaunch(speed: number): { strength: number; speed: number; roll: number } {
-  return launchOf(flickStrength(speed));
 }
 
 /**
@@ -505,7 +490,7 @@ export function planThrow(o: { box: Box; tossBox?: Box; homes: readonly Vec[]; d
       }
       // A flick's way home can be several dice long: the smoother blend (zero speed AND
       // acceleration at the end) leaves no visible residual in the last frames before the landing.
-      const g = flick ? smoother((u - from) / (1 - from)) : smooth((u - from) / (1 - from));
+      const g = flick ? smoother((u - from) / (1 - from)) : smoothstep((u - from) / (1 - from));
       xs[k] = Math.min(box.right, Math.max(box.left, tr.xs[k]! + (home.x - tr.rest.x) * g));
       ys[k] = Math.min(box.bottom, Math.max(box.top, tr.ys[k]! + (home.y - tr.rest.y) * g));
     }
@@ -554,7 +539,7 @@ function sampleDie(plan: ThrowPlan, i: number, t: number): DieState {
   const lerp = (arr: Float64Array): number => arr[k0]! + (arr[k1]! - arr[k0]!) * a;
   const [sx0, sy0] = d.spin;
   const R = u >= 1 ? [d.ax[n - 1]!, d.ay[n - 1]!] : [lerp(d.ax), lerp(d.ay)];
-  const s = smooth(u);
+  const s = smoothstep(u);
   const b = plan.box;
   // The path already rolls home (planThrow); the last frame is exactly home.
   const x = u >= 1 ? d.home.x : lerp(d.xs);
@@ -585,11 +570,6 @@ export function samplePair(plan: ThrowPlan, t: number): DieState[] {
     p[1].y = Math.min(b.bottom, Math.max(b.top, p[1].y + ny * push));
   }
   return p;
-}
-
-/** One die's state `t` ms into the throw. */
-export function sampleThrow(plan: ThrowPlan, i: number, t: number): DieState {
-  return samplePair(plan, t)[i]!;
 }
 
 /** Bounding box of every die centre over the throw (stage px). */
@@ -630,6 +610,9 @@ export interface Frame {
   s: number;
 }
 
+/** An angle (degrees) in [-180, 180). */
+const normDeg = (a: number): number => ((((a + 180) % 360) + 360) % 360) - 180;
+
 /**
  * The frame from the two dice: their homes in pair px and their measured screen centres (a
  * similarity: scale, turn, offset; it holds the Stage's turn toward the seat and every scale on
@@ -639,8 +622,7 @@ export function frameFrom(homes: [Vec, Vec], centres: [Vec, Vec]): Frame {
   const d = { x: homes[1].x - homes[0].x, y: homes[1].y - homes[0].y };
   const e = { x: centres[1].x - centres[0].x, y: centres[1].y - centres[0].y };
   const s = len(e) / Math.max(1e-6, len(d));
-  let a = (Math.atan2(e.y, e.x) - Math.atan2(d.y, d.x)) * DEG;
-  a = ((((a + 180) % 360) + 360) % 360) - 180;
+  let a = normDeg((Math.atan2(e.y, e.x) - Math.atan2(d.y, d.x)) * DEG);
   const q = Math.round(a / 90) * 90;
   if (Math.abs(a - q) < 2) a = q === -180 ? 180 : q;
   const r = rot(homes[0], a);
@@ -653,7 +635,7 @@ export function frameFrom(homes: [Vec, Vec], centres: [Vec, Vec]): Frame {
  * layout size). One point carries no turn, so the Stage's own angle is used.
  */
 export function frameFromOne(home: Vec, centre: Vec, angle: number, s: number): Frame {
-  let a = ((((angle + 180) % 360) + 360) % 360) - 180;
+  let a = normDeg(angle);
   if (a === -180) a = 180;
   const r = rot(home, a);
   return { ox: centre.x - s * r.x, oy: centre.y - s * r.y, a, s };
@@ -708,16 +690,12 @@ export function screenWalls(f: Frame, view: Box, ds: number): Box {
  * the same turn throws the same way). The look only: the engine has decided the faces.
  */
 export function cpuFlick(seed: number, turn: number, again = 0): { speed: number; angle: number } {
-  let x = (Math.imul(seed | 0, 0x9e3779b1) ^ Math.imul(turn + 1, 0x85ebca6b) ^ Math.imul(again + 1, 0xc2b2ae35)) >>> 0 || 1;
+  let x = (Math.imul(seed | 0, 0x9e3779b1) ^ Math.imul(turn + 1, 0x85ebca6b) ^ Math.imul(again + 1, 0xc2b2ae35)) >>> 0;
   const next = (): number => {
-    x ^= x << 13;
-    x >>>= 0;
-    x ^= x >>> 17;
-    x ^= x << 5;
-    x >>>= 0;
-    return x / 4294967296;
+    const [v, n] = mulberry32Step(x);
+    x = n;
+    return v;
   };
-  next();
   const [lo, hi] = THROW.cpuFlick;
   return { speed: lo + (hi - lo) * next(), angle: (next() - 0.5) * 24 };
 }

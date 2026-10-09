@@ -130,9 +130,9 @@ Result 화면 꽃가루는 이제 `prefs.fxCanvasFor`(Android 앱에서는 기�
 자체인지)은 기기에서 확인되지 않았다. PC Chrome(GPU 끔 포함)에서는 재현되지 않는다.
 
 조치: Android 앱에서는 캔버스 효과를 기본으로 끈다(`prefs.fxQualityOn`, 설정 → 연출 품질에서 고르면 켜짐).
-켰을 때는 워커/OffscreenCanvas 대신 메인 스레드에서 그린다(주사위 굴림 캔버스와 같은 경로). 주사위·말 이동·
-토스트·비트는 DOM 모션이라 영향이 없다. **미확인:** 주사위 굴림 캔버스가 이 기기에서 정상인지, 켰을 때
-메인 스레드 경로에서 흰 사각형이 사라지는지. 둘 다 기기에서 봐야 한다.
+켰을 때는 워커/OffscreenCanvas 대신 메인 스레드에서 그린다. 주사위·말 이동·토스트·비트는 DOM 모션이라
+영향이 없다(주사위는 2026-10-09부터 제자리 굴림까지 캔버스를 전혀 쓰지 않는다). **미확인:** 켰을 때 메인
+스레드 경로에서 흰 사각형이 사라지는지. 기기에서 봐야 한다.
 
 ## Android WebView 흰 사각형 대응 (2026-10-03)
 
@@ -408,7 +408,7 @@ Windows Playwright는 `PW_CHROMIUM_PATH`에 Chrome 실행 파일을 지정한다
   vsync 사이 중간에 격자선을 두는 위상 고정. 클럭이 슬롯의 첫 vsync를 놓치면 다음 슬롯까지 대기(격자 밖 프레임 방지).
 - `src/ui/fx/quantize.ts` — `anim()`(Web Animations)의 키프레임을 30 Hz 계단(`step-end`)으로 샘플링, 시작 시각을 격자에 정렬.
   CSS 애니메이션/전환은 `animationstart`/`transitionstart`에서 `steps(n)` 타이밍으로 양자화.
-- 모든 애니메이션 경로가 이 클럭/래퍼를 사용: 토큰 홉·점프(WAAPI), 주사위(캔버스, `onFrame`), 돈 카운트업(`onFrame`, ≈10 Hz 갱신),
+- 모든 애니메이션 경로가 이 클럭/래퍼를 사용: 토큰 홉·점프(WAAPI), 주사위(DOM 큐브, `onFrame`), 돈 카운트업(`onFrame`, ≈10 Hz 갱신),
   파티클(캔버스, `onFrame`), 떠오르는 금액/토스트/도장/카드 뒤집기/흔들기/메뉴/결과 히어로(`anim`), 스테이지 회전(`anim`, 이제
   `smooth` 없이 30 Hz — 60 Hz 회전 하나로 표시율이 ~36 fps까지 올라갔음), 타이머 링(CSS `lr-timer`, 이벤트 양자화),
   알림·게임 종료 전환(`gridTimeout`).
@@ -427,7 +427,8 @@ Windows Playwright는 `PW_CHROMIUM_PATH`에 Chrome 실행 파일을 지정한다
 
 ### 4.3 레이어·페인트 위생 (C)
 - 주사위: CSS 3D(preserve-3d, 면마다 레이어 → 16개) → 정지 상태는 **정사영 2D 큐브**(면마다 2D `matrix()`), 굴림은
-  두 주사위를 **캔버스 1장**(소프트웨어 캔버스, 1×, 미리 그린 면 스프라이트)에.
+  두 주사위를 **캔버스 1장**(소프트웨어 캔버스, 1×, 미리 그린 면 스프라이트)에. 2026-10-09부터는 캔버스 없이 DOM
+  큐브 자체를 30 Hz로 포즈(굴리는 동안 주사위당 레이어 1장, docs/DESIGN.md "Dice throw").
 - 파티클: 파티클마다 DOM+레이어(최대 80) → 효과당 임시 캔버스 1장(경계 상자 크기).
 - `html/body/#app/.game/.result/.fx-layer`의 `position: fixed` 제거(전체화면 fixed 상자 겹침이 24 MB 오버랩 레이어를 만듦).
 - 진입 애니메이션 `fill: both` → `backwards`(끝난 뒤에도 레이어 유지되던 문제).

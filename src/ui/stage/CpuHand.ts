@@ -31,6 +31,7 @@
 import type { Action, GameState, Seat } from '@/engine';
 import { anim, D, frame, gamePace, headless, isHeld, noMotion, onFrame, sleep } from '@/ui/fx/time';
 import { EASE, HAND } from '@/ui/fx/motion';
+import { smoothstep } from '@/ui/fx/vfx/ease';
 import { h, isDevHook, SEAT_ANGLE, svgNode } from '@/ui/game/util';
 import type { Board } from '@/ui/board/Board';
 import type { Stage } from './Stage';
@@ -259,12 +260,13 @@ export class CpuHand {
     //     hand; the throw goes the way of the stroke (a little variety in its angle).
     let lifted = down;
     let rest = up;
+    // The throw's seeded look for this turn (a roll again after doubles throws another way).
+    const st = o.state;
+    const look = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
     if (skill) {
       // Drag the arrow into the aim's zone, toward the board centre (a seeded few degrees off).
-      const st = o.state;
-      const pick = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
-      const L = zoneLength(roll!.aim) * this.stage.dice.layoutSizes().ds;
-      const pa = (pick.angle * Math.PI) / 180;
+      const L = zoneLength(roll!.aim) * this.stage.dice.sizes().ds;
+      const pa = (look.angle * Math.PI) / 180;
       // In the hand's (seat) frame "up" is (0, -1); on the screen that is turned by the seat's angle.
       const hx = Math.sin(pa) * L;
       const hy = -Math.cos(pa) * L;
@@ -281,7 +283,7 @@ export class CpuHand {
           if (last >= 0 && !isHeld()) el += now - last;
           last = now;
           const k = dur > 0 ? Math.min(1, el / dur) : 1;
-          const e = k * k * (3 - 2 * k);
+          const e = smoothstep(k);
           hand.style.transform = at(qx + hx * e, qy + hy * e, TILT + 4 * e, 0.86);
           skill.drag({ x: vx * e, y: vy * e });
           if (k >= 1 || !o.alive()) {
@@ -301,12 +303,10 @@ export class CpuHand {
       hand.style.transform = flick;
       await anim(hand, [{ transform: down }, { transform: flick }], { duration: HAND.flick, easing: EASE.anticipate });
       if (!o.alive()) return this.drop();
-      const st = o.state;
-      const pick = cpuFlick(st.seed, st.turn, st.phase.kind === 'preRoll' && st.phase.rollAgain ? (st.lastDice?.[0] ?? 0) * 7 + (st.lastDice?.[1] ?? 0) : 0);
-      const a = rad * -1 + (pick.angle * Math.PI) / 180;
+      const a = rad * -1 + (look.angle * Math.PI) / 180;
       // Layer "up" (0, -1) on screen: the layer is rotated by `angle` about the board centre.
       const v = this.stage.toLocal({ x: Math.sin(a), y: -Math.cos(a) });
-      this.stage.dice.aim({ ...v, strength: flickStrength(pick.speed) });
+      this.stage.dice.aim({ ...v, strength: flickStrength(look.speed) });
       lifted = flick;
       rest = at(qx, qy - H * 0.7, TILT + 4, 1);
     }

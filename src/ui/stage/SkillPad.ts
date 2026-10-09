@@ -135,7 +135,7 @@ export class SkillPad {
     this.ring.append(track, glow, band, mark, fill, needleRim, needle);
     this.paths = { fill, needle, needleRim, all: [track, glow, band, mark, fill, needleRim, needle] };
     this.readout = h('div', { class: 'skill-acc', 'aria-hidden': 'true' });
-    this.o.dice.pairEl.append(this.ring, this.readout);
+    this.o.dice.pair.append(this.ring, this.readout);
     this.layout();
     this.drawNeedle(0, false);
   }
@@ -176,7 +176,7 @@ export class SkillPad {
 
   /** Size the ring around the dice in play (pair px: it scales and turns with the Stage). */
   private layout(): void {
-    const { ds, gap } = this.o.dice.layoutSizes();
+    const { ds, gap } = this.o.dice.sizes();
     this.ds = ds;
     const pairW = this.stride * ds + (this.stride - 1) * gap;
     const m = ds * 0.42;
