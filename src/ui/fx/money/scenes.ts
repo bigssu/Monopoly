@@ -30,7 +30,7 @@ import { rotate, type Wallet } from './wallet';
 import { frameOf, phaseAt, type Sob } from './sob';
 import './strings';
 import { SEAT_CYCLE, SEAT_UP } from '@/ui/orientation';
-import { outBack } from '../vfx/ease';
+import { outBack, smoothstep } from '../vfx/ease';
 import { esc } from '@/ui/shell/dom';
 
 export interface Party {
@@ -199,7 +199,6 @@ function trueUp(c: MoneyClock, sceneMs: number): number {
   return 1 + Math.min(MAX_TRUE_UP - 1, left / (c.factor * sceneMs));
 }
 
-const smooth = (u: number): number => u * u * (3 - 2 * u);
 /** Damped wobble 0 → 0 (follow-through after an impact). */
 const wobble = (u: number, cycles = 1.5): number => Math.sin(Math.PI * 2 * cycles * u) * (1 - u) ** 1.6;
 
@@ -481,8 +480,8 @@ async function finish(x: Ctx, o: FinishOpts): Promise<void> {
   if (r) {
     const l = x.st.local(r);
     const s = Math.max(0.08, Math.min(l.w, l.h) / g.hero);
-    jobs.push(x.st.poseTo({ x: l.x + l.w / 2, y: l.y + l.h / 2, s, rx: 0, o: 0.2 }, out, smooth));
-  } else jobs.push(x.st.poseTo({ s: x.st.heroPose.s * 0.8, o: 0 }, out, smooth));
+    jobs.push(x.st.poseTo({ x: l.x + l.w / 2, y: l.y + l.h / 2, s, rx: 0, o: 0.2 }, out, smoothstep));
+  } else jobs.push(x.st.poseTo({ s: x.st.heroPose.s * 0.8, o: 0 }, out, smoothstep));
   for (const p of x.st.plaques) jobs.push(x.st.tween(f(6), (u) => (p.el.style.opacity = String(Math.min(Number(p.el.style.opacity || 0), 1 - u)))));
   if (x.st.stamp.style.opacity && x.st.stamp.style.opacity !== '0') jobs.push(x.st.tween(f(6), (u) => (x.st.stamp.style.opacity = String(1 - u))));
   for (const w of o.wallets ?? SEAT_CYCLE.map((s) => x.st.wallets[s]).filter((w) => w.visible)) jobs.push(w.exit(x.st, out));
@@ -737,7 +736,7 @@ export function build(st: MoneyStage, a: BuildArgs): MoneyPlay {
       result: async () => {
         // Anticipation: the site crouches; then the building springs up past its height (≈ 18 %
         // overshoot), lands with a squash and settles (squash & stretch, follow-through).
-        await x.st.poseTo({ s: x.st.heroPose.s * 0.95 }, f(4), smooth);
+        await x.st.poseTo({ s: x.st.heroPose.s * 0.95 }, f(4), smoothstep);
         void x.st.poseTo({ s: x.st.heroPose.s / 0.95 }, f(6), (u) => outBack(u, 1.6));
         void x.st.fx('dust_puff', lotPoint(x, a.seat, 0.02), { scale: g.hero / 150, tint: '#E9D3B0', fps: 16 });
         if (rise) {
@@ -1285,7 +1284,7 @@ function cry(x: Ctx, crier: HTMLElement | null): void {
     drops.forEach((d, j) => (j % TEARS_PER_EYE === 0 ? place(d, Math.floor(j / TEARS_PER_EYE), 0.42) : (d.style.opacity = '0')));
     return;
   }
-  void x.st.tween(f(8), (u) => streams.forEach((s) => (s.style.transform = `scaleY(${smooth(u).toFixed(3)})`)));
+  void x.st.tween(f(8), (u) => streams.forEach((s) => (s.style.transform = `scaleY(${smoothstep(u).toFixed(3)})`)));
   const t0 = x.c.t + f(4);
   x.c.add((t) => {
     if (t > 1e12) return false; // the clock is being disposed: the stage parks
@@ -1355,7 +1354,7 @@ export function sell(st: MoneyStage, a: SellArgs): MoneyPlay {
           const b = it.querySelector<HTMLElement>(land ? '.mh-sold-c' : '.mh-sold-b');
           const chunks = [...it.querySelectorAll<HTMLElement>('.mh-chunk')];
           await x.st.tween(f(10), (u) => {
-            const e = smooth(u);
+            const e = smoothstep(u);
             if (b && land) {
               b.style.transform = `translateY(${(-12 - 8 * e).toFixed(2)}%) rotate(${(-5 * e).toFixed(2)}deg)`;
               b.style.opacity = (1 - 0.5 * e).toFixed(2);

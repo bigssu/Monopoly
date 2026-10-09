@@ -19,9 +19,10 @@ import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
 import { anim, D, headless, isHeld, isSkipping, noMotion, onFrame, reducedMotion } from '@/ui/fx/time';
 import { cubicBezier } from '@/ui/fx/quantize';
+import { keyAt, smoothstep } from '@/ui/fx/vfx/ease';
 import { h, isDevHook } from '@/ui/game/util';
 import { rolledFaces } from './skill';
-import { bounceAt, frameFrom, frameFromOne, planThrow, rollMode, sampleThrow, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowAim, type ThrowPlan, type Vec } from './throw';
+import { bounceAt, frameFrom, frameFromOne, planThrow, rollMode, samplePair, screenWalls, throwBounds, throwTravel, toScreen, type Box, type Frame, type ThrowAim, type ThrowPlan, type Vec } from './throw';
 
 const PIPS: Record<number, Array<[number, number]>> = {
   1: [[50, 50]],
@@ -383,15 +384,7 @@ const WOBBLE: [number, number, number][] = [
   [1, 0, 0],
 ];
 function wobbleAt(x: number): string {
-  const u = x - Math.floor(x);
-  let i = 0;
-  while (i < WOBBLE.length - 2 && u > WOBBLE[i + 1]![0]) i++;
-  const p = WOBBLE[i]!;
-  const q = WOBBLE[i + 1]!;
-  const k = (u - p[0]) / (q[0] - p[0]);
-  const e = k * k * (3 - 2 * k);
-  const deg = p[1] + (q[1] - p[1]) * e;
-  const lift = p[2] + (q[2] - p[2]) * e;
+  const [deg, lift] = keyAt(WOBBLE, x - Math.floor(x), smoothstep) as [number, number];
   return `translateY(${lift.toFixed(2)}%) rotate(${deg.toFixed(2)}deg)`;
 }
 
@@ -720,10 +713,7 @@ export class Dice {
       ctx.globalAlpha = 1;
       for (const [x, y, dw, dh] of dirty) ctx.clearRect(x, y, dw, dh);
       dirty = [];
-      for (let i = 0; i < plan.dice.length; i++) {
-        const s = sampleThrow(plan, i, t);
-        dirty.push(drawCube(ctx, sp, s.rx, s.ry, s.x - left, s.y - top + s.ty * ds, s.sx, s.sy));
-      }
+      for (const s of samplePair(plan, t)) dirty.push(drawCube(ctx, sp, s.rx, s.ry, s.x - left, s.y - top + s.ty * ds, s.sx, s.sy));
     };
     (flight?.frame ?? this.pair).append(canvas);
     this.el.classList.add('is-rolling', 'is-canvas');
@@ -761,8 +751,9 @@ export class Dice {
       });
     }
     const draw = (t: number): void => {
+      const all = samplePair(plan, t);
       for (let i = 0; i < live.length; i++) {
-        const s = sampleThrow(plan, i, t);
+        const s = all[i]!;
         const die = live[i]!;
         die.el.style.transform = `translate(${(s.x - homes[i]!.x).toFixed(1)}px, ${(s.y - homes[i]!.y + s.ty * ds).toFixed(1)}px) scale(${s.sx.toFixed(3)}, ${s.sy.toFixed(3)})`;
         die.pose(s.rx, s.ry);

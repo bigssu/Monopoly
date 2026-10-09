@@ -92,3 +92,24 @@ export function bezier2(a: number, c: number, b: number, t: number): number {
   const m = 1 - t;
   return m * m * a + 2 * m * t * c + t * t * b;
 }
+
+/** Smoothstep: 3u² − 2u³ of u clamped to [0, 1] (zero speed at both ends). */
+export function smoothstep(u: number): number {
+  const v = Math.min(1, Math.max(0, u));
+  return v * v * (3 - 2 * v);
+}
+
+/**
+ * A keyframe table at `u`: rows `[offset, ...values]` with rising offsets (the first 0, the last 1);
+ * the values of the segment holding `u`, interpolated by `ease` of the segment's own fraction.
+ */
+export function keyAt(table: readonly (readonly number[])[], u: number, ease: EaseFn = (k) => k): number[] {
+  let i = 0;
+  while (i < table.length - 2 && u > table[i + 1]![0]!) i++;
+  const a = table[i]!;
+  const b = table[i + 1]!;
+  const k = ease((u - a[0]!) / (b[0]! - a[0]!));
+  const out: number[] = [];
+  for (let j = 1; j < a.length; j++) out.push(a[j]! + (b[j]! - a[j]!) * k);
+  return out;
+}

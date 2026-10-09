@@ -217,7 +217,7 @@ Instead of a roll button, the human's turn invites a throw and the dice are thro
   the in-place roll (~1 s); headless: instant.
 * **Strength = release speed** (owner request 2026-10-06: "the faster my finger pushes, the faster
   and farther the dice fly"). The launch speed and the roll length are monotonic (linear) in the
-  release speed, clamped between a gentle minimum and a hard maximum (`flickLaunch`, `THROW.launch`
+  release speed, clamped between a gentle minimum and a hard maximum (`launchOf(flickStrength(v))`, `THROW.launch`
   / `flickRoll` / `flickMax`); the planner only picks the angles (the leading die within 8° of
   the flick and its spread, the trailing one a few degrees off and 4–8 % slower, 60 ms later) for
   the throw whose dice come to rest nearest home. A faster flick therefore always launches faster,

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   cpuFlick,
   flickAim,
-  flickLaunch,
+  flickStrength,
   frameFromOne,
   launchOf,
   frameFrom,
@@ -16,7 +16,6 @@ import {
   releaseVelocity,
   rollMode,
   samplePair,
-  sampleThrow,
   screenToStage,
   screenWalls,
   THROW,
@@ -94,7 +93,7 @@ describe('planThrow', () => {
   it('lasts as long as its strength: a flick 1.1-1.96 s by release speed, a toss about a second', () => {
     for (const { name, v, plan } of plans()) {
       if (plan.kind === 'flick') {
-        const L = flickLaunch(Math.hypot(v!.x, v!.y));
+        const L = launchOf(flickStrength(Math.hypot(v!.x, v!.y)));
         // The leading die rolls `L.roll`, the other leaves 60 ms later and rolls 3 % shorter.
         expect(plan.total, name).toBeGreaterThanOrEqual(L.roll - 1e-6);
         expect(plan.total, name).toBeLessThanOrEqual(L.roll + THROW.delay + 1e-6);
@@ -113,7 +112,7 @@ describe('planThrow', () => {
   it('lands each die at home on the face the engine rolled', () => {
     for (const { name, plan, faces } of plans()) {
       for (const i of [0, 1] as const) {
-        const s = sampleThrow(plan, i, plan.total);
+        const s = samplePair(plan, plan.total)[i]!;
         const want = [FINAL[faces[i]]![0] - 18, FINAL[faces[i]]![1] + 24];
         expect(mod(s.rx), `${name} die ${i} rx`).toBe(mod(want[0]!));
         expect(mod(s.ry), `${name} die ${i} ry`).toBe(mod(want[1]!));
@@ -131,7 +130,7 @@ describe('planThrow', () => {
       // The die that leaves first; its first frames (before any wall or knock) point the flick's way.
       const i = plan.dice[0]!.delay === 0 ? 0 : 1;
       const d = plan.dice[i]!;
-      const s = sampleThrow(plan, i, 17);
+      const s = samplePair(plan, 17)[i]!;
       const dx = s.x - d.home.x;
       const dy = s.y - d.home.y;
       const cos = (dx * v.x + dy * v.y) / (Math.hypot(dx, dy) * Math.hypot(v.x, v.y));
@@ -172,7 +171,7 @@ describe('planThrow', () => {
     const L = LAYOUTS[0]!;
     const a = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: flickAim({ x: 900, y: -1300 }), poses: [pose(1, 2), pose(1, 5)], rand: seeded(3) });
     const b = planThrow({ box: L.box, homes: homesOf(L.ds, L.gap), ds: L.ds, aim: flickAim({ x: 900, y: -1300 }), poses: [pose(1, 2), pose(1, 5)], rand: seeded(3) });
-    expect(sampleThrow(a, 1, 700)).toEqual(sampleThrow(b, 1, 700));
+    expect(samplePair(a, 700)[1]).toEqual(samplePair(b, 700)[1]);
   });
 });
 
@@ -294,18 +293,18 @@ const SCREEN_DIRS: Vec[] = [
 
 describe('flick strength (owner: the faster the push, the faster and farther)', () => {
   it('maps the release speed monotonically to the launch, clamped at both ends', () => {
-    let prev = flickLaunch(THROW.flickMin);
+    let prev = launchOf(flickStrength(THROW.flickMin));
     expect(prev.strength).toBe(0);
     expect(prev.speed).toBe(THROW.launch[0]);
     expect(prev.roll).toBe(THROW.flickRoll[0]);
     for (let v = THROW.flickMin + 100; v <= THROW.flickMax; v += 100) {
-      const L = flickLaunch(v);
+      const L = launchOf(flickStrength(v));
       expect(L.speed).toBeGreaterThan(prev.speed);
       expect(L.roll).toBeGreaterThan(prev.roll);
       prev = L;
     }
-    expect(flickLaunch(THROW.flickMax)).toEqual({ strength: 1, speed: THROW.launch[1], roll: THROW.flickRoll[1] });
-    expect(flickLaunch(THROW.flickMax * 3)).toEqual(flickLaunch(THROW.flickMax));
+    expect(launchOf(flickStrength(THROW.flickMax))).toEqual({ strength: 1, speed: THROW.launch[1], roll: THROW.flickRoll[1] });
+    expect(launchOf(flickStrength(THROW.flickMax * 3))).toEqual(launchOf(flickStrength(THROW.flickMax)));
   });
 
   it('a faster release launches faster, runs a longer path and lasts longer, for every seat and direction', () => {
@@ -334,7 +333,7 @@ describe('flick strength (owner: the faster the push, the faster and farther)', 
     const b = screenThrow(0, { x: THROW.flickMax * 4, y: 0 }).plan;
     expect(b.speed).toBeCloseTo(a.speed, 9);
     expect(b.total).toBeCloseTo(a.total, 9);
-    expect(sampleThrow(b, 0, 600)).toEqual(sampleThrow(a, 0, 600));
+    expect(samplePair(b, 600)[0]).toEqual(samplePair(a, 600)[0]);
     // The hard maximum: about a die per 30 Hz frame.
     expect(a.speed / SCREEN.ds).toBeCloseTo(THROW.launch[1], 6);
   });
@@ -398,7 +397,7 @@ describe('screen walls (owner: bounce off the screen\'s edges)', () => {
         k++;
         const { plan } = screenThrow(angle, { x: d.x * 2800, y: d.y * 2800 }, k, faces);
         for (const i of [0, 1] as const) {
-          const s = sampleThrow(plan, i, plan.total);
+          const s = samplePair(plan, plan.total)[i]!;
           expect(mod(s.rx)).toBe(mod(FINAL[faces[i]]![0] - 18));
           expect(mod(s.ry)).toBe(mod(FINAL[faces[i]]![1] + 24));
           expect(s.x).toBeCloseTo(plan.dice[i]!.home.x, 6);
@@ -420,7 +419,7 @@ describe('screen walls (owner: bounce off the screen\'s edges)', () => {
         const { f, plan } = screenThrow(angle, { x: d.x * 2000, y: d.y * 2000 });
         const i = plan.dice[0]!.delay === 0 ? 0 : 1;
         const a = toScreen(f, plan.dice[i]!.home);
-        const s = sampleThrow(plan, i, 60);
+        const s = samplePair(plan, 60)[i]!;
         const b = toScreen(f, { x: s.x, y: s.y });
         const cos = ((b.x - a.x) * d.x + (b.y - a.y) * d.y) / Math.hypot(b.x - a.x, b.y - a.y);
         expect(cos, `${seat} ${d.x},${d.y}`).toBeGreaterThan(Math.cos((22 * Math.PI) / 180));
@@ -484,8 +483,8 @@ describe('cpuFlick (CPU throws: medium strength, fixed per turn)', () => {
       expect(Math.abs(c.angle)).toBeLessThanOrEqual(12);
       speeds.add(Math.round(c.speed));
       // Never the maximum.
-      expect(flickLaunch(c.speed).strength).toBeLessThan(0.75);
-      expect(flickLaunch(c.speed).strength).toBeGreaterThan(0.2);
+      expect(flickStrength(c.speed)).toBeLessThan(0.75);
+      expect(flickStrength(c.speed)).toBeGreaterThan(0.2);
     }
     expect(speeds.size).toBeGreaterThan(30);
   });
@@ -523,7 +522,7 @@ describe('strength = the aim arrow\'s length (strategy mode) and one-die throws'
     expect(launchOf(-1)).toEqual(launchOf(0));
     expect(launchOf(Number.NaN)).toEqual(launchOf(0));
     // A casual flick is the same mapping through its release speed.
-    expect(flickLaunch(THROW.flickMax)).toEqual(launchOf(1));
+    expect(launchOf(flickStrength(THROW.flickMax))).toEqual(launchOf(1));
   });
 
   it('a stronger aim flies faster, farther and longer', () => {
@@ -550,7 +549,7 @@ describe('strength = the aim arrow\'s length (strategy mode) and one-die throws'
             expect(all[0]!.x).toBeGreaterThanOrEqual(plan.box.left - 1e-6);
             expect(all[0]!.x).toBeLessThanOrEqual(plan.box.right + 1e-6);
           }
-          const s = sampleThrow(plan, 0, plan.total);
+          const s = samplePair(plan, plan.total)[0]!;
           expect(mod(s.rx)).toBe(mod(FINAL[face]![0] - 18));
           expect(mod(s.ry)).toBe(mod(FINAL[face]![1] + 24));
           expect(s.x).toBeCloseTo(home[0]!.x, 6);
