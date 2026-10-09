@@ -18,14 +18,6 @@
  *   island, card amounts, start cash) is exactly as in §4.
  */
 
-/**
- * Skill throw (rules version 3, docs/research/11-skill-throw.md §1): the chance at a perfect
- * accuracy that the roll is drawn inside the aimed band. 0.6 → the two-dice low band (2–5, 27.8 %
- * naturally) comes up 0.6 + 0.4 × 0.278 ≈ 71 % of the time. Chosen by simulation (docs/BALANCE.md
- * "Rules version 3").
- */
-export const SKILL_CAP = 0.6;
-
 /** Skill throw bands [low, high] by stride (inclusive sums). */
 export const SKILL_BANDS: Readonly<Record<1 | 2, Readonly<Record<'low' | 'high', readonly [number, number]>>>> = {
   1: { low: [1, 2], high: [5, 6] },
@@ -129,8 +121,13 @@ export const ECONOMY = {
   winBackMultiplier: 1,
 
   // --- Rules version 3 (docs/research/10-strategy-depth.md, docs/BALANCE.md "Rules version 3") ---
-  /** Skill throw assist cap (`SKILL_CAP`); read through here so the balance scripts can sweep it. */
-  skillCap: SKILL_CAP as number,
+  /**
+   * Skill throw (docs/research/11-skill-throw.md §1): the chance at a perfect accuracy that the
+   * roll is drawn inside the aimed band. 0.6 → the two-dice low band (2–5, 27.8 % naturally) comes
+   * up 0.6 + 0.4 × 0.278 ≈ 71 % of the time. Chosen by simulation (docs/BALANCE.md "Rules version
+   * 3"); `npm run skill -- … --cap X` sweeps it.
+   */
+  skillCap: 0.6 as number,
   /** Chase takeover: the multiplier at equal assets, and how far it moves either way (2 ± 0.5). */
   chaseBase: 2 as number,
   chaseRange: 0.5 as number,
@@ -145,8 +142,6 @@ export const ECONOMY = {
   investMaxLevel: 3 as number,
   /** Block-buy: surcharge (× value, paid to the owner with the price) on top of the takeover price. */
   blockSurcharge: 2 as number,
-  /** Block-buy: extra paid (to the owner) when the block-bought property is a hub. */
-  blockHubFee: 0 as number,
   /** Vault cap: the lucky vault never holds more than this; fees beyond it go to the bank. */
   vaultCap: 500 as number,
   /** Vault cap: the bank's per-round addition to the vault (instead of `vaultSeed`). */

@@ -94,7 +94,7 @@ export interface RuleFlags {
   // --- rules version 3 (docs/research/10-strategy-depth.md, 11-skill-throw.md) ---
   /** Stride choice (보폭 선택): roll one die (1–6, no doubles) or two (2–12). */
   strideChoice: boolean;
-  /** Skill throw (손맛 던지기): aim at the low or high band; accuracy × SKILL_CAP is the assist chance. */
+  /** Skill throw (손맛 던지기): aim at the low or high band; accuracy × `ECONOMY.skillCap` is the assist chance. */
   skillThrow: boolean;
   /** Start investment (출발 투자): passing Start lets you raise one of your cities a level from afar. */
   startInvest: boolean;

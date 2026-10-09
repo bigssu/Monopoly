@@ -302,9 +302,9 @@ without them); the set alert is what halves the set wins (36.0 → 20.8 %); star
 dearer to take (takeovers 1.62 → 1.12 per game) and so also lowers set wins; the chase multiplier is the
 one that moves takeovers toward the trailer (0.37 → 0.51 per game, +38 %); the vault cap is the vault.
 
-### SKILL_CAP (2 players, strategy mode, 2,000 seeds)
+### skillCap (2 players, strategy mode, 2,000 seeds)
 
-| SKILL_CAP | rolls the assist decides | vs "always yes" | vs "plain" | vs easy | set wins | rounds | leader at R10 wins |
+| skillCap | rolls the assist decides | vs "always yes" | vs "plain" | vs easy | set wins | rounds | leader at R10 wins |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 0 (stride only) | 0 % | 76.0 % | 58.8 % | 52.3 % | 19.8 % | 26.22 | 62.4 % |
 | 0.4 | 19.1 % | 79.0 % | 65.7 % | 59.3 % | 22.3 % | 26.52 | 62.8 % |
@@ -321,9 +321,9 @@ noise), so the choice is skill gain against dice control, and 0.6 is the knee.
 
 | constant | value | how it was chosen |
 |---|---|---|
-| `SKILL_CAP` | 0.6 | table above |
+| `skillCap` | 0.6 | table above |
 | `blockSurcharge` | 2 (× value, paid to the owner) | 2p set wins with block-buy at the takeover price only: 10–13 %; + 1 × value 13–19 %, + 2 × 20.8 %, + 2.5 × 22.3 % (owner-paid). 2 is the smallest that reaches the 20 % floor. |
-| `blockHubFee` | 0 | hub wins stay 5.4 % of 2p games without a fee (v2: 17.7 %); a 500 fee only added 1.6 pp of hub wins — not needed |
+| (hub fee on a block-buy) | none | hub wins stay 5.4 % of 2p games without a fee (v2: 17.7 %); a 500 fee only added 1.6 pp of hub wins — not needed, so the constant was removed |
 | `chaseBase` / `chaseRange` / `chaseSpan` | 2 / 0.5 / 2 | the 1.5–2.5 × range is the research's; span 1.5 or 4 changed takeovers by < 0.03 per game, so the round "half / twice the assets" scale stays |
 | `chaseSaleRate` | 0.75 | keeps the sale headline's 1.5 × at equal assets |
 | `investMaxLevel` | 3 (hotel) | the research's rule; villa-only (1) raised set wins (10.1 → 16.3 % before the surcharge was tuned) but left a nearly empty choice (1.9 invests a game) |
@@ -365,6 +365,6 @@ npm run skill -- table --players 2 --seeds 2000                         # strate
 npm run skill -- table --players 2 --seeds 2000 --rules normal --rules-version 2   # the old default
 npm run skill -- matchups --players 2 --seeds 2000 --policies yes,plain,easy,normal
 npm run skill -- table --off startInvest                                  # ablation
-npm run skill -- matchups --cap 0.72 --policies yes,plain,easy            # SKILL_CAP sweep
+npm run skill -- matchups --cap 0.72 --policies yes,plain,easy            # skillCap sweep
 npm run skill -- expert --seeds 200 --k 32 --cands 3 --margin 3             # search player
 ```

@@ -412,7 +412,7 @@ export type Action =
    * the dice gauge (B7). Rules version 3 (normal / advanced, docs/research/11-skill-throw.md §1):
    * `stride` 1 = one die (1–6, never doubles), 2 or missing = two dice; `aim` the band the throw
    * aims at (two dice: low 2–5 / high 9–12; one die: low 1–2 / high 5–6) and `accuracy` (0..1) how
-   * well it was thrown: with chance `SKILL_CAP × accuracy` the result is drawn inside the band (in
+   * well it was thrown: with chance `ECONOMY.skillCap × accuracy` the result is drawn inside the band (in
    * its natural proportions), otherwise it is a natural roll. No `aim` or accuracy 0 = natural.
    * The island escape roll ignores all three (it needs doubles).
    */

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { chooseAction, chooseRoll, cpuAccuracy, throwDistribution } from '../ai';
-import { ECONOMY, SKILL_BANDS, SKILL_CAP } from '../economy';
+import { ECONOMY, SKILL_BANDS } from '../economy';
 import { counterbuyOptions, counterbuyPrice, createGame, gaugeRoll, isLegal, legalActions, reduce, skilledRoll } from '../reducer';
 import { chaseMultiplier, round10, takeoverPrice, takeoverTerms, valueOf } from '../rules';
 import { createRng, rollDice, seedToState } from '../rng';
@@ -45,7 +45,7 @@ describe('stride choice and the skill throw', () => {
   const band = (p: number[], [lo, hi]: readonly [number, number]) => p.slice(lo, hi + 1).reduce((a, b) => a + b, 0);
 
   it('a perfect throw lands in the aimed band about cap + (1 − cap) × natural of the time', () => {
-    expect(SKILL_CAP).toBe(0.6);
+    expect(ECONOMY.skillCap).toBe(0.6);
     const two = freq(2, 'low', 1);
     expect(band(two.p, SKILL_BANDS[2].low)).toBeCloseTo(0.6 + 0.4 * (10 / 36), 1.6);
     expect(two.assisted).toBeCloseTo(0.6, 1.6);
@@ -56,7 +56,7 @@ describe('stride choice and the skill throw', () => {
     // Inside the band the natural proportions hold (4 is three times as likely as 2).
     expect(two.p[4]! / two.p[2]!).toBeCloseTo(3, 0);
     // Matches the analytic distribution the CPU plans with.
-    const plan = throwDistribution(2, 'low', SKILL_CAP);
+    const plan = throwDistribution(2, 'low', ECONOMY.skillCap);
     for (let t = 2; t <= 12; t++) expect(two.p[t]!).toBeCloseTo(plan[t]!, 1.7);
   });
 

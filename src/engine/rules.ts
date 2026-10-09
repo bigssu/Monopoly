@@ -54,7 +54,7 @@ export function nextBuildCost(state: GameState, index: number): number | null {
 }
 
 /** The news flash headline in force this round (rules version 2), if it is `id`. */
-export function newsActive(state: GameState, id: NewsId): boolean {
+function newsActive(state: GameState, id: NewsId): boolean {
   return state.news?.id === id && state.news.round === state.round && ruleFlags(state.settings).newsFlash;
 }
 

@@ -1450,11 +1450,10 @@ export function investOptions(s: GameState, pid: PlayerId): number[] {
 
 /**
  * Block-buy price, all paid to the owner (a forced buy-out at a premium): the takeover price for
- * `buyer` (chase multiplier) plus `blockSurcharge` × value and, for a hub, `blockHubFee`.
+ * `buyer` (chase multiplier) plus `blockSurcharge` × value (hubs included: no extra fee).
  */
 export function counterbuyPrice(s: GameState, idx: number, buyer: PlayerId): number {
-  return takeoverPrice(s, idx, buyer) + round10(ECONOMY.blockSurcharge * propertyValue(s, idx)) +
-    (isHub(idx, s.settings.spacesPerSide ?? 7) ? ECONOMY.blockHubFee : 0);
+  return takeoverPrice(s, idx, buyer) + round10(ECONOMY.blockSurcharge * propertyValue(s, idx));
 }
 
 /** Block-buy options for `pid` now: non-landmark properties of opponents' notices they have not answered, affordable. */

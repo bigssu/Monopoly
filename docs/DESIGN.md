@@ -603,7 +603,7 @@ before the change). The B7 dice gauge is off from version 3 (the skill throw rep
 * **보폭 선택 (stride, `strideChoice`)** — before rolling: one die (1–6, never doubles: no extra roll,
   bonus card or third-double island) or two (2–12, default). The island escape roll is always two dice.
 * **손맛 던지기 (skill throw, `skillThrow`)** — the `Roll` action carries `aim` ('low' | 'high') and
-  `accuracy` (0..1). With chance `SKILL_CAP × accuracy` (`SKILL_CAP = 0.6`, `economy.ts`) the result is
+  `accuracy` (0..1). With chance `skillCap × accuracy` (`ECONOMY.skillCap = 0.6`, `economy.ts`) the result is
   drawn inside the band in natural proportions (two dice: low 2–5, high 9–12; one die: 1–2 / 5–6), else
   a natural roll. A perfect throw at the two-dice low band lands in it ≈ 71 % of the time. `DiceRolled`
   carries `stride`, `aim`, `accuracy`, `assisted`; a one-die roll is `dice: [die, 0]`. The CPU picks
@@ -619,7 +619,7 @@ before the change). The B7 dice gauge is off from version 3 (the skill throw rep
   opponent may, once per alert, before moving (pre-roll, island or travel prompt), buy one non-landmark
   property of the set from anywhere for its takeover price (chase multiplier) **+ 2 × value**
   (`blockSurcharge`), all paid to the owner. A guard shield stops it (and uses up that answer). Landing
-  on a member and taking it over normally also breaks it. Hubs get no extra fee (`blockHubFee` 0:
+  on a member and taking it over normally also breaks it. Hubs get no extra fee (a hub fee was tried:
   hub wins stay about 5 % of 2-player games). If the game ends (round limit, or the round after a first
   bankruptcy) before the owner's next turn, the alert still wins when every solvent opponent has had a
   turn since it was announced (`heard`); otherwise the assets decide.

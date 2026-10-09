@@ -220,7 +220,7 @@ const ONE_DIE = [0, 1, 1, 1, 1, 1, 1].map((w) => w / 6);
 /** Natural probability of each total for two dice (index = total). */
 const TWO_DICE = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((w) => w / 36);
 
-/** Probability of each total for a throw (stride, aim) with assist chance `p` (= SKILL_CAP × accuracy). */
+/** Probability of each total for a throw (stride, aim) with assist chance `p` (= `ECONOMY.skillCap` × accuracy). */
 export function throwDistribution(stride: 1 | 2, aim: 'low' | 'high' | undefined, p: number): number[] {
   const nat = stride === 1 ? ONE_DIE : TWO_DICE;
   if (!aim || p <= 0) return nat.slice();
