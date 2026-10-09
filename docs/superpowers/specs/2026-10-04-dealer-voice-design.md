@@ -45,7 +45,7 @@ engine events / PromptOpened ──► dealer/director.ts ──► Dealer.say(l
 | `src/ui/audio/voice.ts` | Lazy `fetch` + `decodeAudioData` of `voice/<id>.ogg`, small LRU cache, play/stop, returns duration; ducks SFX/BGM gain while speaking. Shares the existing AudioContext/master volume. | `synth.ts` context |
 | `src/ui/shell/prefs.ts` | `dealerVoice: 'off' \| 'min' \| 'normal' \| 'full'` (default `normal`). | — |
 | `src/ui/screens/SettingsScreen.ts` | Segmented row "딜러 음성". | prefs |
-| `scripts/dealer/gen-voice.mjs` | Reads the catalog, calls ElevenLabs (`mp3_44100_128` raw into `scripts/dealer/.cache/`), skips ids whose text hash is unchanged, transcodes with ffmpeg to `public/voice/<id>.ogg` (libopus, mono, 20 kbps, 24 kHz, trimmed silence), writes `public/voice/manifest.json` (id → duration ms). | ElevenLabs key `ELEVENLABS_API_KEY`, ffmpeg |
+| `scripts/dealer/gen-voice.mjs` | Reads the catalog, calls ElevenLabs (`mp3_44100_128` raw into `scripts/dealer/.cache/`), skips ids whose text hash is unchanged, transcodes with ffmpeg to `public/voice/<id>.ogg` (libopus, mono, 20 kbps, 24 kHz, trimmed silence), records the text of each shipped file in `scripts/dealer/voice-texts.json`. | ElevenLabs key `ELEVENLABS_API_KEY`, ffmpeg |
 | `scripts/dealer/gen-sprites.mjs` | Gemini generation per expression prompt (raw into `.cache/`), ffmpeg `colorkey=0xFF00FF:0.30:0.10`, 320 px WebP q80 to `public/dealer/<expr>.webp`. | `GOOGLE_API_KEY` (header `x-goog-api-key`), ffmpeg |
 
 ### Expressions (sprites)
@@ -102,8 +102,8 @@ a ~4.9 MB web bundle. Voices load lazily on first use and are cached; sprites pr
 
 - `director.test.ts`: per level, the right line ids for representative event batches; cooldown;
   advice equals the AI's choice; English → no voice flag.
-- `lines.test.ts` (integrity): unique ids; every id has `public/voice/<id>.ogg` and a manifest
-  duration; every `expr` has `public/dealer/<expr>.webp`; ko/en non-empty.
+- `lines.test.ts` (integrity): unique ids; every id has `public/voice/<id>.ogg` and its recorded
+  text in `scripts/dealer/voice-texts.json`; every `expr` has `public/dealer/<expr>.webp`; ko/en non-empty.
 - `voice.test.ts`: LRU + missing-file fallback with a stubbed fetch/AudioContext.
 - e2e: bubble appears on a scripted buy at "적당"; nothing at "끔"; English shows subtitle; game
   still reaches idle at the same speed.

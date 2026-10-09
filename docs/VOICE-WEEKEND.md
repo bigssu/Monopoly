@@ -24,7 +24,7 @@ node scripts/dealer/gen-voice.mjs --dry
 ## 준비물 (한 번만)
 
 - Node.js 22.12 이상, 저장소 최신(`git pull origin main`), `npm ci`
-- ffmpeg와 ffprobe가 PATH에 있을 것. Windows: `winget install Gyan.FFmpeg` 후 새 터미널.
+- ffmpeg가 PATH에 있을 것. Windows: `winget install Gyan.FFmpeg` 후 새 터미널.
 - ElevenLabs 키(상업 이용 가능한 요금제). 비용은 글자 수 기준이라 이번 작업은 약 700자 분량이다. 마음에 안 드는
   줄을 다시 뽑을 여유를 두면 1,000자 안팎.
 
@@ -35,7 +35,7 @@ node scripts/dealer/gen-voice.mjs --dry
    - PowerShell: `$env:ELEVENLABS_API_KEY="키"; node scripts/dealer/gen-voice.mjs`
    - bash: `ELEVENLABS_API_KEY=키 node scripts/dealer/gen-voice.mjs`
    - 스크립트가 알아서 하는 것: 33줄만 받아서 다듬고(앞뒤 무음 제거, 음량 맞춤) `public/voice/`에 넣고,
-     `manifest.json`의 길이와 `scripts/dealer/voice-texts.json`(녹음한 문장)을 갱신하고, `lines.ts`의
+     `scripts/dealer/voice-texts.json`(녹음한 문장)을 갱신하고, `lines.ts`의
      `VOICE_PENDING` 목록을 비운다.
 3. 들어 보기: `public/voice/<id>.ogg`를 몇 개 재생하거나, `npm run dev`로 한 판 해 본다.
    - 어떤 줄이 마음에 안 들면: `scripts/dealer/.cache/voice/<id>.mp3`를 지우고, 그 id를 `lines.ts`의

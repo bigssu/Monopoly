@@ -1,8 +1,8 @@
 /**
- * Dealer catalog integrity (every line has its voice file, duration and sprite) and the director's
+ * Dealer catalog integrity (every line has its voice file, recorded text and sprite) and the director's
  * pure pickers (docs/superpowers/specs/2026-10-04-dealer-voice-design.md).
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { chooseAction, createGame, defaultPlayers, defaultSettings, type GameEvent, type GameState } from '@/engine';
@@ -20,17 +20,18 @@ describe('dealer catalog', () => {
     }
   });
 
-  it('ships a voice file and a duration for every recorded line, and no stale file for a pending one', () => {
-    const manifest = JSON.parse(readFileSync(join(PUB, 'voice', 'manifest.json'), 'utf8')) as Record<string, number>;
+  it('ships a voice file for every recorded line, and no stale file or text for a pending one', () => {
+    const texts = JSON.parse(readFileSync(join(PUB, '..', 'scripts', 'dealer', 'voice-texts.json'), 'utf8')) as Record<string, string>;
     for (const l of DEALER_LINES) {
+      const file = join(PUB, 'voice', `${l.id}.ogg`);
       if (!l.voice) {
         // Text only until recorded (VOICE_PENDING): an old recording of other words must not ship.
-        expect(existsSync(join(PUB, 'voice', `${l.id}.ogg`)), l.id).toBe(false);
-        expect(manifest[l.id], l.id).toBeUndefined();
+        expect(existsSync(file), l.id).toBe(false);
+        expect(texts[l.id], l.id).toBeUndefined();
         continue;
       }
-      expect(existsSync(join(PUB, 'voice', `${l.id}.ogg`)), l.id).toBe(true);
-      expect(manifest[l.id], l.id).toBeGreaterThan(500);
+      expect(existsSync(file), l.id).toBe(true);
+      expect(statSync(file).size, l.id).toBeGreaterThan(1000);
     }
     for (const id of VOICE_PENDING) expect(DEALER_LINES.some((l) => l.id === id), id).toBe(true);
   });

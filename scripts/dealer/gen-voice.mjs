@@ -2,7 +2,7 @@
 /**
  * Dealer voice (docs/superpowers/specs/2026-10-04-dealer-voice-design.md, runbook docs/VOICE-WEEKEND.md):
  * lines of src/ui/dealer/lines.ts → ElevenLabs (voice Krys, eleven_v4, Korean) → trimmed,
- * loudness-matched Opus mono .ogg in public/voice/ + public/voice/manifest.json (id → duration ms).
+ * loudness-matched Opus mono .ogg in public/voice/<id>.ogg.
  *
  *   node scripts/dealer/gen-voice.mjs --dry                 # what would be recorded, no key needed
  *   ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs  # record it
@@ -43,7 +43,6 @@ const json = execFileSync(process.execPath, ['--import', 'tsx', '-e', "import('.
 /** @type {{ id: string, ko: string, voice: boolean }[]} */
 const lines = JSON.parse(json);
 const recorded = existsSync(TEXTS) ? JSON.parse(readFileSync(TEXTS, 'utf8')) : {};
-const oldManifest = existsSync(join(OUT, 'manifest.json')) ? JSON.parse(readFileSync(join(OUT, 'manifest.json'), 'utf8')) : {};
 
 const reason = (l) =>
   all ? 'all' : !l.voice ? 'pending' : recorded[l.id] !== l.ko ? 'text changed' : !existsSync(join(OUT, `${l.id}.ogg`)) ? 'file missing' : null;
@@ -53,7 +52,7 @@ console.log(`${lines.length} lines in the catalog; ${todo.length} to record (${c
 for (const l of todo) console.log(`  ${l.id.padEnd(26)} [${reason(l)}] ${l.ko}`);
 if (dry || !todo.length) process.exit(0);
 if (!key) throw new Error('ELEVENLABS_API_KEY is not set (run with --dry to only list the lines).');
-for (const tool of ['ffmpeg', 'ffprobe']) {
+for (const tool of ['ffmpeg']) {
   try {
     execFileSync(tool, ['-version'], { stdio: 'ignore' });
   } catch {
@@ -107,28 +106,20 @@ const TRIM = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=
 const ENCODE = ['-ac', '1', '-ar', '24000', '-c:a', 'libopus', '-b:a', '20k', '-application', 'voip'];
 // Byte-identical output for identical input: no encoder/version metadata, no random stream serial.
 const EXACT = ['-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-serial_offset', '1'];
-const fresh = {};
+const fresh = new Set();
 for (const l of todo) {
   const out = join(OUT, `${l.id}.ogg`);
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(CACHE, `${l.id}.mp3`), '-af', TRIM, ...ENCODE, ...EXACT, `${out}.tmp.ogg`]);
   renameSync(`${out}.tmp.ogg`, out);
-  const sec = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out], { encoding: 'utf8' }).trim());
-  fresh[l.id] = Math.round(sec * 1000);
+  fresh.add(l.id);
   recorded[l.id] = l.ko;
 }
 
-// 3. Manifest and texts in catalog order; drop lines that no longer exist.
+// 3. Texts in catalog order, only for lines whose file ships; drop files for lines that no longer exist.
 const ids = new Set(lines.map((l) => l.id));
-const manifest = {};
 const texts = {};
-for (const l of lines) {
-  const ms = fresh[l.id] ?? oldManifest[l.id];
-  if (ms === undefined || !existsSync(join(OUT, `${l.id}.ogg`))) continue;
-  manifest[l.id] = ms;
-  texts[l.id] = recorded[l.id];
-}
+for (const l of lines) if (recorded[l.id] !== undefined && existsSync(join(OUT, `${l.id}.ogg`))) texts[l.id] = recorded[l.id];
 for (const f of readdirSync(OUT)) if (f.endsWith('.ogg') && !ids.has(f.slice(0, -4))) rmSync(join(OUT, f));
-writeFileSync(join(OUT, 'manifest.json'), `${JSON.stringify(manifest)}\n`);
 writeFileSync(TEXTS, `${JSON.stringify(texts, null, 1)}\n`);
 
 // 4. Everything recorded leaves VOICE_PENDING.
@@ -136,7 +127,7 @@ const src = readFileSync(LINES_TS, 'utf8');
 const block = /(export const VOICE_PENDING: ReadonlySet<string> = new Set\(\[)([\s\S]*?)(\]\);)/;
 const m = src.match(block);
 if (!m) throw new Error('VOICE_PENDING block not found in lines.ts: remove the recorded ids by hand');
-const left = [...m[2].matchAll(/'([^']+)'/g)].map((x) => x[1]).filter((id) => ids.has(id) && !(id in fresh));
+const left = [...m[2].matchAll(/'([^']+)'/g)].map((x) => x[1]).filter((id) => ids.has(id) && !fresh.has(id));
 const body = left.length ? `\n  ${left.map((id) => `'${id}'`).join(', ')},\n` : '';
 writeFileSync(LINES_TS, src.replace(block, `$1${body}$3`));
 
