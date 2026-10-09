@@ -1,5 +1,5 @@
 /**
- * Timeline DSL + runner (VFX.md §3.8, §7.2b.0). A preset is a list of `t(frame, action)` ops at
+ * Timeline DSL + runner (VFX.md §7.2b.0, §13.1). A preset is a list of `t(frame, action)` ops at
  * 30 fps FX frames; the runner executes them on the engine clock (never `setTimeout`):
  *
  * - `spawn` / `burst`: particles through the budgeter (per-effect tier cap + pool budget).

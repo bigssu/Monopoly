@@ -126,52 +126,6 @@ idle ──play()──▶ arm ──(다음 격자 프레임)──▶ running 
 - 우선순위(높음→낮음): 승리 > 파산 > 명소 > 인수 > 독점 완성 > 통행료 > 출발 > 축제 > 구매 > 건설 > 카드 > 섬 > 기타.
 - **플래시 예산** `flashBudget`: 1000 ms 창 내 "플래시 프레임"(전 화면 밝기 변화가 큰 프레임) ≤3, 단일 플래시 알파 ≤0.25, 큰 면적 적색 플래시 금지.
 
-### 3.8 코드 구조 (제안)
-
-```
-src/ui/fx/vfx/
-  index.ts        FxHost: init/play/freeze/clear/liveCount/stats, dev 훅 등록
-  engine.ts       리전·캔버스 라이프사이클, onFrame 스텝, 파티클 풀, 예산기, 플래시 예산기
-  renderer2d.ts   FxRenderer(Canvas2D) — begin/sprite/end, 틴트 캐시  (Pixi 교체 지점)
-  atlas.ts        atlas.json 로드, createImageBitmap, 프레임 조회
-  presets.ts      프리셋(이미터 타임라인) 정의: toll, buy, build, landmark, takeover, ...
-  map.ts          GameEvent → 프리셋 매핑(§7), 등급·금액 티어 함수, 콤보 병합
-  rng.ts          mulberry32 시드 PRNG (엔진 rng와 독립)
-public/fx/        atlas-color.webp  atlas-mask.webp  atlas.json   (빌드 산출물, 커밋)
-src/content/fx/   sprites.ts (스프라이트 정의)
-scripts/fx/       bake.mjs  contact-sheet.mjs
-```
-
-핵심 타입(스케치):
-
-```ts
-export type Blend = 'normal' | 'add';
-export interface FxRenderer {              // Canvas2D 구현; Pixi 구현으로 교체 가능
-  begin(region: Rect, scale: number): void;
-  sprite(id: number, x: number, y: number, rot: number, sx: number, sy: number,
-         alpha: number, tint: number /* 0 = 원색, 그 외 팔레트 인덱스 */, blend: Blend): void;
-  end(): void;
-}
-export type Anchor = { space: number } | { panel: PlayerId } | { stage: true } | { table: true } | { x: number; y: number };
-export interface PlayCtx { seat?: Seat; color?: string; to?: Anchor; from?: Anchor; amount?: number; tier?: 0|1|2|3|4; seed?: number; }
-export interface FxHandle {
-  /** 시퀀서가 기다리는 지점(블록 시간). 꼬리는 계속 재생된다. */
-  block: Promise<void>;
-  /** 마지막 파티클까지 종료. */
-  done: Promise<void>;
-  cancel(): void;
-}
-export interface FxHost {
-  init(): Promise<void>;
-  play(preset: PresetId, at: Anchor, ctx?: PlayCtx): FxHandle;
-  freeze(ms: number): void;
-  clear(): void;
-  liveCount(): number;
-}
-```
-
-프리셋은 **타임라인** `[{ t: ms, spawn(ctx) | sfx | haptic | shake | freeze }]`로 정의하고 엔진 클록으로 발화한다(`setTimeout` 금지 — 스킵/속도 배율/일시정지가 자동 적용).
-
 ### 3.9 `animate.ts` 연동 방식
 
 - `GameView`가 `fx: FxHost`를 갖고(`view.vfx`), 각 `case`에서 `void view.vfx.play(...)`(꼬리는 비블록) 또는 `await handle.block`(블록 구간만 대기).
@@ -587,7 +541,7 @@ FX **51f(1.7 s)** + 정지 3f, 블록 **FX f21**(≈ 800 ms, 정지 포함), 스
 #### 7.2b.12 구현 연동 요구 · 테스트 (코드는 이번 작업에서 바꾸지 않음)
 
 **연동 요구(구현 에이전트용)**
-1. `FxHandle`에 `cue(name): Promise<void>` 추가(§3.8). 타임라인 op에 `{t, cue:'swap'|'frame'|'stamp'|'badge'}` 추가 — 엔진 클록으로 발화(스킵 시 즉시).
+1. `FxHandle`에 `cue(name): Promise<void>` 추가. 타임라인 op에 `{t, cue:'swap'|'frame'|'stamp'|'badge'}` 추가 — 엔진 클록으로 발화(스킵 시 즉시).
 2. `animate.ts` `Built`/`PropertyBought`/`TakenOver` 분기: 현재는 `vs...level/owner` 변경 후 `render()`를 **먼저** 호출한다 → 새 흐름에서는 **cue 프레임에서** 변경·`render()`. 그 전까지 뷰는 이전 상태(이전 레벨/이전 소유자)를 유지해야 "먼지 속 교체"가 성립. `fast`/스킵 경로는 즉시 최종 상태.
 3. `Built.free` 분기: `ev.free`면 7.2b.6, `ev.level===4`이면 7.2b.5(코인·망치 → comet).
 4. `.fx-closeup` DOM(7.2b.10)은 `Stage`가 소유(좌석 회전 상속). 클로즈업/스포트라이트는 스킵 시 즉시 제거.
@@ -794,25 +748,6 @@ FX **51f(1.7 s)** + 정지 3f, 블록 **FX f21**(≈ 800 ms, 정지 포함), 스
 
 ---
 
-## 11. 구현 순서·공수
-
-| 단계 | 내용 | 산출/검증 | 공수 |
-|---|---|---|---|
-| **S0 스파이크** | `engine.ts`+`renderer2d.ts` 최소판 + 기존 `coinArc`를 새 엔진으로, 임시 아틀라스(프로토타입 그대로) | 실기기 A/B(§10.4), 에스컬레이션 판단 | 1 |
-| **S1 파이프라인** | `scripts/fx/*`, `npm run fx:atlas`, 컨택트 시트, 아틀라스 검증 테스트 | `public/fx/*` 커밋, ≤500 KB | 1 |
-| **S2 스프라이트 미술** | 목록 30종 다듬기(문자 제거, 스타일 통일) | 컨택트 시트 리뷰 | 1–1.5 |
-| **S3 프리셋** | §7.5 프리셋 + 타임라인 + 예산기/콤보 | 단위 테스트, 프리셋 스냅샷 | 2 |
-| **S4 시퀀서 연동** | `animate.ts` 매핑(`satisfies`), `GroupCompleted` 파생, 쉐이크 확장, 탭 프롬프트 훅, 접근성 폴백 | 통합 e2e | 1 |
-| **S5 게이트/문서** | `perf.mjs fx` 페이즈, PERFORMANCE.md 갱신 | F1–F10 통과 | 1 |
-| 합계 | | | **약 7–7.5 에이전트-일** |
-
-**의존/주의**
-- `src/ui/fx/animate.ts`·`Stage.ts` 등은 다른 에이전트가 수정 중이므로 S4는 해당 작업 병합 후 진행.
-- 추가가 필요한 작은 API: `board.spaceSize(i)`(칸 픽셀 크기), `PlayerPanel.clientRect()`(현재 `clientCenter()`만), `time.ts`에 `reducedMotion()` 노출(현재 `instant()`에 합쳐져 있어 정적 표식 분기 불가), `shake()`의 다중 요소 지원, dev 훅 `fx`.
-- 리스크 상위 3: (1) 실기기 Canvas2D 성능 미측정(SwiftShader 벤치만), (2) 4× 프레임 지연 게이트가 이미 미달 → FX가 겹치지 않도록 시작 지연 유지, (3) 스프라이트 미술 품질(프로토타입은 기하 도형 초안).
-
----
-
 ## 12. 스프라이트 아틀라스 빌드 (실제 구현)
 
 §4–§5의 설계가 `scripts/fx/*` + `src/content/fx/*`로 구현되어 있다(스프라이트 30종 / **125프레임**: 색 10종 29프레임 + 마스크 20종 96프레임).
@@ -887,7 +822,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 | `ease.ts` | `linear/inQuad/outQuad/inOutQuad/inCubic/outCubic/outSine`, `outBack(t, c1)`, `backOvershoot(c1)=4c1³/(27(c1+1)²)`, `c1ForOvershoot`, §7.2b.0 표(`POP_C1` 8/10/12/15 % → 1.5/1.70158/1.9/2.17, `PIP_C1`, `TIER_POP`) |
 | `pool.ts` | SoA 타입 배열 풀 **300 슬롯**(할당 0), `request(n, prio)` = 여유 없으면 `max(ceil(n/4), 여유)`로 감량(하위 우선순위 회수 가능분까지), `alloc`은 **가장 오래된 최저 우선순위**(요청보다 낮은 것만) 회수, `PRIORITY` 표(§3.7), 통계(peak/dropped/reclaimed) |
 | `particles.ts` | 파티클 종류: 스프라이트 애니(루프/고정 fps/`fit`=수명 동안 1회), 정적 스프라이트(컨페티 `scaleX=cos` 뒤집기), 가산 글로우(`blend:'add'`). 운동: 탄도(속도·중력·프레임당 항력) 또는 2차 베지어 경로(+이징, 진행 방향 정렬). 스케일 곡선 s0→s1→s2(구간 이징, `OutBack` c1), 스쿼시(2f 유지 → popBack 5f), 페이드 인/아웃, 회전·감쇠 스윙, **망치 스윙**(들어올림 3f → 내려침 2f, 접촉 프레임 = +20°), 지연 |
-| `atlas.ts` | `import.meta.env.BASE_URL` 기준 `fx/atlas.json` + WebP 2장 → `createImageBitmap`(없으면 `<img>`), 트림 오프셋·앵커·베이크 DPR 복원, `drawFrame()`(범용)·`drawRaw()`(핫패스: 합성된 행렬), **틴트 캐시** `(frame|color)` 오프스크린 캔버스 + `source-in`, LRU 8 MB(64 KB 초과 프레임은 ½ 해상도 캐시 — 13.4), 실패 시 `null`(엔진 비활성, 예외 없음) |
+| `atlas.ts` | `import.meta.env.BASE_URL` 기준 `fx/atlas.json` + WebP 2장 → `createImageBitmap`(없으면 `<img>`), 트림 오프셋·앵커·베이크 DPR 복원, `drawRaw()`(합성된 행렬), **틴트 캐시** `(frame|color)` 오프스크린 캔버스 + `source-in`, LRU 8 MB(64 KB 초과 프레임은 ½ 해상도 캐시 — 13.4), 실패 시 `null`(엔진 비활성, 예외 없음) |
 | `coords.ts` | 주입 콜백(`getLayerRect/getBoardRect/getSpaceRect/getPanelRect/getSeat/getStageRect`) → 레이어 px, `u = 보드/32`, 패널 앵커 = 보드 쪽 가장자리(R3), `SEAT_ANGLE`(= `ui/game/util` 값, 테스트로 고정)·`SEAT_DIR`·`seatLocal()` |
 | `timeline.ts` | DSL `t(frame, action)` — `spawn/burst/shake/flash/hitStop/sfx/haptic/cue/dom/block`. `Runner`: 30 fps FX 프레임 실행, 히트스톱 = FX 시간 정지(타임라인·파티클 모두), 등급 상한(I0 8 · I1 40 · I2 100 · I3 200 · I4 300) 강제, 플래시 예산(1 s 창 ≤3프레임, α ≤0.25, 큰 소프트 `glow` — 전면 사각형 없음), 스킵(대기 cue 즉시 발화·히트스톱 제거·스킵 중 시작한 효과는 파티클 ×0.5·쉐이크/정지 없음), `runReduced()`(첫 sfx·첫 햅틱 + `rm` 표시 op + 정적 하이라이트 1회) |
 | `presets.ts` | §7.5/§7.2b 프리셋 21종 + 범용 4종(`ringPulse/puff/cometJump/billRain`) — 13.2 |
@@ -900,7 +835,7 @@ node scripts/fx/contact-sheet.mjs [--parts <dir>]   # 시트만 다시 그림(--
 캔버스 `hidden`, 백킹 `width=height=0`(또는 `retainBacking` — 13.4).
 
 **설계 대비 달라진 점**
-- 프리셋 타임라인 단위는 ms가 아니라 **30 fps 프레임**(§7.2b 정본과 동일). `FxHandle`은 §3.8 스케치의 `block/done/cancel` + `cue()`.
+- 프리셋 타임라인 단위는 ms가 아니라 **30 fps 프레임**(§7.2b 정본과 동일). `FxHandle`은 `block/done/cancel` + `cue()`.
 - 캔버스 좌표는 클라이언트가 아니라 **`.fx-layer` 로컬 px**(콜백 rect에서 레이어 rect를 뺌).
 - 방향성 스프라이트(망치·경광등·왕관·태그·깃발·별 핍)는 행위자 좌석 각도로 회전, 왕관·태그 낙하와 색종이·코인 샤워의 중력도
   행위자 좌석 기준 "아래"(R2/R5). 나머지는 방사 대칭.
@@ -985,13 +920,6 @@ groupFinale · plot650 · free3 · passStartLanded · victoryHubs`
 - 틴트 캐시: 전 시나리오 후 6.7 MB(상한 8 MB, 축출 없음). 아틀라스 디코드 ≈4.5 MB는 별도(§9).
 - 권장: 연동 시 **`retainBacking: true`**(게임 화면 동안 숨긴 캔버스가 ≤3.6 MB CPU 메모리를 유지 — GPU 레이어 아님, rAF·타이머 0 유지).
   `stopAll()`(리사이즈·화면 이탈·탭 숨김)과 `dispose()`는 항상 해제한다. 게이트 F1–F10의 최종 판정은 연동 후 `perf.mjs fx` 페이즈에서.
-
-### 13.6 남은 일 (연동 단계) — §14에서 완료
-
-연동 체크리스트(구 `docs/VFX-WIRING.md`): CSS import, `time.ts reducedMotion()` 노출, `Board.spaceRect/popIcon/zoomPunch/dimIcon/highlight`,
-`PlayerPanel.clientRect`, `view.ts` 엔진 생성·수명, `shakeAll([table, fxLayer])`, `Stage` `.fx-closeup`·좌표 헬퍼, `animate.ts`의
-전 이벤트 매핑과 **`swap`/`frame` cue까지 `render()` 지연**, `Built.free` 분기, 파생 `GroupCompleted`, 스킵 핸들러 `vfx.skip()`,
-dev 훅 `fx()`, `perf.mjs` `fx` 페이즈(F1–F10), 구 `particles.ts` 이관·제거, e2e. 실기기 A/B(§10.4)는 그 이후.
 
 ---
 
