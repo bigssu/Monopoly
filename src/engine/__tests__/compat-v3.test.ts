@@ -1,8 +1,9 @@
 /**
  * Save compatibility across rules version 3: version-1 and version-2 saves recorded with the code
- * from before version 3 (fixtures/rules-v1-v2-2026-10-08.json, scripts/gen-compat-fixture.ts) keep
- * their rules exactly — the recorded continuation replays to the same events, and the CPU still
- * picks the same moves in those games.
+ * from before version 3 keep their rules exactly — the recorded continuation replays to the same
+ * events, and the CPU still picks the same moves in those games. The fixture
+ * (fixtures/rules-v1-v2-2026-10-08.json) was recorded once at commit c1f1440, by a one-off script
+ * that git history keeps; never re-record it to "fix" a failing test.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

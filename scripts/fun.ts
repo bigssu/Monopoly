@@ -9,20 +9,29 @@
  *
  * Only reads engine output (events + states); it never changes a rule.
  */
+import { parseArgs } from 'node:util';
 import { chooseAction } from '../src/engine/ai';
-import { getBoardInfo, space } from '../src/engine/board';
+import { space } from '../src/engine/board';
 import { createGame, legalActions, reduce } from '../src/engine/reducer';
 import { ranking, totalAssets } from '../src/engine/rules';
 import { defaultPlayers, defaultSettings } from '../src/engine/settings';
 import type { CpuLevel, GameEvent, GameState, PlayerId, RuleLevel, Settings } from '../src/engine/types';
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-const flag = (name: string) => process.argv.includes(`--${name}`);
+const { values: args } = parseArgs({
+  options: {
+    seeds: { type: 'string', default: '400' },
+    rounds: { type: 'string', default: '30' },
+    players: { type: 'string' },
+    rules: { type: 'string' },
+    'rules-version': { type: 'string' },
+    from: { type: 'string', default: '1' },
+    detail: { type: 'boolean', default: false },
+    mixed: { type: 'boolean', default: false },
+    help: { type: 'boolean', default: false },
+  },
+});
 
-if (flag('help')) {
+if (args.help) {
   console.log(`npm run fun -- [--seeds 400] [--rounds 30|inf] [--players 2|3|4] [--rules easy|normal|advanced] [--detail]
   [--mixed] [--rules-version N] [--from 1]   (no --players / --rules: every combination)`);
   process.exit(0);
@@ -34,7 +43,7 @@ const ROUTINE = new Set<GameEvent['type']>([
 ]);
 
 /** One player acting on another (or on another's property / cash). */
-export function interactionOf(ev: GameEvent): string | null {
+function interactionOf(ev: GameEvent): string | null {
   switch (ev.type) {
     case 'TollPaid':
       return ev.waived ? 'tollWaived' : 'toll';
@@ -50,16 +59,14 @@ export function interactionOf(ev: GameEvent): string | null {
       return 'bid';
     case 'Bankrupt':
       return ev.creditorId !== null ? 'bankruptTo' : null;
-    default: {
-      // New rules register their interaction events here (by type name).
-      const t = ev.type as string;
-      if (INTERACTION_TYPES.has(t)) return t;
+    // Player-vs-player by nature (added by later rules).
+    case 'CitySwapped':
+    case 'MonopolyBroken':
+      return ev.type;
+    default:
       return null;
-    }
   }
 }
-/** Event types (added by later rules) that are player-vs-player by nature. */
-const INTERACTION_TYPES = new Set<string>(['CitySwapped', 'BuildingStolen', 'TollMirrored', 'Bounty', 'RevengeToll', 'Blockade', 'JackpotWon', 'MonopolyBroken']);
 
 interface GameMetrics {
   rounds: number;
@@ -217,11 +224,10 @@ function playMeasured(settings: Settings, seed: number): GameMetrics {
   const mean = assets.reduce((a, b) => a + b, 0) / (assets.length || 1);
   m.spread = assets.length ? (Math.max(...assets) - Math.min(...assets)) / (mean || 1) : 0;
   if (m.winner !== null) m.winnerLevel = s.players[m.winner]!.cpuLevel;
-  void getBoardInfo;
   return m;
 }
 
-export interface Summary {
+interface Summary {
   games: number;
   rounds: number;
   turns: number;
@@ -254,7 +260,7 @@ export interface Summary {
   hugeSwingShare: number;
 }
 
-export function summarize(ms: GameMetrics[], players: number): Summary {
+function summarize(ms: GameMetrics[], players: number): Summary {
   const n = ms.length;
   const mean = (f: (m: GameMetrics) => number) => ms.reduce((a, m) => a + f(m), 0) / (n || 1);
   const turns = ms.reduce((a, m) => a + m.turns, 0);
@@ -308,7 +314,7 @@ export function summarize(ms: GameMetrics[], players: number): Summary {
   };
 }
 
-export function runConfig(opts: { players: number; rules: RuleLevel; rounds: number | null; seeds: number; from?: number; mixed?: boolean; cpuLevel?: CpuLevel; rulesVersion?: number }): Summary {
+function runConfig(opts: { players: number; rules: RuleLevel; rounds: number | null; seeds: number; from?: number; mixed?: boolean; cpuLevel?: CpuLevel; rulesVersion?: number }): Summary {
   const base = defaultSettings();
   const out: GameMetrics[] = [];
   const from = opts.from ?? 1;
@@ -341,20 +347,19 @@ function printDetail(label: string, s: Summary): void {
 }
 
 function main(): void {
-  const seeds = Number(arg('seeds') ?? 400);
-  const roundsArg = arg('rounds') ?? '30';
-  const rounds = roundsArg === 'inf' ? null : Number(roundsArg);
-  const from = Number(arg('from') ?? 1);
-  const rulesVersion = arg('rules-version') ? Number(arg('rules-version')) : undefined;
-  if (flag('mixed')) {
+  const seeds = Number(args.seeds);
+  const rounds = args.rounds === 'inf' ? null : Number(args.rounds);
+  const from = Number(args.from);
+  const rulesVersion = args['rules-version'] ? Number(args['rules-version']) : undefined;
+  if (args.mixed) {
     for (const rules of ['easy', 'normal', 'advanced'] as RuleLevel[]) {
       const s = runConfig({ players: 4, rules, rounds, seeds, from, mixed: true, rulesVersion });
       console.log(`mixed 2 normal + 2 easy, rules ${rules}: normal CPUs win ${pct(s.normalWinShare ?? NaN)} (fair = 50%)`);
     }
     return;
   }
-  const playersList = arg('players') ? [Number(arg('players'))] : [2, 3, 4];
-  const rulesList = (arg('rules') ? [arg('rules')] : ['easy', 'normal', 'advanced']) as RuleLevel[];
+  const playersList = args.players ? [Number(args.players)] : [2, 3, 4];
+  const rulesList = (args.rules ? [args.rules] : ['easy', 'normal', 'advanced']) as RuleLevel[];
   const rows: string[] = [];
   rows.push('| players | rules | rounds | decisions/turn | obvious | interactions/game (non-toll) | event kinds | lead changes | comeback R10 | last@R10 wins | dull turns | ≥500 swing turns | seat 1 wins | seat last wins |');
   rows.push('|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|');
@@ -362,7 +367,7 @@ function main(): void {
   for (const players of playersList) {
     for (const rules of rulesList) {
       const s = runConfig({ players, rules, rounds, seeds, from, rulesVersion });
-      if (flag('detail')) printDetail(`${players}p ${rules} ${rounds ?? '∞'} rounds`, s);
+      if (args.detail) printDetail(`${players}p ${rules} ${rounds ?? '∞'} rounds`, s);
       rows.push(
         `| ${players} | ${rules} | ${f2(s.rounds)} | ${f2(s.decisionsPerTurn)} | ${pct(s.obviousShare)} | ${f1(s.interactionsPerGame)} (${f1(s.nonTollInteractions)}) | ${f1(s.eventKinds)} | ${f1(s.leadChanges)} | ${pct(s.comeback10)} | ${pct(s.lastToWin10)} | ${pct(s.dullShare)} | ${pct(s.bigSwingShare)} | ${pct(s.winRateBySeat[0]!)} | ${pct(s.winRateBySeat[players - 1]!)} |`,
       );

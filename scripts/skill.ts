@@ -10,16 +10,17 @@
  *
  * Options: --seeds N (1000) --from N (1) --players N (2) --rules easy|normal|advanced (advanced)
  *   --rules-version N (current) --rounds N|inf (30) --jobs N (4, parallel processes)
- *   --off flag,flag (rule flags forced off: ablation) --cap X (SKILL_CAP) --set key=value,… (ECONOMY)
+ *   --off flag,flag (rule flags forced off: ablation) --cap X (ECONOMY.skillCap) --set key=value,… (ECONOMY)
  *   --ai key=value,… (AI_TUNING, the version-3 CPU knobs)
  *   --policies a,b (matchups: normal,easy,yes,plain,random,pass,alt) --alt key=value,… (the alt CPU's AI_TUNING) --k N (expert rollouts, 16) --cands N (moves tried, 6) --margin N (wins over the CPU's move needed to switch, 1) --progress --json
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { AI_TUNING, chooseAction, cpuAccuracy } from '../src/engine/ai';
-import { getBoardInfo, space } from '../src/engine/board';
 import { ECONOMY } from '../src/engine/economy';
 import { createGame, legalActions, reduce, sameAction } from '../src/engine/reducer';
+import { mulberry32Step } from '../src/engine/rng';
 import { totalAssets } from '../src/engine/rules';
 import { FLAGS_OFF, defaultPlayers, defaultSettings, type RuleFlags } from '../src/engine/settings';
 import type { Action, CpuLevel, GameEvent, GameState, PlayerId, RuleLevel, Settings } from '../src/engine/types';
@@ -29,40 +30,59 @@ import type { Action, CpuLevel, GameEvent, GameState, PlayerId, RuleLevel, Setti
 // ---------------------------------------------------------------------------
 
 const argv = process.argv.slice(2);
-const mode = argv[0] && !argv[0].startsWith('--') ? argv[0] : 'help';
-function arg(name: string): string | undefined {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 ? argv[i + 1] : undefined;
-}
-const has = (name: string) => argv.includes(`--${name}`);
+const { values: args, positionals } = parseArgs({
+  args: argv,
+  allowPositionals: true,
+  options: {
+    seeds: { type: 'string', default: '1000' },
+    from: { type: 'string', default: '1' },
+    players: { type: 'string', default: '2' },
+    rules: { type: 'string', default: 'advanced' },
+    'rules-version': { type: 'string' },
+    rounds: { type: 'string', default: '30' },
+    jobs: { type: 'string', default: '4' },
+    k: { type: 'string', default: '16' },
+    cands: { type: 'string', default: '6' },
+    margin: { type: 'string', default: '1' },
+    off: { type: 'string', default: '' },
+    cap: { type: 'string' },
+    set: { type: 'string', default: '' },
+    ai: { type: 'string', default: '' },
+    policies: { type: 'string', default: 'normal,easy,yes,plain,random,pass' },
+    alt: { type: 'string', default: '' },
+    progress: { type: 'boolean', default: false },
+    json: { type: 'boolean', default: false },
+    help: { type: 'boolean', default: false },
+  },
+});
+const mode = positionals[0] ?? 'help';
 
-if (mode === 'help' || has('help')) {
+if (mode === 'help' || args.help) {
   console.log(readHeader());
   process.exit(0);
 }
 
-const seeds = Number(arg('seeds') ?? 1000);
-const from = Number(arg('from') ?? 1);
-const n = Number(arg('players') ?? 2);
-const rules = (arg('rules') ?? 'advanced') as RuleLevel;
-const rv = arg('rules-version') ? Number(arg('rules-version')) : undefined;
-const roundsArg = arg('rounds') ?? '30';
-const rounds = roundsArg === 'inf' ? null : Number(roundsArg);
-const jobs = Number(arg('jobs') ?? 4);
-const K = Number(arg('k') ?? 16);
+const seeds = Number(args.seeds);
+const from = Number(args.from);
+const n = Number(args.players);
+const rules = args.rules as RuleLevel;
+const rv = args['rules-version'] ? Number(args['rules-version']) : undefined;
+const rounds = args.rounds === 'inf' ? null : Number(args.rounds);
+const jobs = Number(args.jobs);
+const K = Number(args.k);
 /** expert: moves tried per decision (the CPU's + random others). */
-const CANDS = Number(arg('cands') ?? 6);
+const CANDS = Number(args.cands);
 /** expert: switch from the CPU's move only when another wins this many more of the K rollouts. */
-const MARGIN = Number(arg('margin') ?? 1);
-for (const f of (arg('off') ?? '').split(',').filter(Boolean)) FLAGS_OFF.add(f as keyof RuleFlags);
-if (arg('cap')) (ECONOMY as Record<string, unknown>).skillCap = Number(arg('cap'));
-for (const kv of (arg('set') ?? '').split(',').filter(Boolean)) {
+const MARGIN = Number(args.margin);
+for (const f of args.off.split(',').filter(Boolean)) FLAGS_OFF.add(f as keyof RuleFlags);
+if (args.cap) (ECONOMY as Record<string, unknown>).skillCap = Number(args.cap);
+for (const kv of args.set.split(',').filter(Boolean)) {
   const [k, v] = kv.split('=');
   if (!(k! in ECONOMY)) throw new Error(`unknown ECONOMY key ${k}`);
   (ECONOMY as Record<string, unknown>)[k!] = Number(v);
 }
 
-for (const kv of (arg('ai') ?? '').split(',').filter(Boolean)) {
+for (const kv of args.ai.split(',').filter(Boolean)) {
   const [k, v] = kv.split('=');
   if (!(k! in AI_TUNING)) throw new Error(`unknown AI_TUNING key ${k}`);
   (AI_TUNING as Record<string, number>)[k!] = Number(v);
@@ -94,19 +114,16 @@ type Policy = 'normal' | 'easy' | 'yes' | 'plain' | 'random' | 'pass' | 'alt';
 
 /** `alt`: the normal CPU with other AI_TUNING values (`--alt key=value,…`), to compare CPU variants. */
 const ALT: Record<string, number> = {};
-for (const kv of (arg('alt') ?? '').split(',').filter(Boolean)) {
+for (const kv of args.alt.split(',').filter(Boolean)) {
   const [k, v] = kv.split('=');
   ALT[k!] = Number(v);
 }
 
 let rs = 1;
 const rnd = (): number => {
-  rs ^= rs << 13;
-  rs >>>= 0;
-  rs ^= rs >>> 17;
-  rs ^= rs << 5;
-  rs >>>= 0;
-  return rs / 4294967296;
+  const [v, next] = mulberry32Step(rs);
+  rs = next;
+  return v;
 };
 
 function act(s: GameState, pid: PlayerId, pol: Policy): Action {
@@ -158,13 +175,13 @@ const mergeCounts = (a: Counts, b: Counts) => {
 
 /** matchups: per opponent policy, games / hero wins / rounds. */
 function matchups(lo: number, hi: number): Counts {
-  const pols = (arg('policies') ?? 'normal,easy,yes,plain,random,pass').split(',') as Policy[];
+  const pols = args.policies.split(',') as Policy[];
   const c: Counts = {};
   for (const opp of pols) {
     for (let seed = lo; seed < hi; seed++) {
       const hero = seed % n;
       const ps: Policy[] = Array.from({ length: n }, (_, i) => (i === hero ? 'normal' : opp));
-      rs = (seed * 2654435761) >>> 0 || 1;
+      rs = (seed * 2654435761) >>> 0;
       const s = playOut(createGame(settingsFor(ps.map((p) => (p === 'easy' ? 'easy' : 'normal'))), seed), ps);
       if (s.phase.kind !== 'gameOver') continue;
       add(c, `${opp}:games`);
@@ -186,7 +203,6 @@ const SETS = new Set(['triple', 'line', 'hubs']);
 /** table: normal vs normal — one record per game, summed. */
 function table(lo: number, hi: number): Counts {
   const c: Counts = {};
-  const size = getBoardInfo(7).size;
   for (let seed = lo; seed < hi; seed++) {
     const s0 = createGame(settingsFor([]), seed);
     let leader: PlayerId | null = null;
@@ -328,8 +344,6 @@ function table(lo: number, hi: number): Counts {
       add(c, 'lessToll');
       if (tollPaid.indexOf(minToll) === r.winnerId) add(c, 'lessTollWins');
     }
-    void size;
-    void space;
   }
   return c;
 }
@@ -359,7 +373,7 @@ function expert(lo: number, hi: number): Counts {
     return t.phase.kind === 'gameOver' && t.phase.result.winnerId === pid ? 1 : 0;
   };
   for (let seed = lo; seed < hi; seed++) {
-    rs = (seed * 2654435761) >>> 0 || 1;
+    rs = (seed * 2654435761) >>> 0;
     const hero = seed % n;
     let s = createGame(settingsFor([]), seed);
     let k = 0;
@@ -401,7 +415,7 @@ function expert(lo: number, hi: number): Counts {
     add(c, 'games');
     if (s.phase.result.winnerId === hero) add(c, 'wins');
     // Progress on stderr (the slow mode): seed, running wins / games.
-    if (has('progress')) process.stderr.write(`expert seed ${seed}: ${c.wins ?? 0}/${c.games}\n`);
+    if (args.progress) process.stderr.write(`expert seed ${seed}: ${c.wins ?? 0}/${c.games}\n`);
   }
   return c;
 }
@@ -416,10 +430,10 @@ const per = (a: number, b: number, d = 2) => (b ? (a / b).toFixed(d) : '–');
 
 function report(c: Counts): void {
   const label = `${n}p ${rules} v${rv ?? 'current'} ${rounds ?? '∞'}R, seeds ${from}..${from + seeds - 1}` +
-    `${FLAGS_OFF.size ? `, off: ${[...FLAGS_OFF].join(',')}` : ''}${arg('cap') ? `, cap ${arg('cap')}` : ''}${arg('set') ? `, set ${arg('set')}` : ''}${arg('ai') ? `, ai ${arg('ai')}` : ''}`;
+    `${FLAGS_OFF.size ? `, off: ${[...FLAGS_OFF].join(',')}` : ''}${args.cap ? `, cap ${args.cap}` : ''}${args.set ? `, set ${args.set}` : ''}${args.ai ? `, ai ${args.ai}` : ''}`;
   if (mode === 'matchups') {
     console.log(`matchups — ${label} (normal AI in one rotating seat; fair ${(100 / n).toFixed(1)}%)`);
-    for (const opp of (arg('policies') ?? 'normal,easy,yes,plain,random,pass').split(',')) {
+    for (const opp of args.policies.split(',')) {
       const g = c[`${opp}:games`] ?? 0;
       const w = c[`${opp}:wins`] ?? 0;
       console.log(`  vs ${opp.padEnd(6)} hero wins ${pct(w, g)} ${ci(w, g)} of ${g} · rounds ${per(c[`${opp}:rounds`] ?? 0, g)} · hero last at R10 wins ${pct(c[`${opp}:heroLast10Wins`] ?? 0, c[`${opp}:heroLast10`] ?? 0)} (n=${c[`${opp}:heroLast10`] ?? 0})`);
@@ -459,9 +473,9 @@ if (!run) {
   process.exit(1);
 }
 
-if (has('json') || jobs <= 1) {
+if (args.json || jobs <= 1) {
   const c = run(from, from + seeds);
-  if (has('json')) process.stdout.write(JSON.stringify(c));
+  if (args.json) process.stdout.write(JSON.stringify(c));
   else report(c);
 } else {
   const self = fileURLToPath(import.meta.url);
@@ -471,9 +485,10 @@ if (has('json') || jobs <= 1) {
     const lo = from + j * chunk;
     const cnt = Math.min(chunk, from + seeds - lo);
     if (cnt <= 0) break;
-    const args = [...argv.filter((_, i) => !['--from', '--seeds', '--jobs'].includes(argv[i - 1] ?? '') && !['--from', '--seeds', '--jobs'].includes(argv[i]!)), '--from', String(lo), '--seeds', String(cnt), '--json'];
+    // A repeated option's last value wins, so the job's range overrides the parent's.
+    const jobArgs = [...argv, '--from', String(lo), '--seeds', String(cnt), '--json'];
     parts.push(new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [...process.execArgv, self, ...args], { stdio: ['ignore', 'pipe', 'inherit'] });
+      const child = spawn(process.execPath, [...process.execArgv, self, ...jobArgs], { stdio: ['ignore', 'pipe', 'inherit'] });
       let out = '';
       child.stdout.on('data', (d: Buffer) => (out += d.toString()));
       child.on('exit', (code) => (code === 0 ? resolve(JSON.parse(out) as Counts) : reject(new Error(`job ${j} exited ${code}`))));

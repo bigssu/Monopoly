@@ -4,34 +4,45 @@
  *   npm run sim                         # 500 seeds, 4 normal CPUs, default settings
  *   npm run sim -- --seeds 200 --players 3 --rounds 30 --level easy --cash 5000 --auction --rules advanced --rules-version 1
  */
+import { parseArgs } from 'node:util';
 import { defaultPlayers, defaultSettings } from '../src/engine/settings';
 import { simulateGame, type SimResult } from '../src/engine/sim';
 import type { CpuLevel, Settings, VictoryKind } from '../src/engine/types';
 
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-const flag = (name: string) => process.argv.includes(`--${name}`);
+const { values: args } = parseArgs({
+  options: {
+    seeds: { type: 'string', default: '500' },
+    players: { type: 'string', default: '4' },
+    rounds: { type: 'string' },
+    level: { type: 'string', default: 'normal' },
+    from: { type: 'string', default: '1' },
+    cash: { type: 'string' },
+    auction: { type: 'boolean', default: false },
+    'no-takeover': { type: 'boolean', default: false },
+    elimination: { type: 'boolean', default: false },
+    strict: { type: 'boolean', default: false },
+    rules: { type: 'string' },
+    'rules-version': { type: 'string' },
+  },
+});
 
-const seeds = Number(arg('seeds') ?? 500);
-const nPlayers = Number(arg('players') ?? 4);
-const roundsArg = arg('rounds');
-const level = (arg('level') ?? 'normal') as CpuLevel;
-const firstSeed = Number(arg('from') ?? 1);
+const seeds = Number(args.seeds);
+const nPlayers = Number(args.players);
+const level = args.level as CpuLevel;
+const firstSeed = Number(args.from);
 
 const base = defaultSettings();
 const settings: Settings = {
   ...base,
   players: defaultPlayers(nPlayers, { cpu: true, cpuLevel: level }),
-  startCash: Number(arg('cash') ?? base.startCash),
-  roundLimit: roundsArg === 'inf' ? null : Number(roundsArg ?? base.roundLimit),
-  auction: flag('auction'),
-  takeover: !flag('no-takeover'),
-  endOnFirstBankruptcy: !flag('elimination'),
-  rules: (arg('rules') ?? base.rules) as Settings['rules'],
+  startCash: Number(args.cash ?? base.startCash),
+  roundLimit: args.rounds === 'inf' ? null : Number(args.rounds ?? base.roundLimit),
+  auction: args.auction,
+  takeover: !args['no-takeover'],
+  endOnFirstBankruptcy: !args.elimination,
+  rules: (args.rules ?? base.rules) as Settings['rules'],
   // --rules-version 1 replays the rules from before the fun rules (docs/research/08-fun-analysis.md).
-  rulesVersion: Number(arg('rules-version') ?? base.rulesVersion),
+  rulesVersion: Number(args['rules-version'] ?? base.rulesVersion),
 };
 
 const t0 = Date.now();
@@ -90,4 +101,4 @@ const ok2 = earlyBk(5) / results.length < TARGET_EARLY_BK;
 const ok3 = timedOut === 0;
 console.log('');
 console.log(`Targets: ≥35% end before cap: ${ok1 ? 'OK' : 'MISS'}; <5% bankrupt before round 5: ${ok2 ? 'OK' : 'MISS'}; no timeouts: ${ok3 ? 'OK' : 'MISS'}`);
-if (flag('strict') && !(ok1 && ok2 && ok3)) process.exitCode = 1;
+if (args.strict && !(ok1 && ok2 && ok3)) process.exitCode = 1;
