@@ -219,10 +219,6 @@ export class SkillPad {
     return this.acc;
   }
 
-  get isLocked(): boolean {
-    return this.locked;
-  }
-
   /** Press: the needle starts at the bottom and runs; the readout shows the live accuracy. */
   press(): void {
     if (this.pressed) return;

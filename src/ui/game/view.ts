@@ -351,11 +351,6 @@ export class GameView {
     for (const [pid, panel] of this.panels) if (panel.update(vs, { isTurn: pid === actor })) this.rects.delete(`p${pid}`);
   }
 
-  /** The state the view last rendered (the sequencer's view state during playback). */
-  renderedState(): GameState {
-    return this.state;
-  }
-
   showInfo(i: number): void {
     this.stage.showInfo(spaceInfo(this.state, i));
   }

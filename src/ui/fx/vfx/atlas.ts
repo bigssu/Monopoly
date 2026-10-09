@@ -11,22 +11,6 @@ import type { FxAtlasId, FxAtlasJson, FxFrame } from '@/content/fx/types';
 
 type Img = ImageBitmap | HTMLImageElement | HTMLCanvasElement | OffscreenCanvas;
 
-interface DrawOpts {
-  /** Display scale: 1 = the sprite's nominal CSS px size. */
-  scale?: number;
-  /** Extra non-uniform factors (squash / flip). */
-  sx?: number;
-  sy?: number;
-  /** Radians. */
-  rotation?: number;
-  alpha?: number;
-  /** Tint colour for mask sprites (ignored for colour sprites). */
-  tint?: string;
-  blend?: 'source-over' | 'lighter';
-  /** Pivot inside the nominal box (0..1); default centre. */
-  anchor?: readonly [number, number];
-}
-
 interface FrameInfo {
   f: FxFrame;
   img: Img;
@@ -52,8 +36,6 @@ export interface FxAtlas extends FxAtlasMeta {
   /** Tint cache size in bytes / entries (dev stats). */
   cacheBytes(): number;
   cacheEntries(): number;
-  /** Draw `anim` frame at (x, y) (anchor point) in the context's current transform. */
-  drawFrame(ctx: CanvasRenderingContext2D, anim: FxAnimName, frame: number, x: number, y: number, o?: DrawOpts): void;
   /**
    * Hot path: draw with an already-composed transform (a, b, c, d, e, f) in backing px, anchor
    * (ax, ay), alpha and tint index. No allocation after the tint cache is warm.
@@ -194,40 +176,6 @@ export function createAtlas(json: FxAtlasJson, images: Record<FxAtlasId, Img>): 
     cacheBytes: () => cache.bytes,
     cacheEntries: () => cache.size,
     drawRaw,
-    drawFrame(ctx, anim, frame, x, y, o = {}) {
-      const ai = indexOf.get(anim)!;
-      const n = table[ai]!.length;
-      const s = o.scale ?? 1;
-      const r = o.rotation ?? 0;
-      const cs = Math.cos(r);
-      const sn = Math.sin(r);
-      const sx = s * (o.sx ?? 1);
-      const sy = s * (o.sy ?? 1);
-      const m = ctx.getTransform();
-      ctx.save();
-      ctx.globalAlpha = o.alpha ?? 1;
-      ctx.globalCompositeOperation = o.blend ?? 'source-over';
-      // Compose with the caller's transform: M · T(x,y) · R · S.
-      const a = cs * sx;
-      const b = sn * sx;
-      const c = -sn * sy;
-      const d = cs * sy;
-      drawRaw(
-        ctx,
-        ai,
-        ((frame % n) + n) % n,
-        m.a * a + m.c * b,
-        m.b * a + m.d * b,
-        m.a * c + m.c * d,
-        m.b * c + m.d * d,
-        m.a * x + m.c * y + m.e,
-        m.b * x + m.d * y + m.f,
-        o.anchor?.[0] ?? 0.5,
-        o.anchor?.[1] ?? 0.5,
-        o.tint ?? '',
-      );
-      ctx.restore();
-    },
     frameBox(ai, frame, ax, ay, out) {
       const fi = table[ai]?.[frame];
       if (!fi) return false;

@@ -345,12 +345,6 @@ export class PlayerPanel {
     return this.cardEl.getBoundingClientRect();
   }
 
-  /** Centre of the card in client px (for coin arcs). */
-  clientCenter(): { x: number; y: number } {
-    const r = this.cardEl.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }
-
   dispose(): void {
     this.stopTween?.();
     this.stopTween = null;

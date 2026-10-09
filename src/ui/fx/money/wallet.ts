@@ -195,11 +195,6 @@ export class Wallet {
     return this.local(this.colX(m), this.colBase() + n * this.g.slice + this.g.cap * 0.25);
   }
 
-  /** Centre of the amount label, stage coords. */
-  labelPoint(): Pt {
-    return this.local(0, this.g.label / 2);
-  }
-
   /** Middle of the pile (for a wallet-sized burst). */
   center(): Pt {
     return this.local(0, this.colBase() + 3 * this.g.slice);
@@ -365,16 +360,6 @@ export class Wallet {
     this.writeLabel(this.shown);
   }
   private counting = false;
-
-  /** Set the pile and number outright (scene start / skip / headless). */
-  setCash(v: number): void {
-    this.counting = false;
-    this.pile = pileOf(v);
-    this.shown = this.target = Math.max(0, Math.round(v));
-    this.countMs = 0;
-    this.writeLabel(this.shown);
-    this.renderPile();
-  }
 
   /** Per-frame: the count-up (label writes ≤ 15 Hz). Returns true while counting. */
   tick(t: number): boolean {

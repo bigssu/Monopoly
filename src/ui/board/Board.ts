@@ -7,7 +7,7 @@ import { inkOn, playerColor } from '@/content/palette';
 import { getLang, loc, fmtMoney, t } from '@/i18n';
 import { sfx } from '@/ui/audio/sfx';
 import { haptic } from '@/ui/audio/haptics';
-import { anim, animSpeed, D, gridTimeout, isSkipping, noMotion, onFrame } from '@/ui/fx/time';
+import { anim, animSpeed, gridTimeout, isSkipping, noMotion, onFrame } from '@/ui/fx/time';
 import { esc } from '@/ui/shell/dom';
 import { groupColor, h, iconId, setPlayerVars, spaceIcon, svg, svgArt, svgNode } from '@/ui/game/util';
 import { atlasSvg } from '@/ui/game/iconAtlas';
@@ -1082,13 +1082,6 @@ export class Board {
     };
   }
 
-  /** Screen centre (client px) of a space — for fx. */
-  spaceClientCenter(i: number): { x: number; y: number } {
-    const r = this.el.getBoundingClientRect();
-    const g = this.geom[i]!;
-    return { x: r.left + (g.cx / VB) * r.width, y: r.top + (g.cy / VB) * r.height };
-  }
-
   // -------------------------------------------------------------------------
   // Tokens
   // -------------------------------------------------------------------------
@@ -1249,11 +1242,6 @@ export class Board {
   /** Emphasise one player's token (their turn). */
   setActiveToken(pid: PlayerId | null): void {
     for (const [id, tk] of this.tokens) tk.root.classList.toggle('is-active', id === pid);
-  }
-
-  /** px duration helper for callers that time things against a hop. */
-  static hopMs(steps: number): number {
-    return D(Math.max(85, 180 * Math.min(1, 9 / steps)) * steps);
   }
 }
 

@@ -5,7 +5,7 @@
  *   + loadState(state) (resume an arbitrary, e.g. hand-crafted, state) · suggest() (the CPU
  *     policy's choice for whoever must act — e2e tests click the matching on-screen control)
  *   + setLang('ko' | 'en')
- *   + cpuHand() (the CPU hand's press log; freeze(true) holds every hand at its press until release())
+ *   + cpuHand() (the CPU hand's press log; freeze(true) holds every hand at its press until freeze(false))
  *   + dice() (every roll's record: in place / thrown, path, plan, bounces, clacks, timing; the "throw me" rattles)
  */
 import { chooseAction, defaultPlayers, defaultSettings, deepClone, legalActions, type Action, type GameState, type Settings } from '@/engine';
@@ -57,7 +57,7 @@ interface LotAndRollHook {
   /** The money stage (docs/MONEY-EVENTS.md §11): live, scene clock (ms), kept, scenes run, coins in flight. */
   money(): { live: boolean; t: number; kept: boolean; scenes: number; flying: number; tier: string; scale: number; tilt: boolean; camera: boolean; source: string; budgetMB: number; auto: string; health: string[]; log: string[] } | null;
   /** The CPU hand: presses so far, and a switch that holds each hand at its press. */
-  cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; release(): void; frozen(): boolean };
+  cpuHand(): { log: HandRecord[]; clear(): void; freeze(on: boolean): void; frozen(): boolean };
   /** The dice: every roll so far (how it was shown, and the throw's plan). */
   dice(): { log: ThrowRecord[]; rattles: number[]; clear(): void };
   /** Strategy mode: every skill roll the pad sent (zone, aim, accuracy, stride, the throw). */
@@ -132,11 +132,6 @@ export function installDevHook(): void {
         if (!handDev) return;
         handDev.freeze = on;
         if (!on) handDev.release?.();
-      },
-      release: () => {
-        const r = handDev?.release;
-        if (handDev) handDev.release = null;
-        r?.();
       },
       // A hand is being held at its press right now.
       frozen: () => !!handDev?.release,

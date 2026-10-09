@@ -55,7 +55,6 @@ export class Stage {
   private thinking: HTMLElement;
   private diceWrap: HTMLElement;
   private angle = 0;
-  private seat: Seat = 'S';
   private timerId = 0;
   private tickId = 0;
   private countId = 0;
@@ -108,16 +107,11 @@ export class Stage {
     this.rot.append(el);
   }
 
-  get currentSeat(): Seat {
-    return this.seat;
-  }
-
   /** Rotate to face a seat along the shortest arc. */
   async rotateTo(seat: Seat): Promise<void> {
     const target = SEAT_ANGLE[seat];
     let delta = (((target - this.angle) % 360) + 540) % 360 - 180;
     if (delta === -180) delta = 180;
-    this.seat = seat;
     this.el.dataset.seat = seat;
     if (delta === 0) return;
     const from = this.angle;

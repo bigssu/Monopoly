@@ -571,10 +571,6 @@ export class Presenter {
     return n;
   }
 
-  get anyShown(): boolean {
-    return this.slots.some((s) => s.shown);
-  }
-
   stats(): PresentStats {
     let union: RectLike | null = null;
     let shown = 0;
