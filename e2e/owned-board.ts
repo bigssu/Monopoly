@@ -14,7 +14,7 @@
 import type { Page } from '@playwright/test';
 import { PLAYER_COLORS } from '../src/content/palette';
 
-export interface OwnedReport {
+interface OwnedReport {
   problems: string[];
   owned: number;
   buildings: number;

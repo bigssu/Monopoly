@@ -11,7 +11,7 @@
  * Screenshots → e2e/__screenshots__/human-*.png
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { boot, watchConsole } from './helpers';
+import { boot, getState, loadCrafted, waitIdle, watchConsole } from './helpers';
 import type { Action, GameState, Seat } from '../src/engine/types';
 import { reduceMotion } from './motion';
 import { checkOwnedBoard } from './owned-board';
@@ -26,31 +26,6 @@ const FAST = 10;
 
 async function screen(page: Page): Promise<string | undefined> {
   return page.evaluate(() => window.__lotAndRoll!.screen());
-}
-
-async function getState(page: Page): Promise<GameState> {
-  return page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.getState())) as GameState);
-}
-
-/** Wait until the game waits for a human (or is over); dismiss event cards by tapping them. */
-async function waitIdle(page: Page, stats?: { cards: number }): Promise<void> {
-  for (let k = 0; k < 2000; k++) {
-    const st = await page.evaluate(() => ({
-      busy: window.__lotAndRoll!.isBusy(),
-      card: !!document.querySelector('.ev-card-inner.is-flipped'),
-    }));
-    if (st.card) {
-      const ok = await page
-        .locator('.ev-card')
-        .click({ timeout: 1500 })
-        .then(() => true)
-        .catch(() => false);
-      if (ok && stats) stats.cards++;
-    }
-    if (!st.busy) break;
-    await page.waitForTimeout(20);
-  }
-  await page.evaluate(() => window.__lotAndRoll!.whenIdle());
 }
 
 /** Expected control labels (Korean | English). */
@@ -140,23 +115,6 @@ async function humanStep(page: Page, stats: { cards: number; kinds: Record<strin
     })
     .toBe(true);
   return s;
-}
-
-/** A fresh all-human state from `demoSettings`, patched by `patch` and loaded (resume path). */
-async function loadCrafted(page: Page, opts: { players?: number; settings?: Record<string, unknown> }, patch: string): Promise<void> {
-  await page.evaluate(
-    ({ n, settings, patch }) => {
-      const hook = window.__lotAndRoll!;
-      const st = { ...hook.demoSettings(n, false), ...settings };
-      hook.startGame(st as never, 7);
-      const s = hook.getState()!;
-      new Function('s', patch)(s);
-      hook.loadState(s);
-    },
-    { n: opts.players ?? 4, settings: opts.settings ?? {}, patch },
-  );
-  await page.waitForSelector('.game .board');
-  await waitIdle(page);
 }
 
 // ---------------------------------------------------------------------------
@@ -594,15 +552,7 @@ test.describe('human play (clicking real controls)', () => {
       test.setTimeout(240_000);
       const logs = watchConsole(page, { warnings: true });
       // The win-back card is strategy mode: its first-roll skill guide would cover the pad.
-      await page.addInitScript(() => {
-        try {
-          const key = 'lotandroll:prefs:v1';
-          localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skillGuideSeen: true }));
-        } catch {
-          /* storage blocked */
-        }
-      });
-      await boot(page, { w: vp.w, h: vp.h });
+      await boot(page, { w: vp.w, h: vp.h, prefs: { skillGuideSeen: true } });
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;
         hook.setLang('en');
