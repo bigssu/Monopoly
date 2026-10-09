@@ -1,11 +1,12 @@
 # Internal diagnosis: Money Poly (머니폴리) rules v2, normal level, default table (2p = 1 human + 1 CPU normal, 30 rounds, 30 s timer, 32 spaces)
 
-Scope and method. Read-only on the game. Everything below comes from the repo source/docs (cited by path) or from runs I executed on 2026-10-08 in `/home/user/Monopoly` (cited as "Run: ..." with the command and seed count). Throwaway scripts live only in the scratchpad (`/tmp/claude-0/-home-user-Monopoly/0e01a4ab-e5fa-5003-a73b-b929c6d9ba2f/scratchpad/skill.ts` and `.../scratchpad/diag/{mc,wins,comeback,money}.ts`); they import the engine unchanged. Unless noted: rules `normal`, `rulesVersion 2`, 30 rounds, start cash 3,000, seeds 1..N, CPU normal. The `npm run fun` and `npm run sim` outputs reproduce the tables in `docs/BALANCE.md` exactly for the same seeds (the engine is deterministic), so those doc numbers can be quoted as verified.
+Scope and method. Read-only on the game. Everything below comes from the repo source/docs (cited by path) or from runs I executed on 2026-10-08 in the repo (cited as "Run: ..." with the command and seed count). The throwaway scripts behind the scratch runs (`skill.ts`, `diag/{mc,wins,comeback,money}.ts`) imported the engine unchanged. Unless noted: rules `normal`, `rulesVersion 2`, 30 rounds, start cash 3,000, seeds 1..N, CPU normal. The `npm run fun` and `npm run sim` outputs reproduce the tables in `docs/BALANCE.md` exactly for the same seeds (the engine is deterministic), so those doc numbers can be quoted as verified.
 
 Run log (all succeeded unless stated):
-- `npm run fun -- --help` — there is no help handler; the flag is ignored and it starts the full default sweep (400 seeds x 9 configs). I killed it after 15 s. Flags are documented only in the header comment of `scripts/fun.ts` (`--seeds --rounds --players --rules --detail --mixed --rules-version --from`).
+- `npm run fun -- --help` — there is no help handler (added since); the flag is ignored and it starts the full default sweep (400 seeds x 9 configs). I killed it after 15 s. Flags are documented only in the header comment of `scripts/fun.ts` (`--seeds --rounds --players --rules --detail --mixed --rules-version --from`).
 - `npm run fun -- --seeds 1000 --rules normal --detail` (2/3/4 players, v2) and the same with `--rules-version 1`; `npm run fun -- --seeds 1000 --rules easy --players 2 --detail`.
 - `npm run sim -- --players 2 --rounds 30 --seeds 1000` (+ `--rules-version 1`), `--players 3 --rounds 30 --seeds 1000`, `--players 4 --rounds 30 --seeds 1000`, and the default `npm run sim -- --seeds 500` (4p, 15 rounds).
+- Those scratch scripts have since been folded into `scripts/skill.ts`; the runs below are reproduced with `npm run skill -- matchups|table|expert` (`luck` and the `diag/*` counts → `table`, `diag/mc.ts expert` → `expert`; `gauge` and `diag/mc.ts impact` were not kept).
 - Scratch experiments: `skill.ts matchups` (1,000 seeds per matchup; 2p v2, 2p v1, 4p v2, 2p easy rules, 2p advanced rules), `skill.ts luck 1000 2`, `skill.ts gauge` (2,000,000 simulated rolls per gauge setting), `diag/wins.ts` (2p 1,000 seeds; 4p 500 seeds), `diag/comeback.ts 2 1000`, `diag/money.ts 2 1000` (v2 and v1), `diag/mc.ts expert` (200 games, K=24 rollouts) and `diag/mc.ts impact` (40 games, K=64 rollouts, 2,917 decisions, 467 rolls).
 
 ---
@@ -17,48 +18,48 @@ A 32-space, 2d6 roll-and-move game. A player's agency per turn is one or two yes
 
 ### Cited Findings
 **Default table**
-- The setup screen defaults are 30 rounds and a 30 s prompt timer. Player 2 (seat N) is a CPU on normal by default ("one person against the CPU"). The engine's own `defaultSettings()` keeps 15 rounds / 15 s, and `npm run sim` is measured against that — [src/ui/shell/setupModel.ts L55-L80](/home/user/Monopoly/src/ui/shell/setupModel.ts); [src/engine/settings.ts](/home/user/Monopoly/src/engine/settings.ts).
-- The starting seat is randomised by rotating the turn order by a random offset — [src/ui/shell/setupModel.ts `rotateStart`](/home/user/Monopoly/src/ui/shell/setupModel.ts); [docs/DESIGN.md §4.1](/home/user/Monopoly/docs/DESIGN.md).
-- Defaults: `rules: 'normal'`, `rulesVersion: 2`, takeover on, auction off, `endOnFirstBankruptcy` on, `spacesPerSide 7` — [src/engine/settings.ts `defaultSettings`](/home/user/Monopoly/src/engine/settings.ts).
+- The setup screen defaults are 30 rounds and a 30 s prompt timer. Player 2 (seat N) is a CPU on normal by default ("one person against the CPU"). The engine's own `defaultSettings()` keeps 15 rounds / 15 s, and `npm run sim` is measured against that — [src/ui/shell/setupModel.ts L55-L80](../../../src/ui/shell/setupModel.ts); [src/engine/settings.ts](../../../src/engine/settings.ts).
+- The starting seat is randomised by rotating the turn order by a random offset — [src/ui/shell/setupModel.ts `rotateStart`](../../../src/ui/shell/setupModel.ts); [docs/DESIGN.md §4.1](../../DESIGN.md).
+- Defaults: `rules: 'normal'`, `rulesVersion: 2`, takeover on, auction off, `endOnFirstBankruptcy` on, `spacesPerSide 7` — [src/engine/settings.ts `defaultSettings`](../../../src/engine/settings.ts).
 
 **Board (32 spaces)**
-- Index 0 is Start. Corners: Island at 8, Festival at 16, Travel at 24. There are 19 cities in 7 colour groups (brown 2, sky 3, pink 3, orange 3, red 3, yellow 3, blue 2), 4 hubs at 250 each (5, 13, 21, 29), 3 event spaces (3, 18, 27), a donation box (11) and a tax office (23) — [src/content/board.ts](/home/user/Monopoly/src/content/board.ts); [docs/BALANCE.md "Rule interpretations"](/home/user/Monopoly/docs/BALANCE.md).
-- City prices run from 100 (Manila) to 1,000 (Seoul). The cities on each side cost: side A (5 cities) 760 in total, side B (5) 1,440, side C (only 4 cities: Madrid, Berlin, Rome, London) 1,700, side D (5) 3,500. All four hubs together cost 1,000 — computed from [src/content/board.ts](/home/user/Monopoly/src/content/board.ts).
+- Index 0 is Start. Corners: Island at 8, Festival at 16, Travel at 24. There are 19 cities in 7 colour groups (brown 2, sky 3, pink 3, orange 3, red 3, yellow 3, blue 2), 4 hubs at 250 each (5, 13, 21, 29), 3 event spaces (3, 18, 27), a donation box (11) and a tax office (23) — [src/content/board.ts](../../../src/content/board.ts); [docs/BALANCE.md "Rule interpretations"](../../BALANCE.md).
+- City prices run from 100 (Manila) to 1,000 (Seoul). The cities on each side cost: side A (5 cities) 760 in total, side B (5) 1,440, side C (only 4 cities: Madrid, Berlin, Rome, London) 1,700, side D (5) 3,500. All four hubs together cost 1,000 — computed from [src/content/board.ts](../../../src/content/board.ts).
 
 **Economy**
-- Start cash 3,000 (options 2,000 / 3,000 / 5,000). Salary is 300 for passing Start; landing exactly on Start pays salary plus the whole donation pot — [src/engine/economy.ts](/home/user/Monopoly/src/engine/economy.ts); [docs/DESIGN.md §4](/home/user/Monopoly/docs/DESIGN.md).
-- City toll is 0.10 / 1.00 / 2.00 / 3.00 / 4.00 x price for land, villa, building, hotel and landmark (tuned up from the §4 draft of 0.10 / 0.35 / 0.90 / 1.60 / 3.00). The land-only toll doubles with a complete colour group. A single festival marker multiplies one city's toll: x2, then x3 and x5 under the Grand Festival rule when it is held again on the same city — [src/engine/economy.ts](/home/user/Monopoly/src/engine/economy.ts); [src/engine/rules.ts `tollOf`](/home/user/Monopoly/src/engine/rules.ts).
-- Build cost is 0.5 / 0.6 / 0.7 / 1.0 x price per level. A player builds **only when landing on their own city, one level per visit**, with one extra level allowed on the visit they buy (`buildOnPurchase`) or take over (`buildAfterTakeover`). There is no remote building ([docs/DESIGN.md §4](/home/user/Monopoly/docs/DESIGN.md); [src/engine/reducer.ts `offerBuild`, buy branch](/home/user/Monopoly/src/engine/reducer.ts)). A build prompt opens only if the player can afford the level — [docs/BALANCE.md](/home/user/Monopoly/docs/BALANCE.md).
-- Takeover: after paying the toll on a non-landmark opponent property, the visitor may buy it for 2 x value (value = price + build costs). It costs 1.5 x during a "takeover sale" news round, and 1 x for a win-back, which is advanced-only — [src/engine/rules.ts `takeoverPrice`](/home/user/Monopoly/src/engine/rules.ts).
-- Hub toll is 100 x the number of hubs the owner holds. Tax takes 10 % of cash; donation is 100. Bail is 200 and the island holds a player up to 3 turns. A third consecutive double sends the player to the island. Selling back pays 50 % — [src/engine/economy.ts](/home/user/Monopoly/src/engine/economy.ts).
-- Late toll (normal and above, with a round limit): the last 5 rounds multiply tolls by x1.25 … x2.25 — [src/engine/rules.ts `lateTollMultiplier`](/home/user/Monopoly/src/engine/rules.ts).
-- Seat bonus (normal and above): later seats start with +0 / +200 / +400 / +600 — [src/engine/economy.ts `seatBonus`](/home/user/Monopoly/src/engine/economy.ts).
+- Start cash 3,000 (options 2,000 / 3,000 / 5,000). Salary is 300 for passing Start; landing exactly on Start pays salary plus the whole donation pot — [src/engine/economy.ts](../../../src/engine/economy.ts); [docs/DESIGN.md §4](../../DESIGN.md).
+- City toll is 0.10 / 1.00 / 2.00 / 3.00 / 4.00 x price for land, villa, building, hotel and landmark (tuned up from the §4 draft of 0.10 / 0.35 / 0.90 / 1.60 / 3.00). The land-only toll doubles with a complete colour group. A single festival marker multiplies one city's toll: x2, then x3 and x5 under the Grand Festival rule when it is held again on the same city — [src/engine/economy.ts](../../../src/engine/economy.ts); [src/engine/rules.ts `tollOf`](../../../src/engine/rules.ts).
+- Build cost is 0.5 / 0.6 / 0.7 / 1.0 x price per level. A player builds **only when landing on their own city, one level per visit**, with one extra level allowed on the visit they buy (`buildOnPurchase`) or take over (`buildAfterTakeover`). There is no remote building ([docs/DESIGN.md §4](../../DESIGN.md); [src/engine/reducer.ts `offerBuild`, buy branch](../../../src/engine/reducer.ts)). A build prompt opens only if the player can afford the level — [docs/BALANCE.md](../../BALANCE.md).
+- Takeover: after paying the toll on a non-landmark opponent property, the visitor may buy it for 2 x value (value = price + build costs). It costs 1.5 x during a "takeover sale" news round, and 1 x for a win-back, which is advanced-only — [src/engine/rules.ts `takeoverPrice`](../../../src/engine/rules.ts).
+- Hub toll is 100 x the number of hubs the owner holds. Tax takes 10 % of cash; donation is 100. Bail is 200 and the island holds a player up to 3 turns. A third consecutive double sends the player to the island. Selling back pays 50 % — [src/engine/economy.ts](../../../src/engine/economy.ts).
+- Late toll (normal and above, with a round limit): the last 5 rounds multiply tolls by x1.25 … x2.25 — [src/engine/rules.ts `lateTollMultiplier`](../../../src/engine/rules.ts).
+- Seat bonus (normal and above): later seats start with +0 / +200 / +400 / +600 — [src/engine/economy.ts `seatBonus`](../../../src/engine/economy.ts).
 
 **Dice**
-- 2d6 (`rollDice`). Doubles roll again; the third double goes to the island without moving. On the island, rolling doubles escapes without an extra roll. The Express card doubles the next movement. There is no choice of die or direction — [src/engine/reducer.ts `doRoll`, `doIslandRoll`](/home/user/Monopoly/src/engine/reducer.ts).
-- Dice gauge B7 exists only in **advanced** (`diceGauge: advanced`). At a full pull it gives a 35 % chance of a second roll and keeps the higher (or lower) of the two sums — [src/engine/settings.ts `ruleFlags`](/home/user/Monopoly/src/engine/settings.ts); [src/engine/reducer.ts `gaugeRoll`](/home/user/Monopoly/src/engine/reducer.ts); [src/engine/economy.ts `diceGaugeBias: 0.35`](/home/user/Monopoly/src/engine/economy.ts).
-- Measured gauge bias (2,000,000 rolls each). At full high pull the mean sum goes from 7.000 to 7.476, P(sum ≥ 10) from 16.7 % to 21.5 % and P(sum ≤ 4) from 16.7 % to 11.8 %. P(sum = 7) stays at 16.7 %. At a 0.75 pull the mean is 7.239. The CPU never passes a gauge value, so CPU rolls are always plain — Run: `skill.ts gauge`; [src/engine/ai.ts `preRoll` → `{type:'Roll'}`](/home/user/Monopoly/src/engine/ai.ts).
+- 2d6 (`rollDice`). Doubles roll again; the third double goes to the island without moving. On the island, rolling doubles escapes without an extra roll. The Express card doubles the next movement. There is no choice of die or direction — [src/engine/reducer.ts `doRoll`, `doIslandRoll`](../../../src/engine/reducer.ts).
+- Dice gauge B7 exists only in **advanced** (`diceGauge: advanced`). At a full pull it gives a 35 % chance of a second roll and keeps the higher (or lower) of the two sums — [src/engine/settings.ts `ruleFlags`](../../../src/engine/settings.ts); [src/engine/reducer.ts `gaugeRoll`](../../../src/engine/reducer.ts); [src/engine/economy.ts `diceGaugeBias: 0.35`](../../../src/engine/economy.ts).
+- Measured gauge bias (2,000,000 rolls each). At full high pull the mean sum goes from 7.000 to 7.476, P(sum ≥ 10) from 16.7 % to 21.5 % and P(sum ≤ 4) from 16.7 % to 11.8 %. P(sum = 7) stays at 16.7 %. At a 0.75 pull the mean is 7.239. The CPU never passes a gauge value, so CPU rolls are always plain — Run: `skill.ts gauge`; [src/engine/ai.ts `preRoll` → `{type:'Roll'}`](../../../src/engine/ai.ts).
 
 **Cards**
-- The deck is the 24 original cards plus 2 comeback cards (Land Swap, Leader Raid) when `comebackCards` is on (normal and above, v2), drawn uniformly with replacement — [src/content/cards.ts](/home/user/Monopoly/src/content/cards.ts); [src/engine/reducer.ts `deckFor`](/home/user/Monopoly/src/engine/reducer.ts).
-- On normal level a card draw is a **choice between two different cards, one face-down** (`cardChoice` and `hiddenCard` are both normal-level flags). The CPU compares the known card with the deck average and does not peek — [src/engine/settings.ts](/home/user/Monopoly/src/engine/settings.ts); [src/engine/ai.ts `cardChoice`](/home/user/Monopoly/src/engine/ai.ts).
-- Of the 26 cards, 4 need a further choice: Free Upgrade (pick a city), Typhoon (normal-level targeting), Swap (pick a target or pass), and the keepable Toll Pass (use or save). Shield and Escape are keepables used automatically or by prompt. The other 20 resolve immediately — [src/content/cards.ts](/home/user/Monopoly/src/content/cards.ts); [src/engine/ai.ts](/home/user/Monopoly/src/engine/ai.ts).
-- **Doubles bonus card** (v2): every non-third double draws an event card before the extra roll — [docs/DESIGN.md §4.2](/home/user/Monopoly/docs/DESIGN.md).
+- The deck is the 24 original cards plus 2 comeback cards (Land Swap, Leader Raid) when `comebackCards` is on (normal and above, v2), drawn uniformly with replacement — [src/content/cards.ts](../../../src/content/cards.ts); [src/engine/reducer.ts `deckFor`](../../../src/engine/reducer.ts).
+- On normal level a card draw is a **choice between two different cards, one face-down** (`cardChoice` and `hiddenCard` are both normal-level flags). The CPU compares the known card with the deck average and does not peek — [src/engine/settings.ts](../../../src/engine/settings.ts); [src/engine/ai.ts `cardChoice`](../../../src/engine/ai.ts).
+- Of the 26 cards, 4 need a further choice: Free Upgrade (pick a city), Typhoon (normal-level targeting), Swap (pick a target or pass), and the keepable Toll Pass (use or save). Shield and Escape are keepables used automatically or by prompt. The other 20 resolve immediately — [src/content/cards.ts](../../../src/content/cards.ts); [src/engine/ai.ts](../../../src/engine/ai.ts).
+- **Doubles bonus card** (v2): every non-third double draws an event card before the extra roll — [docs/DESIGN.md §4.2](../../DESIGN.md).
 
 **Victory**
-- Last solvent player. Triple (3 complete colour groups). Line (every city on one side; hubs do not count). Hubs (all 4). Round limit (highest total assets). Set wins are checked after every action. With `endOnFirstBankruptcy` and normal's `finishRound`, a first bankruptcy ends the game when the round completes, and in 2p it becomes "lastStanding" — [src/engine/rules.ts `setVictory`, `findVictory`](/home/user/Monopoly/src/engine/rules.ts); [src/engine/reducer.ts `endTurn`](/home/user/Monopoly/src/engine/reducer.ts).
-- One-away warnings (`OneAway` events) tell everyone when a player is one property short of a set — [src/engine/rules.ts `oneAwayWarnings`](/home/user/Monopoly/src/engine/rules.ts).
+- Last solvent player. Triple (3 complete colour groups). Line (every city on one side; hubs do not count). Hubs (all 4). Round limit (highest total assets). Set wins are checked after every action. With `endOnFirstBankruptcy` and normal's `finishRound`, a first bankruptcy ends the game when the round completes, and in 2p it becomes "lastStanding" — [src/engine/rules.ts `setVictory`, `findVictory`](../../../src/engine/rules.ts); [src/engine/reducer.ts `endTurn`](../../../src/engine/reducer.ts).
+- One-away warnings (`OneAway` events) tell everyone when a player is one property short of a set — [src/engine/rules.ts `oneAwayWarnings`](../../../src/engine/rules.ts).
 
 **Comeback and v2 rules (normal level)**
 - Lucky vault: bail and card fines go into the pot, and the bank adds 100 per round. Landing exactly on Start, or drawing the Welfare card, takes the whole pot.
 - News flash every 4 rounds (rounds 4, 8, …, 28, so 7 per 30-round game). Headlines: toll fever x2, quake (one colour group −1 level), build boom (costs ½), takeover sale (1.5x), share day (richest gives 10 % of cash to poorest), vault boom.
 - Comeback cards: when the drawer is last and the leader has ≥ 1.25 x their assets, the first card offered comes from swap / raid / welfare / free upgrade / lottery.
 - All-or-nothing tax: a die roll of 4–6 pays nothing, 1–3 pays double, with the same expected cost as paying.
-- Win-back (1x value) is **advanced only** ([src/engine/settings.ts `winBack: v2 && advanced`](/home/user/Monopoly/src/engine/settings.ts)) — [docs/DESIGN.md §4.2](/home/user/Monopoly/docs/DESIGN.md); [src/engine/economy.ts](/home/user/Monopoly/src/engine/economy.ts); [src/engine/reducer.ts `isComebackDraw`, `newsFlash`](/home/user/Monopoly/src/engine/reducer.ts).
+- Win-back (1x value) is **advanced only** ([src/engine/settings.ts `winBack: v2 && advanced`](../../../src/engine/settings.ts)) — [docs/DESIGN.md §4.2](../../DESIGN.md); [src/engine/economy.ts](../../../src/engine/economy.ts); [src/engine/reducer.ts `isComebackDraw`, `newsFlash`](../../../src/engine/reducer.ts).
 
 **Every decision point in a turn (normal level)**
-- The reducer's phases are: `preRoll` (Roll only); `island` (Roll / PayBail / UseEscapeCard); `travel` (pick any space or Pass, only the turn after landing on corner 24); `buy` (Buy / Pass); `build` (Build one level / Pass, only on your own city); `takeover` (Takeover / Pass, after paying toll); `festival` (pick one of your cities); `freeUpgrade`; `cardChoice` (two cards, one face-down); `target` (typhoon or swap target); `gamble` (tax: pay or roll); `useCard` (toll pass, or shield when attacked); `debt` (choose what to sell). `doubleUp` exists only in advanced and `auction` only with the off-by-default setting — [src/engine/types.ts `Phase`](/home/user/Monopoly/src/engine/types.ts).
-- A prompt opens only when there is a real choice (no build prompt if unaffordable, no takeover prompt if unaffordable) — [docs/BALANCE.md "Rule interpretations"](/home/user/Monopoly/docs/BALANCE.md).
+- The reducer's phases are: `preRoll` (Roll only); `island` (Roll / PayBail / UseEscapeCard); `travel` (pick any space or Pass, only the turn after landing on corner 24); `buy` (Buy / Pass); `build` (Build one level / Pass, only on your own city); `takeover` (Takeover / Pass, after paying toll); `festival` (pick one of your cities); `freeUpgrade`; `cardChoice` (two cards, one face-down); `target` (typhoon or swap target); `gamble` (tax: pay or roll); `useCard` (toll pass, or shield when attacked); `debt` (choose what to sell). `doubleUp` exists only in advanced and `auction` only with the off-by-default setting — [src/engine/types.ts `Phase`](../../../src/engine/types.ts).
+- A prompt opens only when there is a real choice (no build prompt if unaffordable, no takeover prompt if unaffordable) — [docs/BALANCE.md "Rule interpretations"](../../BALANCE.md).
 
 ### Inferences
 - Every prompt except Travel is *reactive*: the dice choose the city, and the player only says yes or no to the one action tied to that square. There is no "where do I invest", "which way do I move" or "whom do I hit" decision outside the rare Travel, Swap and Typhoon moments.
@@ -75,7 +76,7 @@ A 32-space, 2d6 roll-and-move game. A player's agency per turn is one or two yes
 On the default 2p table, v2 raised decisions per turn (1.26 → 1.59), interaction (10.4 → 14.4 per game) and the comeback rate (R10 34.5 → 42.1 %). It also nearly doubled instant set wins (28.3 % → 46.4 % of games) and made the donation-pot jackpot (≈3,000 per game, pure dice) almost as large as all salary paid. In 2p, the R10 leader still wins only 57.9 %, and the R5 leader 52.0 %, close to a coin flip. That reads as low persistence of advantage, not as strong comeback design.
 
 ### Cited Findings
-**Fun metrics** (`npm run fun -- --seeds 1000 --rules normal --detail` vs `--rules-version 1`, 30 rounds, CPU normal; fair last-place win = 50 / 33 / 25 %) — Run; matches [docs/BALANCE.md "Fun rules"](/home/user/Monopoly/docs/BALANCE.md):
+**Fun metrics** (`npm run fun -- --seeds 1000 --rules normal --detail` vs `--rules-version 1`, 30 rounds, CPU normal; fair last-place win = 50 / 33 / 25 %) — Run; matches [docs/BALANCE.md "Fun rules"](../../BALANCE.md):
 
 | metric | 2p v1 → v2 | 3p v1 → v2 | 4p v1 → v2 |
 |---|---|---|---|
@@ -109,7 +110,7 @@ On the default 2p table, v2 raised decisions per turn (1.26 → 1.59), interacti
 | instant set wins in total | 28.3 % | **46.4 %** | 40.7 % | 23.6 % | 9.2 % |
 | round limit | 38.3 % | 36.1 % | 19.8 % | 6.6 % | 47.0 % |
 
-- (`docs/BALANCE.md` lists 23.8 % line for 2p v2 at 500 seeds. My 1,000-seed run gives 24.7 %, and the v1 2p numbers match the doc exactly.) — [docs/BALANCE.md](/home/user/Monopoly/docs/BALANCE.md); Run.
+- (`docs/BALANCE.md` lists 23.8 % line for 2p v2 at 500 seeds. My 1,000-seed run gives 24.7 %, and the v1 2p numbers match the doc exactly.) — [docs/BALANCE.md](../../BALANCE.md); Run.
 
 **When instant wins happen** (2p v2, 1,000 seeds; counts by rounds 1–5 / 6–10 / 11–15 / 16–20 / 21–25 / 26–30) — Run: `skill.ts luck 1000 2`:
 - line: 0 / 8 / 31 / 71 / 77 / 60 (median round 21, p10 13, p90 28);
@@ -160,7 +161,7 @@ Policy quality does matter in aggregate. The normal AI beats a "buy and build ev
 | "always pass" (never buy or build) | 98.9 | 99.7 | 99.7 | 98.5 |
 
 - 4p (1 normal hero vs 3 copies of the policy, fair 25 %, 1,000 seeds): vs 3 normal 25.2 %, vs 3 easy 41.6 %, vs 3 always-yes 37.4 %, vs 3 random 77.9 %, vs 3 always-pass 100 % — Run: `skill.ts matchups 1000 4 normal 2`.
-- The repo's own mixed-table number: CPU normal beats easy 65.9 % (2 normal + 2 easy, normal rules) — [docs/BALANCE.md](/home/user/Monopoly/docs/BALANCE.md).
+- The repo's own mixed-table number: CPU normal beats easy 65.9 % (2 normal + 2 easy, normal rules) — [docs/BALANCE.md](../../BALANCE.md).
 
 **Search-based "expert" vs normal AI** (2p, v2, 200 games, seat alternating). At each of its decisions the expert evaluates the AI's move and up to 5 alternatives with 24 shared-seed rollouts (normal AI on both sides), and switches only if another move scores higher by more than 1/24. It deviated from the AI on 22.2 % of its 7,605 decisions and won **101/200 = 50.5 %** (95 % CI roughly ±7 pp) — Run: `diag/mc.ts expert 1 100 24` and `expert 1001 100 24`.
 
@@ -183,7 +184,7 @@ Policy quality does matter in aggregate. The normal AI beats a "buy and build ev
 
 - Dice: at 467 sampled rolls, forcing 8 different 2d6 outcomes gave a mean max−min spread in win probability of 18.9 pp. The SD of P(win | roll) was 6.4 pp raw and **3.3 pp** after subtracting binomial noise (p(1−p)/K) — Run: `diag/mc.ts impact`.
 - Luck-only features predict the 2p winner (normal vs normal, 1,000 games). The player who **paid less toll wins 78.5 %**, more salaries (laps) 68.5 %, more doubles 62.3 %, more cards drawn 61.9 % (cards are mostly doubles bonuses, see §5), more buy offers in rounds 1–6 58.5 %, fewer island visits 51.4 % — Run: `skill.ts luck 1000 2`.
-- The tax gamble has the same expected cost by design ("기댓값 동일") — [docs/research/08-fun-analysis.md §5 #5](/home/user/Monopoly/docs/research/08-fun-analysis.md). Its measured impact (3.7 pp) is at the noise floor — Run.
+- The tax gamble has the same expected cost by design ("기댓값 동일") — [docs/research/08-fun-analysis.md §5 #5](../08-fun-analysis.md). Its measured impact (3.7 pp) is at the noise floor — Run.
 
 ### Inferences
 - **The headline skill number for the report.** Against a thoughtless "say yes to everything" player, a sensible policy wins about 2 in 3 games in 2p (67.7 %; 54.0 % on easy rules). Against another sensible policy it is a coin flip, and a search-based player could not find a better line than the shipped heuristic. The game rewards *avoiding blunders* (keep a cash reserve, do not overbuild), not *outplaying* an opponent. There is little room above "competent".
@@ -206,12 +207,12 @@ Most prompts are dice-triggered binary accept/decline choices whose answer follo
 
 ### Cited Findings
 - Forced actions are about 1.12 per turn (the Roll, plus single-option prompts). The fun script counts 39.2 % of real decisions as "obvious" in 2p v2 — Run: `npm run fun ... --detail`.
-- The normal AI's rules show how shallow the logic is: buy if cash after ≥ 1.5 x average toll exposure (or to complete or block a set); build if cash ≥ 2 x cost; take over only to complete or block a set; pay bail if cash ≥ 800; tax gamble if not leading and able to pay double. Yet a 24-rollout search player could not beat it (§3) — [src/engine/ai.ts](/home/user/Monopoly/src/engine/ai.ts); Run.
-- Building happens only on landing on your own city, one level per visit (plus one level on purchase or takeover). A landmark (takeover-immune) needs L3 first, so it takes 3 more own-city landings after the purchase visit — [docs/DESIGN.md §4](/home/user/Monopoly/docs/DESIGN.md); [src/engine/reducer.ts `offerBuild`](/home/user/Monopoly/src/engine/reducer.ts).
-- Movement: normal level has plain 2d6. The gauge is advanced-only and weak, raising P(sum ≥ 10) from 16.7 to 21.5 % at most. The Express card is automatic (it doubles the next roll, with no choice of when) — [src/engine/settings.ts](/home/user/Monopoly/src/engine/settings.ts); [src/content/cards.ts `express`](/home/user/Monopoly/src/content/cards.ts); Run: `skill.ts gauge`.
-- Card choice is between two cards with **one face-down**, so roughly half the information is hidden. 12.9 cards per game in 2p, about 6.4 per player — [src/engine/settings.ts `hiddenCard`](/home/user/Monopoly/src/engine/settings.ts); Run.
-- Shield use is automatic in practice: the AI always uses it, and `swapCities` blocks with the shield and no prompt ("nobody keeps a shield for later") — [src/engine/ai.ts `useCard`](/home/user/Monopoly/src/engine/ai.ts); [src/engine/reducer.ts `swapCities`](/home/user/Monopoly/src/engine/reducer.ts).
-- Trading and auctions: none by default (auction is a setting, off). The earlier analysis lists "거래·경매 기본 켬" as not done because of time on one tablet — [docs/research/08-fun-analysis.md §5 #9, §7](/home/user/Monopoly/docs/research/08-fun-analysis.md).
+- The normal AI's rules show how shallow the logic is: buy if cash after ≥ 1.5 x average toll exposure (or to complete or block a set); build if cash ≥ 2 x cost; take over only to complete or block a set; pay bail if cash ≥ 800; tax gamble if not leading and able to pay double. Yet a 24-rollout search player could not beat it (§3) — [src/engine/ai.ts](../../../src/engine/ai.ts); Run.
+- Building happens only on landing on your own city, one level per visit (plus one level on purchase or takeover). A landmark (takeover-immune) needs L3 first, so it takes 3 more own-city landings after the purchase visit — [docs/DESIGN.md §4](../../DESIGN.md); [src/engine/reducer.ts `offerBuild`](../../../src/engine/reducer.ts).
+- Movement: normal level has plain 2d6. The gauge is advanced-only and weak, raising P(sum ≥ 10) from 16.7 to 21.5 % at most. The Express card is automatic (it doubles the next roll, with no choice of when) — [src/engine/settings.ts](../../../src/engine/settings.ts); [src/content/cards.ts `express`](../../../src/content/cards.ts); Run: `skill.ts gauge`.
+- Card choice is between two cards with **one face-down**, so roughly half the information is hidden. 12.9 cards per game in 2p, about 6.4 per player — [src/engine/settings.ts `hiddenCard`](../../../src/engine/settings.ts); Run.
+- Shield use is automatic in practice: the AI always uses it, and `swapCities` blocks with the shield and no prompt ("nobody keeps a shield for later") — [src/engine/ai.ts `useCard`](../../../src/engine/ai.ts); [src/engine/reducer.ts `swapCities`](../../../src/engine/reducer.ts).
+- Trading and auctions: none by default (auction is a setting, off). The earlier analysis lists "거래·경매 기본 켬" as not done because of time on one tablet — [docs/research/08-fun-analysis.md §5 #9, §7](../08-fun-analysis.md).
 - Takeover is a reactive yes/no after a dice landing (5.6 per game in 2p). Players cannot target a specific opponent property except via Travel (2.2 per game) or the Swap card (0.87 swaps per game) — Run.
 
 ### Inferences
@@ -227,7 +228,7 @@ Most prompts are dice-triggered binary accept/decline choices whose answer follo
 
 **Choices a smart player would want and does not have:**
 1. *Movement and timing*: pick a die, or move 1–2 extra for a cost. Currently only advanced has a gauge, and it is 35 %-probabilistic.
-2. *Where to invest*: build on any own city when passing Start, rather than only where you land. The 01 research describes this "start-bonus building" in Modu Marble ([docs/research/01-game-rules-research.md §3.2](/home/user/Monopoly/docs/research/01-game-rules-research.md)).
+2. *Where to invest*: build on any own city when passing Start, rather than only where you land. The 01 research describes this "start-bonus building" in Modu Marble ([docs/research/01-game-rules-research.md §3.2](../01-game-rules-research.md)).
 3. *Saving vs spending*: nothing rewards holding cash except surviving tolls. No interest, no planned purchase, no reserve-based defence.
 4. *Defending*: no way to protect a key city other than landing on it three more times to reach a landmark, or a lucky Shield draw. No "insurance" purchase and no blocking action when a OneAway warning fires (8.75 warnings per game in 2p) unless the dice bring you to the missing square.
 5. *Targeting*: no way to choose an opponent property to pressure except Travel or Swap.
@@ -247,30 +248,30 @@ v2 mostly added *luck-driven* swings: a ≈3,000-per-game pot jackpot from exact
 
 ### Cited Findings
 **Amplifiers (2p v2, 1,000 seeds unless stated)**
-- Lucky-vault pot: 3.51 pot wins per game, mean 856, about **3,003 per game**. That is 80 % of the salary paid (3,731), and it goes to whoever lands exactly on Start or draws Welfare. It was 264 per game in v1 — Run: `diag/money.ts`; [src/engine/reducer.ts `land` case `start`](/home/user/Monopoly/src/engine/reducer.ts).
+- Lucky-vault pot: 3.51 pot wins per game, mean 856, about **3,003 per game**. That is 80 % of the salary paid (3,731), and it goes to whoever lands exactly on Start or draws Welfare. It was 264 per game in v1 — Run: `diag/money.ts`; [src/engine/reducer.ts `land` case `start`](../../../src/engine/reducer.ts).
 - Doubles bonus card: 7.97 of 12.88 card offers per game (62 %) are doubles bonuses. Doubles happen on 16.6 % of rolls. The player with more doubles wins 62.3 % — Run: `diag/comeback.ts 2 1000`, `diag/money.ts`, `skill.ts luck`.
 - Instant set wins: 46.4 % of 2p games, 57.5 % of them completed by a Travel-corner move. The cheap sides (A at 760; C, 4 cities, at 1,700) and the 1,000-cost hub set dominate — Run: `npm run sim`, `diag/wins.ts`.
-- `08-fun-analysis` itself flags this: "2인 판에서 돈이 늘어 즉시 독점 승리(라인)가 10 → 24 %로 늘었다" ("in 2-player games, more money raised instant monopoly (line) wins from 10 to 24 %"). It suggests adjusting the line condition as the next lever — [docs/research/08-fun-analysis.md §6.1](/home/user/Monopoly/docs/research/08-fun-analysis.md); [docs/BALANCE.md "Watch item"](/home/user/Monopoly/docs/BALANCE.md).
-- Toll spikes: p99 toll 2,160 and max 5,880 against start cash 3,000. Grand Festival goes x2 → x3 → x5, toll-fever news is x2, late toll goes up to x2.25. 173 of 175 2p bankruptcies follow a toll — Run: `diag/wins.ts`; [src/engine/economy.ts](/home/user/Monopoly/src/engine/economy.ts).
+- `08-fun-analysis` itself flags this: "2인 판에서 돈이 늘어 즉시 독점 승리(라인)가 10 → 24 %로 늘었다" ("in 2-player games, more money raised instant monopoly (line) wins from 10 to 24 %"). It suggests adjusting the line condition as the next lever — [docs/research/08-fun-analysis.md §6.1](../08-fun-analysis.md); [docs/BALANCE.md "Watch item"](../../BALANCE.md).
+- Toll spikes: p99 toll 2,160 and max 5,880 against start cash 3,000. Grand Festival goes x2 → x3 → x5, toll-fever news is x2, late toll goes up to x2.25. 173 of 175 2p bankruptcies follow a toll — Run: `diag/wins.ts`; [src/engine/economy.ts](../../../src/engine/economy.ts).
 - Takeovers in 2p: 1.21 per game by the player ahead in total assets vs 0.63 by the player behind. A 2 x value takeover needs cash, which the leader has — Run: `diag/comeback.ts`.
-- News flash: 7 headlines per 30-round game, chosen at random, each about 0.95 per game. Toll fever and quake hit whoever happens to be exposed — Run: `diag/comeback.ts`; [src/engine/reducer.ts `newsFlash`](/home/user/Monopoly/src/engine/reducer.ts).
+- News flash: 7 headlines per 30-round game, chosen at random, each about 0.95 per game. Toll fever and quake hit whoever happens to be exposed — Run: `diag/comeback.ts`; [src/engine/reducer.ts `newsFlash`](../../../src/engine/reducer.ts).
 - First bankruptcy ends the game (2p: lastStanding 17.5 %, median round 25) — Run: `skill.ts luck`.
 
 **Mitigators**
-- Two-card choice: worth 6.9 pp mean per pick, but one card is face-down — Run: `diag/mc.ts impact`; [src/engine/settings.ts](/home/user/Monopoly/src/engine/settings.ts).
+- Two-card choice: worth 6.9 pp mean per pick, but one card is face-down — Run: `diag/mc.ts impact`; [src/engine/settings.ts](../../../src/engine/settings.ts).
 - Comeback offer to the last player (leader ≥ 1.25 x assets): 3.15 underdog offers per game. 1.23 players per game receive at least one, and they go on to win 37.5 % (vs 50 % fair) — Run: `diag/comeback.ts`.
 - Raid (0.88 per game), Swap (1.03 drawn, 0.87 executed), Leader Tax (0.14), Share Day news (0.93 per game, richest pays 10 % of cash; MoneyReason `news` totals 176 per game) — Run: `diag/comeback.ts`, `diag/money.ts`.
 - Seat bonus: +200 for seat 2 in 2p. 2p seat wins are 51.9 / 48.1 %, vs 56.5 / 43.5 % on easy rules, which have no seat bonus — Run: `npm run sim`, `npm run fun --rules easy`.
 - Travel corner: the one strong agency moment (~20 pp per decision), but reached by dice — Run.
 - OneAway warnings: 8.75 per 2p game — Run: `diag/wins.ts`.
-- Takeover as blocking: the AI takes over to stop a set (`blocksOpponent`) — [src/engine/ai.ts](/home/user/Monopoly/src/engine/ai.ts).
-- Win-back: advanced only, so not on the default table — [src/engine/settings.ts](/home/user/Monopoly/src/engine/settings.ts).
+- Takeover as blocking: the AI takes over to stop a set (`blocksOpponent`) — [src/engine/ai.ts](../../../src/engine/ai.ts).
+- Win-back: advanced only, so not on the default table — [src/engine/settings.ts](../../../src/engine/settings.ts).
 - Card choice and lead persistence: the R10 leader wins 57.9 % in 2p — Run: `skill.ts luck`.
 
 ### Inferences
 - The comeback tools mostly hand the trailing player a *random* windfall: an exact Start landing, a card drawn on doubles, a swap the dice happen to offer. They do not give a *decision* that converts skill into recovery. That fits the owner's complaint: comebacks feel weak because the losing player cannot *do* anything, only hope.
 - The strongest single luck amplifier on the default 2p table is cheap instant set wins, completed by whoever lands on the right square or the Travel corner. Next comes the exact-landing pot jackpot, which is now worth almost as much as all salaries combined.
-- Takeovers favour the leader in 2p (about 2:1). As tuned, they act as a lead-extender, not the comeback engine that the Modu Marble reference describes ([docs/research/01-game-rules-research.md §3.3](/home/user/Monopoly/docs/research/01-game-rules-research.md)).
+- Takeovers favour the leader in 2p (about 2:1). As tuned, they act as a lead-extender, not the comeback engine that the Modu Marble reference describes ([docs/research/01-game-rules-research.md §3.3](../01-game-rules-research.md)).
 
 ### Gaps
 - I did not decompose how much of the 3,003 pot comes from exact Start landings vs the Welfare card. Welfare is drawn 1.13 times per game, and its share of the pot money is unmeasured.
