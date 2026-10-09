@@ -1,6 +1,8 @@
-// Generates scripts/icon-sheet.html (contact sheet) and, if playwright + Chromium are available, docs/assets/icon-sheet.png.
+// Generates the icon contact sheet as HTML in the temp dir (the path is printed) and, if playwright +
+// Chromium are available, docs/assets/icon-sheet.png.
 // Usage: node scripts/icon-sheet.mjs [--no-shot]
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from './fx/common.mjs';
@@ -41,7 +43,7 @@ figcaption{font-size:11px;margin:0 0 4px 2px;opacity:.7}
 .strip{display:flex;align-items:flex-end;gap:8px;padding:6px;border-radius:6px;margin-bottom:4px}
 i{display:block;flex:none}i svg{width:100%;height:100%;display:block}
 </style></head><body>${body}</body></html>`;
-const htmlPath = only || keys ? path.join(process.env.TMPDIR || '/tmp', 'icon-sheet-part.html') : path.join(here, 'icon-sheet.html');
+const htmlPath = path.join(os.tmpdir(), only || keys ? 'icon-sheet-part.html' : 'icon-sheet.html');
 fs.writeFileSync(htmlPath, html);
 console.log('wrote', htmlPath);
 

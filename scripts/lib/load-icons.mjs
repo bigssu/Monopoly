@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'content', 'icons');
-export const FILES = [
+const FILES = [
   ['landmarks', 'LANDMARK_ICONS'],
   ['tokens', 'TOKEN_ICONS'],
   ['buildings', 'BUILDING_ICONS'],
