@@ -5,65 +5,10 @@
  * loads hand-crafted states (with queued dice / cards / picks) and reads the state.
  * Screenshots → e2e/__screenshots__/fun-*.png
  */
-import { expect, test, type Page } from '@playwright/test';
-import type { GameState } from '../src/engine/types';
-import { boot, watchConsole } from './helpers';
+import { expect, test } from '@playwright/test';
+import { bootFast, getState, loadCrafted, roll, waitIdle, watchConsole } from './helpers';
 
 const SHOTS = 'e2e/__screenshots__';
-
-/** Boot at 1600×1000, animations ×2, no prompt timer, the skill guide seen. */
-async function bootFast(page: Page): Promise<void> {
-  // Strategy mode shows the skill-throw guide at a human's first roll; these specs roll by keyboard.
-  await page.addInitScript(() => {
-    try {
-      const key = 'lotandroll:prefs:v1';
-      localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skillGuideSeen: true }));
-    } catch {
-      /* storage blocked */
-    }
-  });
-  await boot(page, { w: 1600, h: 1000 });
-  await page.evaluate(() => {
-    window.__lotAndRoll!.setAnimSpeed(2);
-    window.__lotAndRoll!.setPromptTimer(0);
-  });
-}
-
-async function getState(page: Page): Promise<GameState> {
-  return page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.getState())) as GameState);
-}
-
-/** Wait until the game waits for a person; event cards are tapped away. */
-async function waitIdle(page: Page): Promise<void> {
-  for (let k = 0; k < 2000; k++) {
-    const st = await page.evaluate(() => ({ busy: window.__lotAndRoll!.isBusy(), card: !!document.querySelector('.ev-card-inner.is-flipped') }));
-    if (st.card) await page.locator('.ev-card').click({ timeout: 1500 }).catch(() => undefined);
-    if (!st.busy) break;
-    await page.waitForTimeout(20);
-  }
-  await page.evaluate(() => window.__lotAndRoll!.whenIdle());
-}
-
-/** A fresh all-human game (4 seats, normal rules version 2 unless `settings` says otherwise), patched by `patch`. */
-async function loadCrafted(page: Page, settings: Record<string, unknown>, patch: string): Promise<void> {
-  await page.evaluate(
-    ({ settings, patch }) => {
-      const hook = window.__lotAndRoll!;
-      hook.startGame({ ...hook.demoSettings(4, false), ...settings } as never, 7);
-      const s = hook.getState()!;
-      new Function('s', patch)(s);
-      hook.loadState(s);
-    },
-    { settings, patch },
-  );
-  await page.waitForSelector('.game .board');
-  await waitIdle(page);
-}
-
-async function roll(page: Page): Promise<void> {
-  await page.locator('.stage [data-action="Roll"]').click();
-  await waitIdle(page);
-}
 
 test.describe('fun rules (rules version 2)', () => {
   test.use({ actionTimeout: 10_000 });
@@ -193,7 +138,7 @@ test.describe('fun rules (rules version 2)', () => {
     await bootFast(page);
     await loadCrafted(
       page,
-      { rules: 'advanced' },
+      { settings: { rules: 'advanced' } },
       `const me = s.players[s.current]; me.position = 26; me.cash = 5000;
        const taker = (s.current + 1) % 4;
        s.properties[31] = { owner: taker, level: 1 };

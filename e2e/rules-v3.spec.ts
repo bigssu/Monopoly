@@ -6,65 +6,12 @@
  * Start info. The dev hook only loads hand-crafted states (queued dice / picks) and reads the state.
  * Screenshots → e2e/__screenshots__/v3-*.png
  */
-import { expect, test, type Page } from '@playwright/test';
-import type { GameState } from '../src/engine/types';
-import { boot, watchConsole } from './helpers';
+import { expect, test } from '@playwright/test';
+import { boot, bootFast, getState, loadCrafted, roll, waitIdle, watchConsole } from './helpers';
 
 const SHOTS = 'e2e/__screenshots__';
-
-async function bootFast(page: Page): Promise<void> {
-  // Strategy mode shows the skill-throw guide at a human's first roll; these specs roll by keyboard.
-  await page.addInitScript(() => {
-    try {
-      const key = 'lotandroll:prefs:v1';
-      localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skillGuideSeen: true }));
-    } catch {
-      /* storage blocked */
-    }
-  });
-  await boot(page, { w: 1600, h: 1000 });
-  await page.evaluate(() => {
-    window.__lotAndRoll!.setAnimSpeed(2);
-    window.__lotAndRoll!.setPromptTimer(0);
-  });
-}
-
-async function getState(page: Page): Promise<GameState> {
-  return page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.getState())) as GameState);
-}
-
-/** Wait until the game waits for a person; event cards are tapped away. */
-async function waitIdle(page: Page): Promise<void> {
-  for (let k = 0; k < 2000; k++) {
-    const st = await page.evaluate(() => ({ busy: window.__lotAndRoll!.isBusy(), card: !!document.querySelector('.ev-card-inner.is-flipped') }));
-    if (st.card) await page.locator('.ev-card').click({ timeout: 1500 }).catch(() => undefined);
-    if (!st.busy) break;
-    await page.waitForTimeout(20);
-  }
-  await page.evaluate(() => window.__lotAndRoll!.whenIdle());
-}
-
-/** A fresh all-human strategy-mode game (4 seats), patched by `patch`. */
-async function loadCrafted(page: Page, patch: string): Promise<void> {
-  await page.evaluate(
-    ({ patch }) => {
-      const hook = window.__lotAndRoll!;
-      hook.startGame({ ...hook.demoSettings(4, false), rules: 'advanced', rulesVersion: 3 } as never, 7);
-      const s = hook.getState()!;
-      new Function('s', patch)(s);
-      hook.loadState(s);
-    },
-    { patch },
-  );
-  await page.waitForSelector('.game .board');
-  await waitIdle(page);
-}
-
-/** A plain roll: the keyboard on the pad (a weak toss; no stride / aim chosen). */
-async function roll(page: Page): Promise<void> {
-  await page.locator('.stage [data-action="Roll"]').first().click();
-  await waitIdle(page);
-}
+/** A fresh all-human strategy-mode game (4 seats). */
+const STRATEGY = { settings: { rules: 'advanced', rulesVersion: 3 } };
 
 test.describe('strategy mode (rules version 3)', () => {
   test.use({ actionTimeout: 10_000 });
@@ -102,7 +49,7 @@ test.describe('strategy mode (rules version 3)', () => {
     const logs = watchConsole(page, { warnings: true });
     await bootFast(page);
     // 28 → 2 (an empty city, declined) passing Start; the current player owns Cairo (4).
-    await loadCrafted(page, `const me = s.players[s.current]; me.position = 28; me.cash = 3000; s.properties[4] = { owner: me.id, level: 0 }; s.testHooks = { diceQueue: [[2, 4]] };`);
+    await loadCrafted(page, STRATEGY, `const me = s.players[s.current]; me.position = 28; me.cash = 3000; s.properties[4] = { owner: me.id, level: 0 }; s.testHooks = { diceQueue: [[2, 4]] };`);
     await roll(page);
     expect((await getState(page)).phase.kind).toBe('buy');
     await page.locator('.st-prompt [data-action="Pass"]').click();
@@ -128,6 +75,7 @@ test.describe('strategy mode (rules version 3)', () => {
     // The current player holds side A but Hanoi (2) and lands on it from 31 (passing Start).
     await loadCrafted(
       page,
+      STRATEGY,
       `const me = s.players[s.current]; me.position = 31; me.cash = 3000;
        for (const i of [1, 4, 6, 7]) s.properties[i] = { owner: me.id, level: 0 };
        s.players[(s.current + 1) % 4].cash = 5000;
@@ -174,6 +122,7 @@ test.describe('strategy mode (rules version 3)', () => {
     await bootFast(page);
     await loadCrafted(
       page,
+      STRATEGY,
       `const me = s.players[s.current]; me.position = 4; me.cash = 1500;
        const rich = s.players[(s.current + 1) % 4]; rich.cash = 9000;
        s.properties[9] = { owner: rich.id, level: 1 };
@@ -192,7 +141,7 @@ test.describe('strategy mode (rules version 3)', () => {
     const logs = watchConsole(page, { warnings: true });
     await bootFast(page);
     // The last seat's turn in round 2: round 3 starts and forecasts round 4's headline.
-    await loadCrafted(page, `s.round = 2; s.current = 3; s.phase = { kind: 'preRoll', playerId: 3, rollAgain: false };
+    await loadCrafted(page, STRATEGY, `s.round = 2; s.current = 3; s.phase = { kind: 'preRoll', playerId: 3, rollAgain: false };
        s.players[3].position = 9; s.testHooks = { diceQueue: [[1, 2]], pickQueue: [1] };`);
     await roll(page);
     await page.locator('.st-prompt [data-action="Pass"]').click();

@@ -16,7 +16,7 @@
  * roll included), so their positions are sampled from the page.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { boot, checkPress, watchConsole } from './helpers';
+import { PREFS_KEY, boot, checkPress, setPrefs, watchConsole } from './helpers';
 import { reduceMotion } from './motion';
 
 interface Rec {
@@ -47,23 +47,34 @@ interface Box {
 const VIEW = { w: 1600, h: 1000 };
 
 /**
- * Player `current` (a human) about to roll `dice` from the start: of 2 humans (S, N) by default, or
- * of `n` humans (4: seats S, E, N, W) — the table view, the Stage turned toward that seat.
+ * Player `current` about to roll `dice` from the start: of 2 humans (S, N) by default, or of `n`
+ * humans (4: seats S, E, N, W) — the table view, the Stage turned toward that seat. `rules:
+ * 'advanced'` is strategy mode (the skill throw); `cpu` hands that seat to a normal CPU.
  */
-async function craft(page: Page, dice: [number, number], o: { n?: number; current?: number } = {}): Promise<void> {
-  await page.evaluate(({ dice, n, current }) => {
+async function craft(
+  page: Page,
+  dice: [number, number],
+  o: { n?: number; current?: number; rules?: 'advanced'; cpu?: boolean; seed?: number } = {},
+): Promise<void> {
+  await page.evaluate(({ dice, n, current, rules, cpu, seed }) => {
     const h = window.__lotAndRoll!;
     h.setPromptTimer(0);
     h.dice().clear();
-    const st = h.demoSettings(n, false);
-    h.startGame(st as never, 7);
+    h.skill().clear();
+    const st = h.demoSettings(n, false) as { rules: string; players: { isCpu: boolean; cpuLevel?: string }[] };
+    if (rules) st.rules = rules;
+    if (cpu) {
+      st.players[current]!.isCpu = true;
+      st.players[current]!.cpuLevel = 'normal';
+    }
+    h.startGame(st as never, seed);
     const s = h.getState()!;
     s.current = current;
     s.phase = { kind: 'preRoll', playerId: current, rollAgain: false };
     s.testHooks = { diceQueue: [dice] };
     h.loadState(s);
-  }, { dice, n: o.n ?? 2, current: o.current ?? 0 });
-  await expect(page.locator('.roll-pad:not(:disabled)')).toBeVisible({ timeout: 30_000 });
+  }, { dice, n: o.n ?? 2, current: o.current ?? 0, rules: o.rules ?? null, cpu: !!o.cpu, seed: o.seed ?? 7 });
+  if (!o.cpu) await expect(page.locator('.roll-pad:not(:disabled)')).toBeVisible({ timeout: 30_000 });
   // The prompt has come in and the stage stands still.
   await page.waitForTimeout(500);
 }
@@ -633,47 +644,6 @@ test.describe('dice throw', () => {
 // ring's phase at the drag is exact.
 // ---------------------------------------------------------------------------------------------
 
-const PREFS = 'lotandroll:prefs:v1';
-
-/** The skill guide counts as seen (only its own test shows it). */
-async function guideSeen(page: Page, seen = true): Promise<void> {
-  await page.addInitScript(
-    ({ key, seen }) => {
-      try {
-        const prev = JSON.parse(localStorage.getItem(key) ?? '{}');
-        localStorage.setItem(key, JSON.stringify({ ...prev, skillGuideSeen: seen }));
-      } catch {
-        /* storage blocked */
-      }
-    },
-    { key: PREFS, seen },
-  );
-}
-
-/** A strategy-mode game (rules advanced, v3): player `current` (a human) about to roll. */
-async function craftSkill(page: Page, dice: [number, number], o: { n?: number; current?: number; cpu?: boolean; seed?: number } = {}): Promise<void> {
-  await page.evaluate(({ dice, n, current, cpu, seed }) => {
-    const h = window.__lotAndRoll!;
-    h.setPromptTimer(0);
-    h.dice().clear();
-    h.skill().clear();
-    const st = h.demoSettings(n, false) as { rules: string; players: { isCpu: boolean; cpuLevel?: string }[] };
-    st.rules = 'advanced';
-    if (cpu) {
-      st.players[current]!.isCpu = true;
-      st.players[current]!.cpuLevel = 'normal';
-    }
-    h.startGame(st as never, seed);
-    const s = h.getState()!;
-    s.current = current;
-    s.phase = { kind: 'preRoll', playerId: current, rollAgain: false };
-    s.testHooks = { diceQueue: [dice] };
-    h.loadState(s);
-  }, { dice, n: o.n ?? 2, current: o.current ?? 0, cpu: !!o.cpu, seed: o.seed ?? 7 });
-  if (!o.cpu) await expect(page.locator('.roll-pad:not(:disabled)')).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(500);
-}
-
 /** The ring's accuracy and phase right now. */
 async function ring(page: Page): Promise<{ acc: number; phase: number; text: string }> {
   return page.evaluate(() => {
@@ -726,7 +696,7 @@ test.describe('skill throw (strategy mode)', () => {
   test('casual mode keeps the plain throw: no chips, no ring, no aim labels, no result line, no guide', async ({ page }) => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await guideSeen(page, false);
+    await setPrefs(page, { skillGuideSeen: false });
     await boot(page, { ...VIEW });
     // demoSettings: rules 'normal' (casual).
     await craft(page, [2, 3]);
@@ -742,9 +712,9 @@ test.describe('skill throw (strategy mode)', () => {
   test('press until the needle is on green, drag short: aim low at ≥ 90 %; the arrow, the readout and the result line', async ({ page }) => {
     test.setTimeout(120_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await guideSeen(page);
+    await setPrefs(page, { skillGuideSeen: true });
     await boot(page, { ...VIEW });
-    await craftSkill(page, [1, 3]);
+    await craft(page, [1, 3], { rules: 'advanced' });
     // At rest: the chips (two dice chosen), the static ring; no needle, no readout.
     await expect(page.locator('.stride-chip[data-stride="2"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.stride-chip[data-stride="1"]')).toHaveText(/하나\s*1–6/);
@@ -779,9 +749,9 @@ test.describe('skill throw (strategy mode)', () => {
   test('a long drag aims high (a strong throw); a tap rolls 보통 (no aim, no result line); the keyboard too', async ({ page }) => {
     test.setTimeout(150_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await guideSeen(page);
+    await setPrefs(page, { skillGuideSeen: true });
     await boot(page, { ...VIEW });
-    await craftSkill(page, [3, 3]);
+    await craft(page, [3, 3], { rules: 'advanced' });
     const ds = (await page.locator('.st-dice .die').first().boundingBox())!.height;
     // Outside the band: 6 frames in (phase ~0.14), accuracy 0.
     const r = await skillThrow(page, 20, -ds * 3.3, { frames: 6 });
@@ -797,14 +767,14 @@ test.describe('skill throw (strategy mode)', () => {
     await expect(page.locator('.st-dice .roll-result')).toHaveAttribute('aria-label', '정확 0% · 크게 노림 → 빗나감 (6)', { timeout: 8000 });
 
     // A middle drag: 보통 (no aim), thrown at a medium strength.
-    await craftSkill(page, [2, 5]);
+    await craft(page, [2, 5], { rules: 'advanced' });
     const m = await skillThrow(page, 0, -ds * 2.1, { frames: 3 });
     expect(m.label).toBe('보통');
     expect((await lastSkill(page)).aim).toBeUndefined();
     await checkResult(page, [2, 5], 'middle');
 
     // A tap: 보통, a weak toss.
-    await craftSkill(page, [4, 1]);
+    await craft(page, [4, 1], { rules: 'advanced' });
     await skillThrow(page, 0, 0, { frames: 4 });
     const tap = await lastSkill(page);
     expect(tap.zone).toBe('tap');
@@ -816,7 +786,7 @@ test.describe('skill throw (strategy mode)', () => {
     await expect(page.locator('.roll-result')).toHaveCount(0);
 
     // The keyboard: 보통 with the chosen stride (a toss).
-    await craftSkill(page, [6, 2]);
+    await craft(page, [6, 2], { rules: 'advanced' });
     await expect(page.locator('.roll-pad')).toBeFocused();
     await page.keyboard.press('Enter');
     await checkResult(page, [6, 2], 'keyboard');
@@ -827,9 +797,9 @@ test.describe('skill throw (strategy mode)', () => {
   test('one die: the chip shows one die and lights 1–6 ahead; the throw renders one die and lands on the engine\'s face', async ({ page }) => {
     test.setTimeout(120_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await guideSeen(page);
+    await setPrefs(page, { skillGuideSeen: true });
     await boot(page, { ...VIEW });
-    await craftSkill(page, [5, 2]);
+    await craft(page, [5, 2], { rules: 'advanced' });
     const two = (await page.locator('.st-dice .dice-pair').boundingBox())!;
     await page.locator('.stride-chip[data-stride="1"]').click();
     await expect(page.locator('.stride-chip[data-stride="1"]')).toHaveAttribute('aria-pressed', 'true');
@@ -876,19 +846,19 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await boot(page, { ...VIEW });
-    await craftSkill(page, [1, 2]);
+    await craft(page, [1, 2], { rules: 'advanced' });
     const guide = page.locator('.st-pop .skill-guide');
     await expect(guide).toBeVisible();
     await expect(guide.locator('.sg-step')).toHaveCount(3);
     await expect(guide.locator('.sg-title')).toHaveText(['누르기', '초록에서 끌기', '길이로 노리기']);
     await guide.locator('.sg-ok').click();
     await expect(guide).toHaveCount(0);
-    expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}').skillGuideSeen, PREFS)).toBe(true);
+    expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}').skillGuideSeen, PREFS_KEY)).toBe(true);
     // The pad works after it.
     await skillThrow(page, 0, 0, { frames: 2 });
     await checkResult(page, [1, 2], 'after the guide');
     // The next strategy roll: no guide.
-    await craftSkill(page, [2, 2]);
+    await craft(page, [2, 2], { rules: 'advanced' });
     await page.waitForTimeout(300);
     await expect(page.locator('.skill-guide')).toHaveCount(0);
     // Settings → 손맛 던지기 안내 → 다시 보기.
@@ -906,9 +876,9 @@ test.describe('skill throw (strategy mode)', () => {
     test.setTimeout(90_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
     await reduceMotion(page);
-    await guideSeen(page);
+    await setPrefs(page, { skillGuideSeen: true });
     await boot(page, { ...VIEW });
-    await craftSkill(page, [3, 4]);
+    await craft(page, [3, 4], { rules: 'advanced' });
     const c = await pairCentre(page);
     await page.evaluate(() => window.__lotAndRoll!.manualClock(true));
     await page.mouse.move(c.x, c.y);
@@ -937,7 +907,7 @@ test.describe('skill throw (strategy mode)', () => {
   test('a CPU acts out its AI roll: presses, the ring stops at its accuracy, it drags into its zone, releases', async ({ page }) => {
     test.setTimeout(150_000);
     const logs = watchConsole(page, { warnings: true, ignore: /favicon|Failed to load resource/ });
-    await guideSeen(page);
+    await setPrefs(page, { skillGuideSeen: true });
     await boot(page, { ...VIEW });
     // Watch, in the page, what the arrow and the readout showed while the CPU dragged.
     await page.evaluate(() => {
@@ -952,7 +922,7 @@ test.describe('skill throw (strategy mode)', () => {
       await page.evaluate(() => window.__lotAndRoll!.cpuHand().clear());
       await page.evaluate(() => ((window as unknown as { __seen: unknown[] }).__seen.length = 0));
       // Seats S and N (the Stage turned 180° for N), different seeds: different AI choices.
-      await craftSkill(page, [seed + 1, seed + 3], { cpu: true, current: seed % 2, seed: 100 + seed * 17 });
+      await craft(page, [seed + 1, seed + 3], { rules: 'advanced', cpu: true, current: seed % 2, seed: 100 + seed * 17 });
       await page.waitForFunction(() => window.__lotAndRoll!.skill().rolls.length > 0, null, { timeout: 30_000 });
       const press = (await page.evaluate(() => JSON.parse(JSON.stringify(window.__lotAndRoll!.cpuHand().log.find((r) => r.action === 'Roll')))))!;
       checkPress(press, 'cpu skill roll');

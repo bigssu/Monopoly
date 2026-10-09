@@ -30,12 +30,12 @@ interface LogEntry {
  * A fresh 4-human game (easy rules: one card, no card choice), the player at `seat` to act, patched
  * by `patch(s, me, other)` (`other(k)` = the player k seats on) and resumed. Normal speed.
  */
-async function craft(page: Page, seat: string, patch: string, manual = false): Promise<void> {
+async function craft(page: Page, seat: string, patch: string): Promise<void> {
   await page.evaluate(
-    ({ seat, patch, manual }) => {
+    ({ seat, patch }) => {
       const hook = window.__lotAndRoll!;
       hook.manualClock(false);
-      void manual; // filmstrips run at the default game pace (no setAnimSpeed: it would set pace 1)
+      // Filmstrips run at the default game pace (no setAnimSpeed: it would set pace 1).
       hook.setPromptTimer(0);
       hook.startGame({ ...hook.demoSettings(4, false), rules: 'easy' } as never, 7);
       const s = hook.getState()!;
@@ -47,7 +47,7 @@ async function craft(page: Page, seat: string, patch: string, manual = false): P
       hook.loadState(s);
       (window as unknown as { __moneyLog: unknown[] }).__moneyLog.length = 0;
     },
-    { seat, patch, manual },
+    { seat, patch },
   );
   await page.waitForSelector('.game .board');
   await page.evaluate(() => window.__lotAndRoll!.whenIdle());
@@ -375,7 +375,7 @@ test.describe('render tiers (MONEY-EVENTS §13)', () => {
     for (const tier of ['high', 'low'] as const) {
       // 3D off on both: the high tier would tilt the hero (a different box), this compares resolution only.
       await boot(page, { w: 1600, h: 1000, query: `&mres=${tier}&m3d=0` });
-      await craft(page, 'S', TOLL, true);
+      await craft(page, 'S', TOLL);
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;
         hook.manualClock(true);
@@ -526,7 +526,7 @@ for (const size of [{ w: 1600, h: 1000 }, { w: 800, h: 450 }]) {
       await boot(page, { w: size.w, h: size.h });
       mkdirSync(STRIPS, { recursive: true });
       for (const sc of SCENARIOS) {
-        await craft(page, seat, sc.patch, true);
+        await craft(page, seat, sc.patch);
         for (const a of sc.pre ?? []) {
           await page.evaluate((a) => {
             const hook = window.__lotAndRoll!;
@@ -723,7 +723,7 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
       const errors = watchConsole(page);
       await boot(page, { w: size.w, h: size.h });
       mkdirSync(STRIPS, { recursive: true });
-      await craft(page, 'S', DEBT, true);
+      await craft(page, 'S', DEBT);
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;
         return hook.dispatch(hook.legal().find((x) => x.type === 'Roll')!);
@@ -762,7 +762,7 @@ test.describe('selling to the bank: the crying dealer (owner review 2026-10-06)'
       if (v === 'reduced') await reduceMotion(page);
       await boot(page, { w: 1280, h: 800, query: v === 'reduced' || v === 'N' ? '' : `&mres=${v}` });
       // Seat N: the cut-in turns 180° to face the seller across the table.
-      await craft(page, v === 'N' ? 'N' : 'S', DEBT, true);
+      await craft(page, v === 'N' ? 'N' : 'S', DEBT);
       await page.evaluate(() => {
         const hook = window.__lotAndRoll!;
         return hook.dispatch(hook.legal().find((x) => x.type === 'Roll')!);

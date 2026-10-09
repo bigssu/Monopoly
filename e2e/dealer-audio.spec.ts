@@ -4,20 +4,14 @@
  * off plays nothing, and the advanced double-up flow completes from real clicks.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { setPrefs } from './helpers';
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
-const PREFS_KEY = 'lotandroll:prefs:v1';
-
 /** Boot with prefs overrides and counters on every way the app can start a sound. */
 async function boot(page: Page, prefs: Record<string, unknown> = {}): Promise<void> {
-  await page.addInitScript(([key, p]) => {
-    try {
-      const prev = JSON.parse(localStorage.getItem(key as string) ?? '{}');
-      localStorage.setItem(key as string, JSON.stringify({ ...prev, ...(p as object) }));
-    } catch {
-      /* storage blocked: defaults apply */
-    }
+  await setPrefs(page, prefs);
+  await page.addInitScript(() => {
     const w = window as unknown as { __starts: number };
     w.__starts = 0;
     const start = AudioBufferSourceNode.prototype.start;
@@ -30,7 +24,7 @@ async function boot(page: Page, prefs: Record<string, unknown> = {}): Promise<vo
       w.__starts++;
       return play.call(this);
     };
-  }, [PREFS_KEY, prefs] as const);
+  });
   await page.goto('/?dev=1');
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'title');
   await page.mouse.click(5, 790); // a first gesture unlocks audio
