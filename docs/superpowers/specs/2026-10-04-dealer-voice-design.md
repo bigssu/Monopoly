@@ -18,10 +18,10 @@ Success: a player who has never read the rules can follow a game from the dealer
 |---|---|
 | Character | The traveler boy from `docs/assets/play-icon-512.png` (teal cap, orange neckerchief, blue jacket, backpack). |
 | Sprites | ~12 expressions + 2 talking frames, generated with Gemini `gemini-3-pro-image` from the icon as reference, on flat magenta, keyed to alpha, 320 px WebP (~16 KB each; probe verified). |
-| Voice | ElevenLabs voice **Krys** (`1W00IGEmNmwmsDeYy7ag`), model `eleven_v4`, Korean. Bright, excited, Pixar-like delivery. |
+| Voice | ElevenLabs model `eleven_v4`. Korean: voice **Krys** (`1W00IGEmNmwmsDeYy7ag`), bright, excited, Pixar-like delivery. English (2026-10-12): voice **Liam** (`TX3LPaxmHKxFdv7VOQHJ`), energetic young American male; Krys is verified for Korean only. |
 | Placement | Inside the board-centre Stage next to the prompt card; rotates with the Stage toward the acting seat. |
 | Levels | Setting "딜러 음성": 끔 / 최소 / 적당 (default) / 전체. |
-| Language | Voice only when the UI language is Korean. English UI shows English subtitles in the bubble, no voice. |
+| Language | The voice follows the UI language: Korean `public/voice/<id>.ogg`, English `public/voice/en/<id>.ogg` (recorded text in `scripts/dealer/voice-texts.json` / `voice-texts-en.json`). The bubble shows the same language. |
 | Sound off | Voice follows the existing sound switch and volume. |
 | Shipping | Only compressed assets in the app: Opus mono ~20 kbps `.ogg` voice, WebP sprites. Raw generations are cached outside git. |
 
@@ -83,7 +83,7 @@ Names are typed by players, so lines never say them; turn lines refer to the sea
 - One line at a time. A new line interrupts only when its priority is higher (e.g. bankrupt over a
   quip); otherwise it is dropped if one is playing, or queued for ≤ 1.5 s if it is advice for the
   prompt now open.
-- Silent mode (English or sound off) shows the bubble for `max(1.2 s, 70 ms × chars) × gamePace`.
+- Silent mode (sound off, or a line still in `VOICE_PENDING`) shows the bubble for `max(1.2 s, 70 ms × chars) × gamePace`.
 - Talking frames alternate every ~110 ms on the shared 30 Hz clock (`onFrame`), no extra rAF.
 
 ### Size budget

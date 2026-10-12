@@ -54,12 +54,14 @@ test('dealer off: no bubble during play', async ({ page }) => {
   await expect(page.locator('.dealer-bubble.is-in')).toHaveCount(0);
 });
 
-test('English UI: the dealer speaks in English subtitles', async ({ page }) => {
-  await boot(page, { lang: 'en' });
+test('English UI: the dealer speaks English, subtitles and voice', async ({ page }) => {
+  const voice = page.waitForResponse((r) => /\/voice\/en\/[\w.]+\.ogg$/.test(r.url()) && r.ok(), { timeout: 15_000 });
+  await boot(page, { lang: 'en', sound: true });
   await startGame(page);
   const text = page.locator('.dealer-bubble.is-in .dealer-text');
   await expect(text).toBeVisible({ timeout: 15_000 });
   expect(await text.innerText()).toMatch(/^[\x20-\x7E’—…]+$/);
+  await voice;
 });
 
 test('sound off: no sample, voice or music is ever started', async ({ page }) => {

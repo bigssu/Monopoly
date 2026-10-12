@@ -20,10 +20,17 @@ describe('dealer catalog', () => {
     }
   });
 
-  it('ships a voice file for every recorded line, and no stale file or text for a pending one', () => {
-    const texts = JSON.parse(readFileSync(join(PUB, '..', 'scripts', 'dealer', 'voice-texts.json'), 'utf8')) as Record<string, string>;
+  // Each language: its voice folder and the text each file there was recorded from (gen-voice.mjs writes it).
+  const LANGS = [
+    { lang: 'ko', dir: join(PUB, 'voice'), texts: 'voice-texts.json' },
+    { lang: 'en', dir: join(PUB, 'voice', 'en'), texts: 'voice-texts-en.json' },
+  ] as const;
+  const readTexts = (f: string) => JSON.parse(readFileSync(join(PUB, '..', 'scripts', 'dealer', f), 'utf8')) as Record<string, string>;
+
+  it.each(LANGS)('ships a $lang voice file for every recorded line, and no stale file or text for a pending one', ({ dir, texts: f }) => {
+    const texts = readTexts(f);
     for (const l of DEALER_LINES) {
-      const file = join(PUB, 'voice', `${l.id}.ogg`);
+      const file = join(dir, `${l.id}.ogg`);
       if (!l.voice) {
         // Text only until recorded (VOICE_PENDING): an old recording of other words must not ship.
         expect(existsSync(file), l.id).toBe(false);
@@ -36,11 +43,10 @@ describe('dealer catalog', () => {
     for (const id of VOICE_PENDING) expect(DEALER_LINES.some((l) => l.id === id), id).toBe(true);
   });
 
-  it('every shipped recording says the line as it is written now (reworded lines go to VOICE_PENDING)', () => {
-    // scripts/dealer/voice-texts.json is the text each public/voice file was recorded from
-    // (gen-voice.mjs writes it). A line reworded without re-recording would play other words.
-    const texts = JSON.parse(readFileSync(join(PUB, '..', 'scripts', 'dealer', 'voice-texts.json'), 'utf8')) as Record<string, string>;
-    for (const l of DEALER_LINES) if (l.voice) expect(texts[l.id], `${l.id}: reworded? add it to VOICE_PENDING`).toBe(l.ko);
+  it.each(LANGS)('every shipped $lang recording says the line as it is written now (reworded lines go to VOICE_PENDING)', ({ lang, texts: f }) => {
+    // A line reworded without re-recording would play other words.
+    const texts = readTexts(f);
+    for (const l of DEALER_LINES) if (l.voice) expect(texts[l.id], `${l.id}: reworded? add it to VOICE_PENDING`).toBe(l[lang]);
   });
 
   it('uses no name from the reference games in what the dealer says (docs/research/02 §2)', () => {

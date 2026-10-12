@@ -1,7 +1,7 @@
 /**
  * The dealer on the Stage (docs/superpowers/specs/2026-10-04-dealer-voice-design.md): the launcher
- * boy as a sprite + speech bubble. `say(line)` shows the line's expression, plays the Korean voice
- * (talking frames flap while it plays) or, silent, holds the bubble for a reading time, then goes
+ * boy as a sprite + speech bubble. `say(line)` shows the line's expression, plays the voice in the app's
+ * language (Korean `voice/<id>.ogg`, English `voice/en/<id>.ogg`; talking frames flap while it plays) or, silent, holds the bubble for a reading time, then goes
  * back to idle. One line at a time: a higher priority interrupts, anything else is dropped.
  *
  * Zero idle load (docs/PERFORMANCE.md, gate B): when a line ends the bubble only fades (its own
@@ -124,8 +124,8 @@ export class Dealer {
     };
 
     // A line without a recorded voice yet (lines.ts VOICE_PENDING) is shown as text only.
-    if (getLang() === 'ko' && this.voiceOn() && line.voice) {
-      void playVoice(line.id, finish).then((ms) => {
+    if (this.voiceOn() && line.voice) {
+      void playVoice(getLang() === 'ko' ? line.id : `en/${line.id}`, finish).then((ms) => {
         if (token !== this.token) return;
         if (ms === null) this.silent(line, token);
         else this.flapAfter(line.expr, token);

@@ -42,7 +42,7 @@ function load(ctx: AudioContext, id: string): Promise<AudioBuffer | null> {
 }
 
 /**
- * Play a line; resolves with its duration in ms once it has *started*, or null when it cannot
+ * Play `voice/<id>.ogg` (`id` may carry a folder: `en/<line id>`); resolves with its duration in ms once it has *started*, or null when it cannot
  * play (sound off, locked context, missing/undecodable file, or superseded while loading).
  * `onEnd` fires when it finishes or is stopped.
  */

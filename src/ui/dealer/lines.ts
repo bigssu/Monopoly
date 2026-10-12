@@ -2,7 +2,7 @@
  * Dealer line catalog — the single source of truth for what the host says (docs/superpowers/specs/
  * 2026-10-04-dealer-voice-design.md). The app (director/Dealer) and the generators
  * (scripts/dealer/gen-voice.mjs) both read it. Each situation has 1+ takes; a take's id is
- * `${situation}.${n}` (1-based) and its voice file is `voice/<id>.ogg`.
+ * `${situation}.${n}` (1-based) and its voice files are `voice/<id>.ogg` (Korean) and `voice/en/<id>.ogg` (English).
  *
  * Tone: a warm, playful Pixar-style host. Never names (players type them) and never amounts.
  */
@@ -764,26 +764,19 @@ export interface DealerLine {
   expr: DealerExpr;
   ko: string;
   en: string;
-  /** A recorded voice ships (`public/voice/<id>.ogg`); false = shown as text only (VOICE_PENDING). */
+  /** Recorded voices ship in both languages (`public/voice/<id>.ogg`, `public/voice/en/<id>.ogg`); false = shown as text only (VOICE_PENDING). */
   voice: boolean;
 }
 
 /**
- * Takes whose Korean voice is not recorded yet (new or reworded lines). They show as text only.
- * `ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs` records exactly these (plus any voiced
- * line whose text no longer matches scripts/dealer/voice-texts.json) and empties this list itself.
+ * Takes whose voice is not recorded yet (new or reworded lines, either language). They show as
+ * text only, in Korean and English. `ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs` records
+ * exactly these in both languages (plus any voiced line whose text no longer matches
+ * scripts/dealer/voice-texts.json / voice-texts-en.json) and empties this list itself.
  * Runbook: docs/VOICE-WEEKEND.md. Rewording a voiced line? Add its id here (the dealer test fails
  * otherwise: a recording of other words must never ship).
  */
-export const VOICE_PENDING: ReadonlySet<string> = new Set([
-  'game.start.3', 'explain.sets.1',
-  'festival.grand.2', 'landmark.done.1', 'landmark.done.2', 'explain.takeover.1',
-  'news.tollFever.1', 'news.quake.1', 'news.buildBoom.1', 'news.takeoverSale.1', 'news.shareDay.1', 'news.vaultBoom.1',
-  'bonus.card.1', 'comeback.offer.1', 'card.swap.1', 'card.raid.1', 'swap.pick.1', 'swap.done.1',
-  'gamble.advice.roll.1', 'gamble.advice.pay.1', 'gamble.win.1', 'gamble.lose.1', 'winback.advice.1', 'winback.done.1', 'jackpot.win.1',
-  // Rules version 3 (strategy mode).
-  'notice.warn.1', 'notice.broken.1', 'block.advice.1', 'block.done.1', 'invest.prompt.1', 'invest.done.1', 'forecast.1', 'chase.advice.1',
-]);
+export const VOICE_PENDING: ReadonlySet<string> = new Set([]);
 
 /** Every take as a flat list (generators, integrity tests). */
 export const DEALER_LINES: readonly DealerLine[] = Object.entries(SITUATIONS).flatMap(([situation, s]) =>
