@@ -125,6 +125,22 @@
 
 ## 남은 작업
 
+진행 중(2026-10-12, 클라우드 세션으로 넘김):
+
+- **문자로만 나오는 메시지 · 추가 SFX · 음악 분석.** 오너 요청: "문자로만 나오는 메시지가 있으면 음성으로 처리하는 게
+  좋은지, SFX가 필요한지 분석하고, 더 필요한 SFX나 음악이 있으면 만들어 와." 아직 분석 결과는 없다. 할 일:
+  (1) 엔진 `GameEvent`와 프롬프트 중 딜러 대사(`src/ui/dealer/director.ts`의 `situationForEvent`/`situationForPrompt`가
+  null인 것)도 효과음(`sfx.play` 호출)도 없는 것, 토스트·배너·컷인·뉴스·독점 예고처럼 글자로만 나오는 것을 표로 정리한다.
+  (2) 자주 나오는 것은 효과음, 드물고 중요한 것은 딜러 대사로 나눠 제안한다. 대사는 `lines.ts`에 한국어·영어로 넣고
+  `VOICE_PENDING`에 id를 넣는다. 효과음은 `src/ui/audio/sfx.ts`의 `SfxName`과 `scripts/sound/gen-sound.mjs`의 `SFX`에,
+  음악은 `MUSIC`에 넣는다(지금은 효과음 24종 + 합성음 5종, 음악 4곡: title·game·final·win. 전략 모드·뉴스·독점 예고용
+  소리는 아직 없다).
+  (3) **생성은 키가 있는 PC에서만 된다.** `ELEVENLABS_API_KEY`는 사용자 PC의 Windows 환경변수에만 있다. 클라우드에서는
+  분석·코드·프롬프트·대사까지 하고 커밋한 뒤, PC에서 `node scripts/dealer/gen-voice.mjs`와
+  `node scripts/sound/gen-sound.mjs sfx <이름…>`/`music <이름>`을 돌린다(둘 다 `--dry`로 먼저 확인).
+- **GitHub 기본 브랜치가 `main`이 아니다.** 원격 기본 브랜치(`origin/HEAD`)는 옛 `ccr-d6694140-gxcpml`이고, 옛
+  `feat/dealer-rules-sound`도 남아 있다. 최신은 `main`이다. 클라우드 세션은 `main`을 체크아웃해서 작업한다.
+
 사용자 답을 기다리는 것:
 
 0. 주사위 던지기 태블릿 확인(새 APK): (a) 내 차례에 주사위가 꿈틀하는지, (b) 주사위 근처를 꾹 누르면 흔들리고, 위·아래·
