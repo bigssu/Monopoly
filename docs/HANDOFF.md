@@ -138,8 +138,8 @@
   (3) **생성은 키가 있는 PC에서만 된다.** `ELEVENLABS_API_KEY`는 사용자 PC의 Windows 환경변수에만 있다. 클라우드에서는
   분석·코드·프롬프트·대사까지 하고 커밋한 뒤, PC에서 `node scripts/dealer/gen-voice.mjs`와
   `node scripts/sound/gen-sound.mjs sfx <이름…>`/`music <이름>`을 돌린다(둘 다 `--dry`로 먼저 확인).
-- **GitHub 기본 브랜치가 `main`이 아니다.** 원격 기본 브랜치(`origin/HEAD`)는 옛 `ccr-d6694140-gxcpml`이고, 옛
-  `feat/dealer-rules-sound`도 남아 있다. 최신은 `main`이다. 클라우드 세션은 `main`을 체크아웃해서 작업한다.
+- GitHub 기본 브랜치는 `main`이다(2026-10-12에 바꿨다). 옛 `ccr-d6694140-gxcpml`·`feat/dealer-rules-sound`는 `main`에
+  모두 들어 있어 원격·로컬 모두 지웠다. 원격 브랜치는 `main` 하나다.
 
 사용자 답을 기다리는 것:
 
