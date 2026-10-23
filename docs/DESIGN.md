@@ -83,6 +83,13 @@ surface: `src/ui/orientation.ts` (`orientationFor(players)` → `mode`, `seat()`
   at N: N→S, W→E, S→N, E→W; at W: W→S, S→E, E→N, N→W.
 * **Stage** stays at 0° for every turn (no rotation animation); prompt cards, the turn banner,
   toasts, the info popover, close-up cards and the dealer all live on it, so they face S.
+* **Dealer and cards on the Stage (owner review 2026-10-23).** The dealer stands at the stage's
+  left at twice the first size (10u), his bubble opening under him in the left strip. Prompt cards
+  (13.65u, 30 % narrower) and event cards (11.2u, 20 % narrower) sit against the right edge, so no
+  card text is ever under him or his bubble. Stacking: prompt card (z 2) < event card (z 3) <
+  dealer (z 4) < toasts, stamps, the rolled total (z 5) < bubble (z 6) < info popover (z 7); the
+  effects layer and the money stage sit above the whole stage, so he never covers an event
+  animation. The sprites' cut-off legs fade out (baked in `scripts/dealer/pack-atlas.py`).
 * **Panels** keep their pinwheel boxes (layout.ts) but are all upright (0°): E / N / W lay out
   like S (narrow and tall), so 800×450 needs no extra room.
 * **Board.** The top row would print upside-down for the reader at S, so it is printed upright

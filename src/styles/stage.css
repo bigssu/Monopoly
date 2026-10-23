@@ -205,7 +205,11 @@ body > .dice-fly { position: fixed; }
 .st-prompt {
   /* May shrink (the card body then scrolls) so a tall card never spills off the stage. */
   flex: 0 1 auto;
-  width: min(calc(var(--u) * 19.5), 100%);
+  /* 30 % narrower than the first 19.5u and against the stage's right edge, so the card's left edge
+     (8.65u from the stage's left) clears the dealer standing on the left (0.2u + 10u sprite, the
+     figure ends ~8.2–8.8u): no text on a card is ever under him (owner review 2026-10-23). */
+  width: min(calc(var(--u) * 13.65), 100%);
+  align-self: flex-end;
   max-height: 100%;
   min-height: 0;
   display: flex;
@@ -242,9 +246,8 @@ body > .dice-fly { position: fixed; }
   font-size: 1.55em;
   line-height: 1.15;
   color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps on the narrower cards (2026-10-23) rather than ending in an ellipsis. */
+  overflow-wrap: anywhere;
 }
 .pc-body {
   display: flex;
@@ -518,9 +521,8 @@ button.pick-row:active { transform: scale(0.985); background: #FFF6DC; }
 button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; transition-duration: var(--t-press); }
 .pick-ico { width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6); min-width: 26px; min-height: 26px; flex: none; margin-left: calc(var(--u) * 0.2); }
 .pick-name { font-family: var(--font-display); font-size: 1.1em; white-space: nowrap; flex: none; }
-.pick-detail { margin-left: auto; font-weight: 800; color: var(--ink-3); font-size: 0.9em; white-space: nowrap; }
+.pick-detail { margin-left: auto; font-weight: 800; color: var(--ink-3); font-size: 0.9em; text-align: right; line-height: 1.15; }
 .debt-row .pbtn { flex: none; min-width: max(64px, calc(var(--u) * 3.6)); min-height: 48px; padding-block: 4px; font-size: 1em !important; }
-.debt-row .pick-detail { white-space: normal; text-align: right; line-height: 1.15; }
 .debt-row.is-best { background: #FFF6DC; }
 .debt-meter { display: flex; flex-direction: column; gap: calc(var(--u) * 0.15); }
 .dm-bar { height: max(8px, calc(var(--u) * 0.45)); border-radius: var(--r-pill); background: #FDE8E7; overflow: hidden; }
@@ -623,9 +625,11 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
   display: grid;
   place-items: center;
   pointer-events: none;
-  z-index: 4;
 }
-.st-toasts > * { grid-area: 1 / 1; }
+/* No z-index on the layer itself, so its children stack with the dealer (below): an event card (z 3)
+   under him, the toasts, stamps and the rolled total (the event animations, z 5) over him. */
+.st-toasts > * { grid-area: 1 / 1; z-index: 5; }
+.st-toasts > .ev-card { z-index: 3; }
 .st-toast {
   display: inline-flex;
   align-items: center;
@@ -670,8 +674,11 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
 .st-stamp.tone-good { color: var(--success); }
 
 .ev-card {
-  width: min(calc(var(--u) * 14), 76%);
+  /* 20 % narrower and against the right edge, clear of the dealer like the prompt card (above). */
+  width: min(calc(var(--u) * 11.2), 76%);
   height: min(calc(var(--u) * 16), 88%);
+  justify-self: end;
+  margin-right: calc(var(--u) * 0.5);
   perspective: calc(var(--u) * 40);
   pointer-events: auto;
 }
@@ -716,7 +723,7 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
 .st-pop {
   position: absolute;
   inset: 0;
-  z-index: 6;
+  z-index: 7;
   display: none;
   place-items: center;
   border-radius: calc(var(--u) * 0.6);
@@ -756,25 +763,31 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
   left: calc(var(--u) * 0.2);
   /* Below the turn banner and the round line, so the bubble never covers them. */
   top: calc(var(--u) * 3.7);
-  width: max(64px, calc(var(--u) * 5));
+  /* Twice the first size (owner review 2026-10-23). */
+  width: max(128px, calc(var(--u) * 10));
   pointer-events: none;
 }
-/* No stacking context on .dealer: the sprite sits under prompt cards (z 2) and the bubble above
-   cards and reveals (.st-toasts z 4), so a card is never hidden and the line stays readable. */
+/* No stacking context on .dealer, so the sprite and the bubble stack with the stage's layers: the
+   sprite over the prompt card (z 2), the skill result line (z 3) and an event card (z 3), so a card
+   opening beside him never hides him (owner review 2026-10-23); under the toasts, stamps and the
+   rolled total (z 5) and every full-screen effect (.fx-layer, the money stage), so he never covers
+   an event animation. The bubble stays above them all (z 6) so the line stays readable, and opens
+   under him, in the stage's free left strip, so it never covers a card's text either. */
 /* No CSS filter: the talking frames swap the image ~8×/s and a drop-shadow re-rasterised it each time. */
 /* The body takes (dealer/acting.ts) move this layer from the feet: transform only, the stage never repaints. */
-.dealer-body { position: relative; z-index: 1; transform-origin: 50% 100%; will-change: transform; }
+.dealer-body { position: relative; z-index: 4; transform-origin: 50% 100%; will-change: transform; }
 /* One atlas, 4 × 4 cells (Dealer.ts sets the image, relative like every asset, and the cell). */
 .dealer-img { display: block; width: 100%; aspect-ratio: 1; background: no-repeat 0 0 / 400% 400%; }
 /* Under a money cut-in (full-screen dim) the dealer is not visible: drop his layers meanwhile. */
 .is-money-live .dealer { display: none; }
 .dealer-bubble {
   position: absolute;
-  z-index: 5;
-  left: 86%;
-  top: 6%;
+  z-index: 6;
+  /* Under the sprite (its legs fade out from ~84 %), left of the cards' edge at 8.65u. */
+  left: calc(var(--u) * 0.6);
+  top: 90%;
   width: max-content;
-  max-width: calc(var(--u) * 11.5);
+  max-width: calc(var(--u) * 7.8);
   padding: calc(var(--u) * 0.35) calc(var(--u) * 0.6);
   border-radius: calc(var(--u) * 0.7);
   background: #FFFFFF;
@@ -784,7 +797,7 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
   line-height: 1.35;
   box-shadow: var(--sh-2);
   opacity: 0;
-  transform-origin: 0 30%;
+  transform-origin: calc(var(--u) * 3.6) 0;
   transition: opacity var(--t-fast) linear;
   /* Its own small layer for good: popping in and fading out never repaint the stage under it
      (promoted only while animating, it repainted the stage at both ends; gate B, PERFORMANCE.md). */
@@ -793,11 +806,11 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
 .dealer-bubble::before {
   content: '';
   position: absolute;
-  left: calc(var(--u) * -0.35);
-  top: calc(var(--u) * 0.55);
+  left: calc(var(--u) * 3.4);
+  top: calc(var(--u) * -0.35);
   border: calc(var(--u) * 0.22) solid transparent;
-  border-right-color: #FFFFFF;
-  border-left-width: calc(var(--u) * 0.15);
+  border-bottom-color: #FFFFFF;
+  border-top-width: calc(var(--u) * 0.15);
 }
 .dealer-bubble.is-in { opacity: 1; }
 .dealer-bubble.is-out { opacity: 0; }

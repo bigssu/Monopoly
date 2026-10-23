@@ -50,5 +50,8 @@
   그래서 1024 × 512, 4 × 2 칸에 256 px(20 % 축소, 빈 공간 25 %). 디코드 메모리 2.46 → 2.10 MB(판매 컷인 동안만).
   판매 컷인 주인공은 짧은 변의 절반쯤으로 크게 보여, 예전보다 조금 더 확대된다(원본 320 → 256).
 - 딜러 아틀라스는 디코드 메모리가 13 × 0.41 = 5.3 → 4.19 MB로 줄었다. 원본 320 px는 `scripts/dealer/sprites/`(앱에 안 들어감).
+- 2026-10-23부터 딜러를 두 배(스테이지 --u × 10)로 그린다. 1600 × 1000 화면에서 304 CSS px, DPR 2면 약 600 기기 px라
+  256 px 칸은 약 2.4배 늘어나 조금 흐리다. 원본도 320 px라 칸만 키워서는 선명해지지 않는다. 더 선명하게 하려면 PC에서
+  스프라이트를 더 크게 다시 뽑고 칸을 512(아틀라스 2048²)로 올려야 한다. 아직 하지 않았다.
 - 다시 만드는 법: 딜러 `python scripts/dealer/pack-atlas.py`, sob `scripts/dealer/bake-sob.py`(sprite-gen 필요), 동전 띠·머니
   `node scripts/fx/bake-money.mjs`(CHROMIUM_PATH), 아이콘 `node scripts/gen-android-icons.mjs --no-play`.
