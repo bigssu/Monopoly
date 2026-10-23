@@ -45,15 +45,19 @@ describe('Android splash assets', () => {
 });
 
 describe('Android launcher assets', () => {
-  it('uses the selected 256px image and Android density-sized icons', () => {
+  it('uses the selected 256px image and power-of-two icons per density (docs/research/13-image-budget.md)', () => {
     expect(pngSize(path.join(root, 'docs/assets/launcher-mark-256.png'))).toEqual([256, 256]);
     expect(fs.existsSync(path.join(root, 'docs/assets/launcher-mark.svg'))).toBe(false);
     expect(fs.existsSync(path.join(root, 'docs/assets/launcher-mark-1024.png'))).toBe(false);
     expect(pngSize(path.join(root, 'docs/assets/play-icon-512.png'))).toEqual([512, 512]);
-    for (const [density, size] of Object.entries({ mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 })) {
-      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher.png`))).toEqual([size, size]);
-      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher_round.png`))).toEqual([size, size]);
-      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher_foreground.png`))).toEqual([size * 108 / 48, size * 108 / 48]);
+    // The power of two at or below each density's Android size (legacy 48dp, adaptive foreground 108dp).
+    const pot = (px: number): number => 2 ** Math.floor(Math.log2(px));
+    for (const [density, dpi] of Object.entries({ mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 })) {
+      const legacy = pot(48 * dpi);
+      const fg = pot(108 * dpi);
+      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher.png`))).toEqual([legacy, legacy]);
+      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher_round.png`))).toEqual([legacy, legacy]);
+      expect(pngSize(path.join(res, `mipmap-${density}/ic_launcher_foreground.png`))).toEqual([fg, fg]);
     }
   });
 });
