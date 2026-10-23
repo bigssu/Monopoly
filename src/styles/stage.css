@@ -323,10 +323,13 @@ body > .dice-fly { position: fixed; }
 .isl-pips .pip { width: calc(var(--u) * 0.7); height: calc(var(--u) * 0.7); min-width: 12px; min-height: 12px; border-radius: 50%; background: #E2E6EE; }
 .isl-pips .pip.is-on { background: #6EC1E4; box-shadow: 0 0 0 3px #D6EEF8; }
 
-.pc-buttons { display: flex; gap: calc(var(--u) * 0.4); margin-top: calc(var(--u) * 0.6); }
+/* On the narrow card (2026-10-23) buttons whose words cannot fit side by side wrap to a second row
+   instead of breaking a word ("Escap / e Pass"); equal widths otherwise, as before. */
+.pc-buttons { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 0.4); margin-top: calc(var(--u) * 0.6); }
 .pbtn {
   flex: 1;
-  min-width: 0;
+  min-width: min-content;
+  overflow-wrap: normal;
   min-height: max(48px, calc(var(--u) * 2.5));
   padding: calc(var(--u) * 0.15) calc(var(--u) * 0.3);
   display: flex;
@@ -522,7 +525,11 @@ button.pick-row.is-pressed { transform: scale(0.985); background: #FFF6DC; trans
 .pick-ico { width: calc(var(--u) * 1.6); height: calc(var(--u) * 1.6); min-width: 26px; min-height: 26px; flex: none; margin-left: calc(var(--u) * 0.2); }
 .pick-name { font-family: var(--font-display); font-size: 1.1em; white-space: nowrap; flex: none; }
 .pick-detail { margin-left: auto; font-weight: 800; color: var(--ink-3); font-size: 0.9em; text-align: right; line-height: 1.15; }
-.debt-row .pbtn { flex: none; min-width: max(64px, calc(var(--u) * 3.6)); min-height: 48px; padding-block: 4px; font-size: 1em !important; }
+/* On the narrow card a row that cannot fit wraps its Sell button under the text, instead of
+   squeezing the detail to one letter per line. */
+.debt-row { flex-wrap: wrap; row-gap: calc(var(--u) * 0.15); }
+.debt-row .pick-detail { min-width: 5em; }
+.debt-row .pbtn { margin-left: auto; flex: none; min-width: max(64px, calc(var(--u) * 3.6)); min-height: 48px; padding-block: 4px; font-size: 1em !important; }
 .debt-row.is-best { background: #FFF6DC; }
 .debt-meter { display: flex; flex-direction: column; gap: calc(var(--u) * 0.15); }
 .dm-bar { height: max(8px, calc(var(--u) * 0.45)); border-radius: var(--r-pill); background: #FDE8E7; overflow: hidden; }
