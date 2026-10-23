@@ -20,6 +20,7 @@ import {
   type GameState,
   type PlayerId,
 } from '@/engine';
+import { resultParts } from '@/ui/stage/skill';
 import { DEALER_LINES, levelIncludes, SITUATIONS, type DealerLevel, type DealerLine } from './lines';
 
 type DealerSetting = 'off' | DealerLevel;
@@ -49,7 +50,8 @@ const board = (s: GameState) => getBoardInfo(s.settings.spacesPerSide ?? 7).boar
 const REACTIONS = new Set<GameEvent['type']>([
   'DiceRolled', 'PassedStart', 'PropertyBought', 'CannotAfford', 'Built', 'TollPaid', 'TakenOver', 'TakeoverBlocked',
   'CardUsed', 'SentToIsland', 'Escaped', 'FestivalSet', 'TravelGranted', 'BuildingSold', 'PropertySold', 'Bankrupt',
-  'AuctionEnded', 'MoneyChanged', 'DoubleUpRolled', 'Gambled', 'CitySwapped',
+  'AuctionEnded', 'MoneyChanged', 'DoubleUpRolled', 'Gambled', 'CitySwapped', 'Demolished', 'DebtSettled', 'IslandStay',
+  'CardNoEffect',
 ]);
 
 /** Situation for an event, called just before its animation (`when: 'before'`) or after it. */
@@ -84,8 +86,13 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
       return `turn.${vs.players[ev.playerId]!.colorId}`;
     }
     case 'DiceRolled':
+    {
       if (ev.isDouble && ev.consecutiveDoubles >= 3) return 'doubles.three';
-      return ev.isDouble ? 'doubles' : null;
+      if (ev.isDouble) return 'doubles';
+      // Strategy mode: a throw aimed at a band (skill.ts, the same verdict as the result line).
+      const aimed = resultParts(ev);
+      return aimed ? (aimed.hit ? 'aim.hit' : 'aim.miss') : null;
+    }
     case 'PassedStart':
       return ev.landed ? 'pass.start.landed' : 'pass.start';
     case 'PropertyBought':
@@ -113,10 +120,18 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
       return `card.${ev.cardId}`;
     case 'CardUsed':
       return 'card.used';
+    case 'CardNoEffect':
+      return 'card.noEffect';
+    case 'Demolished':
+      return ev.cause === 'typhoon' ? 'demolish.typhoon' : ev.cause === 'quake' ? 'demolish.quake' : null;
+    case 'IslandStay':
+      return 'island.stay';
+    case 'DebtSettled':
+      return 'debt.settled';
     case 'SentToIsland':
       return ev.cause === 'doubles' ? null : 'island.enter';
     case 'Escaped':
-      return ev.method === 'served' ? null : 'island.escape';
+      return ev.method === 'served' ? 'island.served' : 'island.escape';
     case 'FestivalSet':
       if (ev.spaceIndex === null) return null;
       return ev.previous === ev.spaceIndex ? 'festival.grand' : 'festival.set';
@@ -156,7 +171,7 @@ export function situationForEvent(ev: GameEvent, vs: GameState, memo: DealerMemo
     case 'AuctionStarted':
       return 'auction.start';
     case 'AuctionEnded':
-      return ev.winnerId === null ? null : 'auction.end';
+      return ev.winnerId === null ? 'auction.none' : 'auction.end';
     case 'OneAway':
       return 'one.away';
     case 'MoneyChanged':
@@ -224,6 +239,10 @@ export function situationForPrompt(s: GameState): string | null {
       return 'island.advice';
     case 'festival':
       return 'festival.prompt';
+    case 'freeUpgrade':
+      return 'upgrade.pick';
+    case 'auction':
+      return 'auction.bid';
     case 'travel':
       return 'travel.prompt';
     default:

@@ -5,6 +5,10 @@
  * `${situation}.${n}` (1-based) and its voice files are `voice/<id>.ogg` (Korean) and `voice/en/<id>.ogg` (English).
  *
  * Tone: a warm, playful Pixar-style host. Never names (players type them) and never amounts.
+ *
+ * Acting (docs/research/12-dealer-acting.md): every situation has a direction in ACT — Eleven v4
+ * audio tags for emotion and pace, and how loud the take ships. A take may also carry inline tags
+ * (`[gasps] 헉!`) for a change of mood mid-line; the bubble never shows them.
  */
 
 /** Which voice setting first includes the line (each level includes the ones before: min, normal, full). */
@@ -166,6 +170,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['아쉽게도 돈이 조금 모자라요.', "Oh no, you're a little short."],
       ['이번엔 지갑이 허락하지 않네요. 다음에 꼭 사요!', "Your wallet says no this time. Next time!"],
+      ['[sighs] 아깝다… 조금만 더 있었으면 살 수 있었는데!', '[sighs] So close… just a little more and it was yours!'],
     ],
   },
   'buy.done': {
@@ -224,6 +229,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['지금은 참는 게 좋겠어요. 현금이 너무 줄어들어요.', "Hold off for now. You'd run low on cash."],
       ['건물은 다음에 올려도 늦지 않아요. 이번엔 패스!', "You can build later. Pass this time!"],
+      ['음… 공사비가 부담돼요. 비상금은 남겨 둬요!', 'Hmm… that build is steep. Keep a little rainy-day money!'],
     ],
   },
   'build.done': {
@@ -292,6 +298,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['이 땅, 인수할 수 있어요! 저라면 빼앗아 오겠어요!', "You can take over this land! I'd grab it!"],
       ['기회예요! 인수하면 상대의 수입을 막을 수 있어요!', 'Your shot! Take it over and cut their income!'],
+      ['[whispers] 쉿… 이 땅, 지금 가져오면 딱이에요!', "[whispers] Psst… grab this one now, it's perfect!"],
     ],
   },
   'takeover.advice.no': {
@@ -301,6 +308,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['인수는 비싸요. 이번엔 참아 볼까요?', "Takeovers are pricey. Maybe hold back?"],
       ['저라면 이번엔 넘기겠어요. 현금이 더 중요해요.', "I'd pass. Cash matters more right now."],
+      ['욕심은 나지만… 지금은 지갑을 지킬 때예요.', 'Tempting… but right now, guard your wallet.'],
     ],
   },
   'takeover.shield': {
@@ -316,6 +324,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['인수 성공! 이 땅의 주인이 바뀌었어요!', 'Takeover! This land has a new owner!'],
       ['쾅! 땅을 통째로 사 버렸어요!', 'Boom! Bought the whole plot!'],
+      ['[gasps] 세상에! 남의 땅을 꿀꺽했어요!', '[gasps] No way! They just swallowed that city whole!'],
       ['이런 반전이! 주인이 바뀌었어요!', 'What a twist! A new owner!'],
     ],
   },
@@ -347,8 +356,24 @@ export const SITUATIONS: Record<string, Situation> = {
   'card.to-travel': { level: 'normal', priority: P.event, expr: 'present', takes: [['자유여행 칸으로 가요! 다음 턴엔 어디든 갈 수 있어요!', 'Off to Travel! Next turn, go anywhere!']] },
   'card.to-festival': { level: 'normal', priority: P.event, expr: 'cheer', takes: [['축제 칸으로 출발! 내 도시에서 축제를 열어요!', 'To the Festival! Throw a party in your city!']] },
   'card.bank-dividend': { level: 'normal', priority: P.event, expr: 'cheer', takes: [['은행에서 배당금이 들어왔어요!', 'The bank paid a dividend!']] },
-  'card.lottery': { level: 'normal', priority: P.event, expr: 'laugh', takes: [['복권 당첨! 오늘 대박이에요!', 'Lottery win! Jackpot day!']] },
-  'card.fine': { level: 'normal', priority: P.event, expr: 'sad', takes: [['벌금이에요… 다음부턴 조심해요!', 'A fine… be careful next time!']] },
+  'card.lottery': {
+    level: 'normal',
+    priority: P.event,
+    expr: 'laugh',
+    takes: [
+      ['복권 당첨! 오늘 대박이에요!', 'Lottery win! Jackpot day!'],
+      ['[gasps] 이게 웬 횡재! 복권이 맞았어요!', '[gasps] What a windfall! The lottery hit!'],
+    ],
+  },
+  'card.fine': {
+    level: 'normal',
+    priority: P.event,
+    expr: 'sad',
+    takes: [
+      ['벌금이에요… 다음부턴 조심해요!', 'A fine… be careful next time!'],
+      ['[sighs] 딱 걸렸어요. 벌금을 내야 해요.', '[sighs] Caught red-handed. Time to pay the fine.'],
+    ],
+  },
   'card.repairs': { level: 'normal', priority: P.event, expr: 'nervous', takes: [['건물 수리비가 나왔어요. 건물이 많을수록 비싸요!', 'Repair bill! More buildings, more cost!']] },
   'card.birthday': { level: 'normal', priority: P.event, expr: 'cheer', takes: [['생일 축하해요! 모두에게 선물을 받아요!', 'Happy birthday! Gifts from everyone!']] },
   'card.charity': { level: 'normal', priority: P.event, expr: 'present', takes: [['마음 따뜻한 기부! 모두에게 조금씩 나눠 줘요.', 'A kind donation! Share a little with everyone.']] },
@@ -367,6 +392,51 @@ export const SITUATIONS: Record<string, Situation> = {
   'card.festival-invite': { level: 'normal', priority: P.event, expr: 'cheer', takes: [['축제 초대장! 축제가 내 도시로 옮겨와요!', 'Festival invite! The festival moves to your city!']] },
   'card.hub-bonus': { level: 'normal', priority: P.event, expr: 'cheer', takes: [['세계 일주 보너스! 허브가 많을수록 더 받아요!', 'World tour bonus! More hubs, more money!']] },
   express: { level: 'normal', priority: P.info, expr: 'laugh', takes: [['급행 발동! 두 배로 달려요!', 'Express on! Double the distance!']] },
+  'card.noEffect': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'thinking',
+    takes: [
+      ['어라? 이번 카드는 아무 일도 일어나지 않네요.', 'Huh? This card does nothing this time.'],
+      ['카드가 허탕이에요! 그래도 손해는 없어요.', 'A dud card! At least nothing was lost.'],
+    ],
+  },
+  'demolish.typhoon': {
+    level: 'normal',
+    priority: P.event,
+    expr: 'sad',
+    takes: [
+      ['[gasps] 휘이잉… 태풍에 건물이 한 층 날아갔어요!', '[gasps] Whoosh… the typhoon blew a floor away!'],
+      ['아이고, 공들인 건물이 낮아졌어요…', 'Oh dear, that hard-won building got smaller…'],
+    ],
+  },
+  'demolish.quake': {
+    level: 'normal',
+    priority: P.event,
+    expr: 'surprised',
+    takes: [
+      ['우르르 쾅! 지진에 건물이 무너졌어요!', 'Rumble, crash! The quake knocked a building down!'],
+      ['흔들흔들… 건물이 한 층 내려앉았어요!', 'Shake, shake… a building lost a floor!'],
+    ],
+  },
+  'aim.hit': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'cheer',
+    takes: [
+      ['노린 대로 나왔어요! 손맛 최고!', 'Right where you aimed! What a touch!'],
+      ['명중! 주사위를 마음대로 다루네요!', 'Bullseye! You have those dice on a leash!'],
+    ],
+  },
+  'aim.miss': {
+    level: 'full',
+    priority: P.quip,
+    expr: 'laugh',
+    takes: [
+      ['앗, 노린 데서 살짝 빗나갔어요!', 'Oops, just off the mark!'],
+      ['주사위가 말을 안 듣네요! 다음엔 초록 띠를 노려요.', "The dice didn't listen! Aim for the green band next time."],
+    ],
+  },
 
   // --- Corners & special spaces ----------------------------------------------------------------
   'island.enter': {
@@ -388,6 +458,15 @@ export const SITUATIONS: Record<string, Situation> = {
       ['저라면 더블을 노려 보겠어요. 행운을 빌어요!', "I'd go for doubles. Good luck!"],
     ],
   },
+  'island.stay': {
+    level: 'full',
+    priority: P.quip,
+    expr: 'sad',
+    takes: [
+      ['아직 섬이에요… 코코넛이나 하나 더 먹어요.', 'Still on the island… have another coconut.'],
+      ['이번에도 더블이 안 나왔네요. 조금만 더 버텨요!', 'No doubles again. Hang in there a little longer!'],
+    ],
+  },
   'island.escape': {
     level: 'normal',
     priority: P.event,
@@ -395,6 +474,16 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['탈출 성공! 다시 여행을 떠나요!', 'Escaped! Back on the road!'],
       ['드디어 섬을 떠나요! 안녕, 야자수야!', 'Finally leaving! Bye-bye, palm trees!'],
+      ['[laughs] 뗏목 완성! 섬 생활은 여기까지예요!', "[laughs] Raft's ready! Island life is over!"],
+    ],
+  },
+  'island.served': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'present',
+    takes: [
+      ['세 턴을 꼬박 채웠어요. 이제 자유예요!', 'Three turns served. You are free!'],
+      ['휴가 끝! 배가 데리러 왔어요!', "Vacation's over! The boat is here for you!"],
     ],
   },
   'festival.prompt': {
@@ -413,6 +502,7 @@ export const SITUATIONS: Record<string, Situation> = {
     takes: [
       ['빵빠레! 축제가 시작됐어요! 이 도시는 통행료 두 배!', 'Fanfare! The festival begins — double toll here!'],
       ['폭죽이 팡팡! 축제 도시가 정해졌어요!', 'Fireworks! The festival city is set!'],
+      ['둥둥둥! 이 도시가 오늘 밤 축제의 주인공이에요!', 'Boom, boom, boom! Tonight this city is the star!'],
     ],
   },
   'travel.granted': {
@@ -433,8 +523,24 @@ export const SITUATIONS: Record<string, Situation> = {
       ['저라면 아직 주인 없는 좋은 땅으로 가겠어요!', "I'd fly to a good unowned plot!"],
     ],
   },
-  'tax.pay': { level: 'normal', priority: P.info, expr: 'sad', takes: [['세무서예요. 세금은 피할 수 없죠!', "Tax office. You can't escape taxes!"]] },
-  'donation.pay': { level: 'normal', priority: P.info, expr: 'present', takes: [['기부함에 쏙! 나중에 누군가 받아 가요.', 'Into the donation box! Someone will collect it later.']] },
+  'tax.pay': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'sad',
+    takes: [
+      ['세무서예요. 세금은 피할 수 없죠!', "Tax office. You can't escape taxes!"],
+      ['[sighs] 세금 낼 시간이에요. 아깝지만 어쩔 수 없죠.', "[sighs] Tax time. It stings, but that's life."],
+    ],
+  },
+  'donation.pay': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'present',
+    takes: [
+      ['기부함에 쏙! 나중에 누군가 받아 가요.', 'Into the donation box! Someone will collect it later.'],
+      ['기부함이 점점 무거워져요. 누가 가져갈까요?', 'The donation box is getting heavy. Who will claim it?'],
+    ],
+  },
 
   // --- Auctions, debt, bankruptcy -------------------------------------------------------------
   'auction.start': {
@@ -455,6 +561,21 @@ export const SITUATIONS: Record<string, Situation> = {
       ['경매 종료! 새 주인을 축하해요!', 'Auction over! Congrats to the new owner!'],
     ],
   },
+  'auction.bid': {
+    level: 'full',
+    priority: P.advice,
+    expr: 'thinking',
+    takes: [
+      ['더 부를까요, 여기서 멈출까요? 너무 무리하진 마세요!', "Bid higher or stop here? Don't overreach!"],
+      ['경매는 눈치 싸움! 꼭 필요한 땅인지 생각해 봐요.', 'Auctions are a staring contest! Do you really need this one?'],
+    ],
+  },
+  'auction.none': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'thinking',
+    takes: [['아무도 사지 않았네요. 이 땅은 다음 주인을 기다려요.', 'Nobody bought it. This land waits for its next owner.']],
+  },
   'debt.start': {
     level: 'min',
     priority: P.big,
@@ -464,7 +585,24 @@ export const SITUATIONS: Record<string, Situation> = {
       ['위기예요! 팔 수 있는 걸 골라 주세요.', 'Trouble! Choose something to sell.'],
     ],
   },
-  'sell.done': { level: 'normal', priority: P.info, expr: 'sad', takes: [['아까운 자산을 팔았어요… 힘내요!', 'Sold a precious asset… hang in there!']] },
+  'sell.done': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'sad',
+    takes: [
+      ['아까운 자산을 팔았어요… 힘내요!', 'Sold a precious asset… hang in there!'],
+      ['[sighs] 정든 건물과 작별이에요… 다시 지으면 돼요!', '[sighs] Goodbye, old building… you can always build again!'],
+    ],
+  },
+  'debt.settled': {
+    level: 'normal',
+    priority: P.event,
+    expr: 'present',
+    takes: [
+      ['[sighs] 휴우, 빚을 다 갚았어요! 다시 시작해 봐요.', "[sighs] Phew, the debt is paid! Let's start fresh."],
+      ['위기 탈출! 아직 게임은 끝나지 않았어요!', 'Crisis over! The game is not done yet!'],
+    ],
+  },
   bankrupt: {
     level: 'min',
     priority: P.end,
@@ -506,7 +644,15 @@ export const SITUATIONS: Record<string, Situation> = {
       ['얼른요, 얼른! 시간이 도망가요!', 'Quick, quick! Time is running away!'],
     ],
   },
-  'timer.auto': { level: 'normal', priority: P.info, expr: 'present', takes: [['시간이 다 돼서 제가 안전한 쪽으로 골랐어요.', 'Time is up, so I picked the safe choice.']] },
+  'timer.auto': {
+    level: 'normal',
+    priority: P.info,
+    expr: 'present',
+    takes: [
+      ['시간이 다 돼서 제가 안전한 쪽으로 골랐어요.', 'Time is up, so I picked the safe choice.'],
+      ['땡! 시간 초과라서 제가 대신 골랐어요.', 'Ding! Out of time, so I chose for you.'],
+    ],
+  },
   'cpu.thinking': {
     level: 'full',
     priority: P.quip,
@@ -586,6 +732,15 @@ export const SITUATIONS: Record<string, Situation> = {
       ['짠! 보관 카드 사용! 이럴 때 쓰려고 모아 뒀죠!', 'Ta-da! Saved card used — that is what it was for!'],
     ],
   },
+  'upgrade.pick': {
+    level: 'normal',
+    priority: P.advice,
+    expr: 'point',
+    takes: [
+      ['공짜 공사예요! 통행료가 가장 크게 오를 도시를 골라요!', 'Free construction! Pick the city whose toll grows the most!'],
+      ['어느 도시를 키울까요? 사람들이 자주 오는 곳이 좋아요!', 'Which city should grow? One people land on often!'],
+    ],
+  },
 
   // --- Rule levels (보통 / 고급) -------------------------------------------------------------------
   'late.toll': {
@@ -640,7 +795,10 @@ export const SITUATIONS: Record<string, Situation> = {
     level: 'normal',
     priority: P.info,
     expr: 'surprised',
-    takes: [['허브가 인기 폭발! 다음 통행료는 더 비싸져요!', 'The hub is booming! Its next toll goes up!']],
+    takes: [
+      ['허브가 인기 폭발! 다음 통행료는 더 비싸져요!', 'The hub is booming! Its next toll goes up!'],
+      ['손님이 끊이질 않아요! 허브 통행료가 또 올라요!', 'Visitors keep coming! The hub toll rises again!'],
+    ],
   },
   'doubleup.offer': {
     level: 'normal',
@@ -756,14 +914,152 @@ export const SITUATIONS: Record<string, Situation> = {
   'win.lastStanding': { level: 'min', priority: P.end, expr: 'trophy', takes: [['마지막까지 살아남은 진정한 승자! 축하합니다!', 'The last one standing — a true champion!']] },
 };
 
+/**
+ * How loud a take ships (gen-voice.mjs loudness target): `soft` −21 LUFS (asides, advice, sorrow),
+ * `mid` −18 (the default), `loud` −15 (big moments). Normalising every take to one level flattened
+ * a shout and a whisper to the same volume.
+ */
+export type Loud = 'soft' | 'mid' | 'loud';
+
+/**
+ * The direction for each situation (docs/research/12-dealer-acting.md): Eleven v4 audio tags put
+ * before every take — emotion first, then pace — and its loudness. Exact situation first, then its
+ * family (`turn.*`, `card.*`, `news.*`, `explain.*`, `win.*`). Contrast is the point: quips are
+ * quick and quiet, advice unhurried, results punchy, endings broad.
+ */
+const ACT: Record<string, readonly [string, Loud]> = {
+  'game.start': ['[excited, warm, like a game-show host]', 'loud'],
+  'turn.*': ['[playful, upbeat, snappy]', 'mid'],
+  'roll.nudge': ['[playful, quietly, teasing]', 'soft'],
+  'gauge.hint': ['[friendly, quietly, unhurried]', 'soft'],
+  doubles: ['[excited, snappy]', 'loud'],
+  'doubles.three': ['[startled, then sympathetic, drawn out]', 'loud'],
+  'pass.start': ['[cheerful, bouncy]', 'mid'],
+  'pass.start.landed': ['[amazed, excited]', 'loud'],
+  'buy.advice.yes': ['[confident, encouraging, unhurried]', 'soft'],
+  'buy.advice.no': ['[thoughtful, gently, slowly]', 'soft'],
+  'buy.cant': ['[let down, softly]', 'soft'],
+  'buy.done': ['[excited, proud]', 'mid'],
+  'monopoly.done': ['[amazed, powerful, excited]', 'loud'],
+  'one.away': ['[anxious, urgent, rushed]', 'loud'],
+  'build.advice.yes': ['[thoughtful, encouraging]', 'soft'],
+  'build.advice.no': ['[thoughtful, gently, slowly]', 'soft'],
+  'build.done': ['[cheerful, proud, bouncy]', 'mid'],
+  'landmark.done': ['[amazed, proud, booming]', 'loud'],
+  'toll.small': ['[matter-of-fact, friendly]', 'mid'],
+  'toll.big': ['[startled, disbelief, drawn out]', 'loud'],
+  'toll.waived': ['[relieved, playful]', 'mid'],
+  'toll.receive': ['[content, playful, laughs softly]', 'mid'],
+  'streak.toll': ['[laughs] [excited, speedy]', 'loud'],
+  'takeover.advice.yes': ['[confident, mischievous]', 'soft'],
+  'takeover.advice.no': ['[thoughtful, cautious, slowly]', 'soft'],
+  'takeover.shield': ['[anxious, warning]', 'mid'],
+  'takeover.done': ['[startled, dramatic]', 'loud'],
+  'takeover.blocked': ['[laughs] [triumphant]', 'loud'],
+  'card.draw': ['[curious, building anticipation]', 'mid'],
+  'card.*': ['[lively, expressive]', 'mid'],
+  'card.to-island': ['[let down, sympathetic]', 'mid'],
+  'card.fine': ['[let down, softly]', 'mid'],
+  'card.repairs': ['[anxious, a little rushed]', 'mid'],
+  'card.back-three': ['[startled, playful]', 'mid'],
+  'card.typhoon': ['[dramatic, urgent]', 'loud'],
+  'card.random-jump': ['[amazed, playful]', 'mid'],
+  'card.lottery': ['[excited, laughs]', 'loud'],
+  'card.welfare': ['[excited, laughs]', 'loud'],
+  'card.noEffect': ['[confused, then shrugging, softly]', 'soft'],
+  'card.used': ['[proud, sly]', 'mid'],
+  'card.choice': ['[curious, playful]', 'mid'],
+  'card.swap': ['[mischievous, excited]', 'mid'],
+  'card.raid': ['[mischievous, laughs]', 'mid'],
+  express: ['[excited, speedy]', 'mid'],
+  'demolish.typhoon': ['[sympathetic, drawn out]', 'mid'],
+  'demolish.quake': ['[startled, dramatic]', 'loud'],
+  'aim.hit': ['[impressed, excited]', 'mid'],
+  'aim.miss': ['[playful, teasing, quietly]', 'soft'],
+  'island.enter': ['[sympathetic, slowly]', 'mid'],
+  'island.stay': ['[sympathetic, quietly]', 'soft'],
+  'island.advice': ['[thoughtful, calm]', 'soft'],
+  'island.escape': ['[relieved, excited]', 'mid'],
+  'island.served': ['[content, friendly]', 'mid'],
+  'festival.prompt': ['[warm, inviting]', 'soft'],
+  'festival.set': ['[excited, celebratory]', 'loud'],
+  'festival.grand': ['[amazed, booming]', 'loud'],
+  'travel.granted': ['[excited, adventurous]', 'mid'],
+  'travel.prompt': ['[curious, inviting]', 'soft'],
+  'tax.pay': ['[sighs] [resigned, dry]', 'mid'],
+  'donation.pay': ['[warm, gently]', 'mid'],
+  'auction.start': ['[like an auctioneer, energetic]', 'loud'],
+  'auction.bid': ['[thoughtful, hushed]', 'soft'],
+  'auction.end': ['[like an auctioneer, triumphant, snappy]', 'loud'],
+  'auction.none': ['[thoughtful, softly]', 'soft'],
+  'debt.start': ['[anxious, urgent]', 'loud'],
+  'debt.settled': ['[relieved, warm]', 'mid'],
+  'sell.done': ['[sad, softly]', 'soft'],
+  bankrupt: ['[sad, slowly, heartfelt]', 'mid'],
+  'round.start': ['[upbeat, snappy]', 'soft'],
+  'round.final': ['[tense, dramatic]', 'loud'],
+  'round.last': ['[tense, dramatic, slowly]', 'loud'],
+  'late.toll': ['[tense, warning]', 'loud'],
+  'final.round': ['[tense, dramatic]', 'loud'],
+  'timer.urgent': ['[anxious, rushed]', 'loud'],
+  'timer.auto': ['[calm, reassuring]', 'soft'],
+  'cpu.thinking': ['[curious, quietly, playful]', 'soft'],
+  'land.own': ['[content, relaxed, softly]', 'soft'],
+  'cash.low': ['[worried, hushed]', 'mid'],
+  'leader.change': ['[amazed, excited]', 'loud'],
+  'use.pass.yes': ['[confident, encouraging]', 'soft'],
+  'use.pass.no': ['[thoughtful, calm]', 'soft'],
+  'use.shield': ['[urgent, anxious]', 'loud'],
+  'hub.grow': ['[impressed, lively]', 'mid'],
+  'doubleup.offer': ['[mischievous, building anticipation]', 'mid'],
+  'doubleup.win': ['[excited, triumphant]', 'loud'],
+  'doubleup.lose': ['[sympathetic, let down]', 'mid'],
+  'target.pick': ['[mischievous, conspiratorial]', 'soft'],
+  'upgrade.pick': ['[encouraging, friendly]', 'soft'],
+  'news.*': ['[like a news anchor, urgent, excited]', 'loud'],
+  'bonus.card': ['[excited, snappy]', 'mid'],
+  'comeback.offer': ['[encouraging, warm, hopeful]', 'mid'],
+  'swap.pick': ['[mischievous, conspiratorial]', 'soft'],
+  'swap.done': ['[amazed, dramatic]', 'loud'],
+  'gamble.advice.roll': ['[mischievous, daring]', 'soft'],
+  'gamble.advice.pay': ['[calm, cautious]', 'soft'],
+  'gamble.win': ['[excited, triumphant]', 'loud'],
+  'gamble.lose': ['[sympathetic, laughs softly]', 'mid'],
+  'winback.advice': ['[encouraging, determined]', 'soft'],
+  'winback.done': ['[proud, triumphant]', 'loud'],
+  'jackpot.win': ['[amazed, shouting with joy]', 'loud'],
+  'notice.warn': ['[urgent, warning, dramatic]', 'loud'],
+  'notice.broken': ['[relieved, excited]', 'loud'],
+  'block.advice': ['[urgent, conspiratorial]', 'mid'],
+  'block.done': ['[triumphant, snappy]', 'loud'],
+  'invest.prompt': ['[thoughtful, encouraging]', 'soft'],
+  'invest.done': ['[cheerful, proud]', 'mid'],
+  forecast: ['[curious, informative]', 'mid'],
+  'chase.advice': ['[encouraging, sly]', 'soft'],
+  'explain.*': ['[warm, clear, unhurried, like a friendly teacher]', 'mid'],
+  'win.*': ['[triumphant, booming, celebratory]', 'loud'],
+};
+
+/** The direction of `situation` (exact, then its family). */
+export function actFor(situation: string): readonly [string, Loud] | undefined {
+  return ACT[situation] ?? ACT[`${situation.split('.')[0]}.*`];
+}
+
+/** What the bubble shows: the take without its inline audio tags. */
+const shown = (text: string): string => text.replace(/\[[^\]]*\]\s*/g, '').replace(/\s{2,}/g, ' ').trim();
+
 export interface DealerLine {
   id: string;
   situation: string;
   level: DealerLevel;
   priority: number;
   expr: DealerExpr;
+  /** What the bubble shows. */
   ko: string;
   en: string;
+  /** What the voice is recorded from: the direction's tags + the take with its inline tags. */
+  say: { ko: string; en: string };
+  loud: Loud;
   /** Recorded voices ship in both languages (`public/voice/<id>.ogg`, `public/voice/en/<id>.ogg`); false = shown as text only (VOICE_PENDING). */
   voice: boolean;
 }
@@ -782,7 +1078,9 @@ export const VOICE_PENDING: ReadonlySet<string> = new Set([]);
 export const DEALER_LINES: readonly DealerLine[] = Object.entries(SITUATIONS).flatMap(([situation, s]) =>
   s.takes.map(([ko, en], k) => {
     const id = `${situation}.${k + 1}`;
-    return { id, situation, level: s.level, priority: s.priority, expr: s.expr, ko, en, voice: !VOICE_PENDING.has(id) };
+    const [tags, loud] = actFor(situation) ?? ['', 'mid'];
+    const say = { ko: `${tags} ${ko}`.trim(), en: `${tags} ${en}`.trim() };
+    return { id, situation, level: s.level, priority: s.priority, expr: s.expr, ko: shown(ko), en: shown(en), say, loud, voice: !VOICE_PENDING.has(id) };
   }),
 );
 

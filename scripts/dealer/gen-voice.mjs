@@ -8,6 +8,8 @@
  *   node scripts/dealer/gen-voice.mjs --dry                 # what would be recorded, no key needed
  *   ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs  # record it
  *   ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs --all   # re-record every line (all credits)
+ *   ELEVENLABS_API_KEY=… node scripts/dealer/gen-voice.mjs --only id,id   # new takes of these lines (both languages)
+ *   ELEVENLABS_API_KEY=… node scripts/dealer/check-voice.mjs       # transcribe every take, list the ones that say something else
  *
  * What gets recorded, per language: every line in VOICE_PENDING, every voiced line whose text no
  * longer matches scripts/dealer/voice-texts.json / voice-texts-en.json (the text each shipped file
@@ -36,6 +38,8 @@ const CONCURRENCY = 4;
 
 const all = process.argv.includes('--all') || process.argv.includes('--force');
 const dry = process.argv.includes('--dry');
+const onlyAt = process.argv.indexOf('--only');
+const only = new Set(onlyAt > 0 ? (process.argv[onlyAt + 1] ?? '').split(',').filter(Boolean) : []);
 const key = process.env.ELEVENLABS_API_KEY;
 
 // The catalog is TypeScript: load it through tsx (a dev dependency of the project).
@@ -43,17 +47,18 @@ const json = execFileSync(process.execPath, ['--import', 'tsx', '-e', "import('.
   cwd: ROOT,
   encoding: 'utf8',
 });
-/** @type {{ id: string, ko: string, en: string, voice: boolean }[]} */
+/** @type {{ id: string, say: { ko: string, en: string }, loud: 'soft' | 'mid' | 'loud', voice: boolean }[]} */
 const lines = JSON.parse(json);
 const ids = new Set(lines.map((l) => l.id));
 console.log(`${lines.length} lines in the catalog.`);
 
 /** Record what one language is missing; returns the ids it wrote. */
 async function record({ lang, voice, out, texts: TEXTS, cache: CACHE }) {
-  const text = (l) => l[lang];
+  // The recorded script: the line's direction (audio tags) + its text (lines.ts ACT).
+  const text = (l) => l.say[lang];
   const recorded = existsSync(TEXTS) ? JSON.parse(readFileSync(TEXTS, 'utf8')) : {};
   const reason = (l) =>
-    all ? 'all' : !l.voice ? 'pending' : recorded[l.id] !== text(l) ? 'text changed' : !existsSync(join(out, `${l.id}.ogg`)) ? 'file missing' : null;
+    all ? 'all' : only.has(l.id) ? 'retake' : !l.voice ? 'pending' : recorded[l.id] !== text(l) ? 'text changed' : !existsSync(join(out, `${l.id}.ogg`)) ? 'file missing' : null;
   const todo = lines.filter((l) => reason(l));
   const chars = todo.reduce((a, l) => a + text(l).length, 0);
   console.log(`[${lang}] ${todo.length} to record (${chars} characters).`);
@@ -94,7 +99,7 @@ async function record({ lang, voice, out, texts: TEXTS, cache: CACHE }) {
   }
 
   // 1. Fetch (a cached raw take of the same text is reused, unless --all).
-  const fetchList = todo.filter((l) => all || !existsSync(join(CACHE, `${l.id}.mp3`)) || cachedText(l.id) !== text(l));
+  const fetchList = todo.filter((l) => all || only.has(l.id) || !existsSync(join(CACHE, `${l.id}.mp3`)) || cachedText(l.id) !== text(l));
   let fetched = 0;
   const queue = [...fetchList];
   await Promise.all(
@@ -111,7 +116,7 @@ async function record({ lang, voice, out, texts: TEXTS, cache: CACHE }) {
   const fresh = new Set();
   for (const l of todo) {
     const file = join(out, `${l.id}.ogg`);
-    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(CACHE, `${l.id}.mp3`), '-af', TRIM, ...ENCODE, ...EXACT, `${file}.tmp.ogg`]);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(CACHE, `${l.id}.mp3`), '-af', `${TRIM},loudnorm=I=${LUFS[l.loud]}:TP=-1.5:LRA=11`, ...ENCODE, ...EXACT, `${file}.tmp.ogg`]);
     renameSync(`${file}.tmp.ogg`, file);
     fresh.add(l.id);
     recorded[l.id] = text(l);
@@ -128,7 +133,9 @@ async function record({ lang, voice, out, texts: TEXTS, cache: CACHE }) {
   return fresh;
 }
 
-const TRIM = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.08,areverse,loudnorm=I=-18:TP=-1.5:LRA=11';
+const TRIM = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.08,areverse';
+// Loudness by the line's direction (lines.ts `Loud`): a whisper ships quieter than a shout.
+const LUFS = { soft: -21, mid: -18, loud: -15 };
 const ENCODE = ['-ac', '1', '-ar', '24000', '-c:a', 'libopus', '-b:a', '20k', '-application', 'voip'];
 // Byte-identical output for identical input: no encoder/version metadata, no random stream serial.
 const EXACT = ['-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-serial_offset', '1'];

@@ -592,19 +592,21 @@ const DEBT = `s.players[me].position = 12; s.players[me].cash = 280; s.propertie
 
 /**
  * The sad sprite's lower eyelids (fractions of the sprite; scenes.ts SAD_EYES, measured on
- * public/dealer/sad.webp). In a sob frame the rigid head, and so the lids, sit SOB.headDy[phase]
+ * scripts/dealer/sprites/sad.webp). In a sob frame the rigid head, and so the lids, sit SOB.headDy[phase]
  * sprite px lower (docs/MONEY-EVENTS.md §14.5).
  */
 const EYES = [{ x: 0.405, y: 0.398 }, { x: 0.548, y: 0.374 }];
 const lidDy = (phase: number): number => SOB.headDy[phase]! / SOB.cell;
-/** The sob phase a probe saw (cell p of n sits at background-position p / (n − 1)). */
-const phaseOf = (p: CryProbe): number => Math.round((p.pos / 100) * (SOB.cells - 1));
+/** The sob phase a probe saw (scenes.ts sobAt: tile (col, row) sits at background-position col·tile / (sheet − tile)). */
+const tileOf = (pos: number, sheet: number): number => Math.round((pos / 100) * ((sheet - SOB.tile) / SOB.tile));
+const phaseOf = (p: CryProbe): number => tileOf(p.posY, SOB.sheetH) * SOB.cols + tileOf(p.pos, SOB.sheetW);
 
 interface CryProbe {
   /** The sob sheet (background-image). */
   src: string;
-  /** background-position x (%): the sheet cell on show is `phaseOf`. */
+  /** background-position x / y (%): the sheet tile on show is `phaseOf`. */
   pos: number;
+  posY: number;
   /** Sprite box on screen (px). */
   w: number;
   /** Tear streams: top / bottom centre relative to the sprite box, and grown (> 0 px tall). */
@@ -627,6 +629,7 @@ function cryProbe(): CryProbe | null {
   return {
     src: cs.backgroundImage,
     pos: parseFloat(cs.backgroundPositionX),
+    posY: parseFloat(cs.backgroundPositionY),
     w: r.width,
     streams: [...document.querySelectorAll('.money-stage .mh-stream')].map(rel).map((q) => ({ x: q.x, y: q.y, yb: q.yb, h: q.h })),
     drops: [...document.querySelectorAll('.money-stage .mh-tear')].map(rel).filter((q) => q.o > 0.05).map((q) => ({ x: q.x, y: q.cy })),

@@ -14,7 +14,7 @@ const run = (n: number, sobs: Sob[], start = 0): number[] => Array.from({ length
 const runs = (ps: number[]): number[] => ps.reduce<number[]>((a, p, k) => (k && p === ps[k - 1] ? (a[a.length - 1]!++, a) : [...a, 1]), []);
 
 describe('sob sheet', () => {
-  it('6 cells of 320 px; headDy per phase, measured by the bake (the head is rigid, it only moves)', () => {
+  it('6 phases of the 320 px still; headDy per phase, measured by the bake (the head is rigid, it only moves)', () => {
     expect(SOB.cells).toBe(6);
     expect(SOB.cell).toBe(320);
     expect(SOB.headDy).toHaveLength(SOB.cells);
@@ -22,13 +22,19 @@ describe('sob sheet', () => {
     expect(Math.max(...SOB.headDy)).toBeGreaterThan(0);
     expect(Math.min(...SOB.headDy)).toBeLessThan(0);
     for (const d of SOB.headDy) expect(Math.abs(d) / SOB.cell).toBeLessThan(0.05);
-    // The committed sheet is the 6-cell strip (RIFF WebP, VP8X canvas 1920 × 320 with alpha).
+    // The committed sheet: power-of-two sides (RIFF WebP, VP8X canvas 1024 × 512 with alpha), the 6 phases in a
+    // 4 × 2 grid of 256 px tiles (the still shrunk no more than 30 %), no more than 40 % of it empty.
     const b = readFileSync(`public/${SOB_SHEET}`);
     expect(b.subarray(0, 4).toString()).toBe('RIFF');
     expect(b.subarray(12, 16).toString()).toBe('VP8X');
     expect(b[20]! & 0x10, 'alpha').toBeTruthy();
-    expect(1 + b.readUIntLE(24, 3)).toBe(SOB.cells * SOB.cell);
-    expect(1 + b.readUIntLE(27, 3)).toBe(SOB.cell);
+    expect(1 + b.readUIntLE(24, 3)).toBe(SOB.sheetW);
+    expect(1 + b.readUIntLE(27, 3)).toBe(SOB.sheetH);
+    for (const v of [SOB.sheetW, SOB.sheetH]) expect(v & (v - 1)).toBe(0);
+    expect(SOB.cols * SOB.tile).toBeLessThanOrEqual(SOB.sheetW);
+    expect(Math.ceil(SOB.cells / SOB.cols) * SOB.tile).toBeLessThanOrEqual(SOB.sheetH);
+    expect(1 - (SOB.cells * SOB.tile ** 2) / (SOB.sheetW * SOB.sheetH)).toBeLessThan(0.4);
+    expect(SOB.tile / SOB.cell).toBeGreaterThanOrEqual(0.7);
   });
 });
 

@@ -5,7 +5,8 @@
  *   src/content/fx/sprites-money.ts MONEY_SPRITES → headless Chromium raster (DPR 2 · k)
  *   → alpha trim (fixed-box sprites keep their whole cell) → MaxRects pack (pad 2, ≤ 1024)
  *   → ONE WebP sheet public/fx/money.webp + public/fx/money.json
- *   + standalone repeatable tiles public/fx/money-tile-<name>.webp (sprites with `tile: true`)
+ *   + the repeatable tiles (sprites with `tile: true`) side by side in one power-of-two strip,
+ *     public/fx/money-tiles.webp: TILE_SLOTS slots of TILE_W x TILE_H, used with repeat-y (each slot is a column)
  *   + src/content/fx/money-manifest.ts (typed names / files) + docs/assets/money-contact-sheet.png
  *
  * The money atlas is separate from the canvas-VFX atlases (atlas-color / atlas-mask): only the money
@@ -44,6 +45,12 @@ for (const s of SPRITES) {
     frames.push({ key: `${s.name}/${i}`, name: s.name, svg, sw, sh, edgeOk: !!s.edgeOk, fixedBox: !!s.fixedBox, tile: !!s.tile && i === 0 });
   }
 }
+
+/** The tile strip: power-of-two slots and sheet (docs/research/13-image-budget.md), one slot per tile. */
+const TILE_W = 256;
+const TILE_H = 32;
+const TILE_SLOTS = 4;
+const TILE_FILE = 'money-tiles.webp';
 
 const b64of = (page, key, q) =>
   page.evaluate(
@@ -159,13 +166,29 @@ try {
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(resolve(OUT_DIR, 'money.webp'), sheet);
-  const tiles = {};
-  for (const fr of frames.filter((f) => f.tile)) {
-    const buf = Buffer.from(await b64of(page, fr.key, QUALITY), 'base64');
-    const file = `money-tile-${fr.name}.webp`;
-    writeFileSync(resolve(OUT_DIR, file), buf);
-    tiles[fr.name] = { file, w: fr.sw, h: fr.sh, bytes: buf.length };
-  }
+  const tileFrames = frames.filter((f) => f.tile);
+  if (tileFrames.length > TILE_SLOTS) throw new Error(`money: ${tileFrames.length} tiles do not fit ${TILE_SLOTS} slots`);
+  const strip = Buffer.from(
+    await page.evaluate(
+      async ({ keys, w, h, slots, q }) => {
+        const c = document.createElement('canvas');
+        c.width = w * slots;
+        c.height = h;
+        const g = c.getContext('2d');
+        g.imageSmoothingQuality = 'high';
+        keys.forEach((k, i) => g.drawImage(window.__fx.get(k), i * w, 0, w, h));
+        const blob = await new Promise((res) => c.toBlob(res, 'image/webp', q));
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        let s = '';
+        for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+        return btoa(s);
+      },
+      { keys: tileFrames.map((f) => f.key), w: TILE_W, h: TILE_H, slots: TILE_SLOTS, q: QUALITY },
+    ),
+    'base64',
+  );
+  writeFileSync(resolve(OUT_DIR, TILE_FILE), strip);
+  const tiles = Object.fromEntries(tileFrames.map((fr, slot) => [fr.name, { file: TILE_FILE, slot, slots: TILE_SLOTS, w: TILE_W, h: TILE_H, bytes: slot ? 0 : strip.length }]));
   const jsonFrames = {};
   const anims = {};
   for (const s of SPRITES) {
@@ -197,9 +220,9 @@ try {
     `export const MONEY_ANIMS: Record<MoneyAnimName, { n: number; fps: number; w: number; h: number; k: number; fixedBox: boolean }> = {\n` +
     SPRITES.map((s) => `  ${s.name}: { n: ${s.n}, fps: ${s.fps}, w: ${s.w}, h: ${s.h}, k: ${s.k ?? 1}, fixedBox: ${!!s.fixedBox} },`).join('\n') +
     `\n};\n\n` +
-    `/** Standalone repeatable tiles (wallet coin columns): name -> path and raster size. */\n` +
-    `export const MONEY_TILES: Record<string, { file: string; w: number; h: number }> = {\n` +
-    Object.entries(tiles).map(([n, t]) => `  ${n}: { file: 'fx/${t.file}', w: ${t.w}, h: ${t.h} },`).join('\n') +
+    `/** Repeatable tiles (wallet coin columns): one strip of \`slots\` side by side, each w × h; name -> its slot. */\n` +
+    `export const MONEY_TILES: Record<string, { file: string; slot: number; slots: number; w: number; h: number }> = {\n` +
+    Object.entries(tiles).map(([n, t]) => `  ${n}: { file: 'fx/${t.file}', slot: ${t.slot}, slots: ${t.slots}, w: ${t.w}, h: ${t.h} },`).join('\n') +
     `\n};\n`;
   writeFileSync(resolve(ROOT, 'src/content/fx/money-manifest.ts'), manifest);
 
@@ -209,7 +232,7 @@ try {
   const used = frames.reduce((s, f) => s + f.box.w * f.box.h, 0);
   console.log(`money atlas: ${SPRITES.length} animations, ${frames.length} frames, DPR ${DPR}, q${QUALITY}`);
   console.log(`  money.webp  ${W}x${H}  ${kb(sheet.length)}  fill ${((used / (W * H)) * 100).toFixed(0)}%`);
-  console.log(`  money.json  ${kb(jsonBytes)} · tiles ${Object.keys(tiles).length} files ${kb(tileBytes)}`);
+  console.log(`  money.json  ${kb(jsonBytes)} · tiles ${Object.keys(tiles).length} in ${TILE_FILE} ${TILE_W * TILE_SLOTS}x${TILE_H} ${kb(tileBytes)}`);
   console.log(`  total ${kb(sheet.length + jsonBytes + tileBytes)}`);
 
   if (!args.has('--no-sheet')) {
@@ -253,14 +276,15 @@ try {
         let x = 10;
         for (const m of ['gold', 'silver', 'bronze']) {
           const img = new Image();
-          img.src = tileData[m];
+          img.src = tileData;
           await img.decode();
           const t = tiles[`coin_slice_${m}`];
+          // A slot is drawn at the old 80 × 12 nominal size (the strip's slots are resampled to power-of-two).
           for (const nCoins of [1, 5, 15]) {
-            for (let i = 0; i < nCoins; i++) g.drawImage(img, x, y + 220 - (i + 1) * (t.h / 2) * 1.2, (t.w / 2) * 1.2, (t.h / 2) * 1.2);
+            for (let i = 0; i < nCoins; i++) g.drawImage(img, t.slot * t.w, 0, t.w, t.h, x, y + 220 - (i + 1) * 12 * 1.2, 80 * 1.2, 12 * 1.2);
             const top = anims[`coin_top_${m}`];
             const f = frames[`coin_top_${m}/0`];
-            g.drawImage(src, f.x, f.y, f.w, f.h, x, y + 220 - nCoins * (t.h / 2) * 1.2 - (f.h / top.scale) * 0.6, (f.w / top.scale) * 1.2, (f.h / top.scale) * 1.2);
+            g.drawImage(src, f.x, f.y, f.w, f.h, x, y + 220 - nCoins * 12 * 1.2 - (f.h / top.scale) * 0.6, (f.w / top.scale) * 1.2, (f.h / top.scale) * 1.2);
             x += 70;
           }
           x += 30;
@@ -271,9 +295,7 @@ try {
         anims,
         frames: jsonFrames,
         tiles,
-        tileData: Object.fromEntries(
-          ['gold', 'silver', 'bronze'].map((m) => [m, 'data:image/webp;base64,' + readFileSync(resolve(OUT_DIR, tiles[`coin_slice_${m}`].file)).toString('base64')]),
-        ),
+        tileData: 'data:image/webp;base64,' + readFileSync(resolve(OUT_DIR, TILE_FILE)).toString('base64'),
       },
     ).catch((e) => (console.warn('contact sheet failed:', e.message), null));
     if (png) {

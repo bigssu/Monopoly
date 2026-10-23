@@ -2,7 +2,9 @@
  * Dealer voice playback (docs/superpowers/specs/2026-10-04-dealer-voice-design.md): lazily fetches
  * and decodes `voice/<id>.ogg` (Opus), keeps a small cache, plays one line at a time through the
  * shared audio graph (synth.ts `voiceOut`) and ducks the sound effects while it speaks.
+ * Each decoded line also yields its mouth track (dealer/cadence.ts) for lip sync.
  */
+import { mouthLevels } from '@/ui/dealer/cadence';
 interface VoiceHost {
   /** Shared context + output node, or null when sound is off / not unlocked yet. */
   voiceOut(): { ctx: AudioContext; node: AudioNode } | null;
@@ -18,6 +20,7 @@ export function installVoiceHost(h: VoiceHost): void {
 const CACHE_MAX = 12;
 const cache = new Map<string, Promise<AudioBuffer | null>>();
 let playing: AudioBufferSourceNode | null = null;
+const mouths = new WeakMap<AudioBuffer, Uint8Array>();
 /**
  * Request generation: bumped by every play and stop. A line whose file finishes loading after a
  * newer request (or a stop) is dropped instead of cutting in without its bubble.
@@ -42,11 +45,12 @@ function load(ctx: AudioContext, id: string): Promise<AudioBuffer | null> {
 }
 
 /**
- * Play `voice/<id>.ogg` (`id` may carry a folder: `en/<line id>`); resolves with its duration in ms once it has *started*, or null when it cannot
- * play (sound off, locked context, missing/undecodable file, or superseded while loading).
- * `onEnd` fires when it finishes or is stopped.
+ * Play `voice/<id>.ogg` (`id` may carry a folder: `en/<line id>`) `delayMs` from now; resolves once it is
+ * scheduled with its duration (ms), the moment it starts (`performance.now()` time) and its mouth
+ * levels (1/30 s frames), or null when it cannot play (sound off, locked context, missing/undecodable
+ * file, or superseded while loading). `onEnd` fires when it finishes or is stopped.
  */
-export async function playVoice(id: string, onEnd: () => void): Promise<number | null> {
+export async function playVoice(id: string, onEnd: () => void, delayMs = 0): Promise<{ ms: number; startAt: number; mouth: Uint8Array } | null> {
   const out = host?.voiceOut();
   if (!out) return null;
   const mine = ++generation;
@@ -66,8 +70,10 @@ export async function playVoice(id: string, onEnd: () => void): Promise<number |
     src.disconnect();
     onEnd();
   };
-  src.start();
-  return Math.round(buf.duration * 1000);
+  src.start(out.ctx.currentTime + delayMs / 1000);
+  let mouth = mouths.get(buf);
+  if (!mouth) mouths.set(buf, (mouth = mouthLevels(buf.getChannelData(0), buf.sampleRate)));
+  return { ms: Math.round(buf.duration * 1000), startAt: performance.now() + delayMs, mouth };
 }
 
 function stopSource(): void {

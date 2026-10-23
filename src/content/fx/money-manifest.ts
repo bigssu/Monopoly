@@ -43,9 +43,9 @@ export const MONEY_ANIMS: Record<MoneyAnimName, { n: number; fps: number; w: num
   dust_puff: { n: 8, fps: 20, w: 96, h: 96, k: 0.34, fixedBox: false },
 };
 
-/** Standalone repeatable tiles (wallet coin columns): name -> path and raster size. */
-export const MONEY_TILES: Record<string, { file: string; w: number; h: number }> = {
-  coin_slice_gold: { file: 'fx/money-tile-coin_slice_gold.webp', w: 160, h: 24 },
-  coin_slice_silver: { file: 'fx/money-tile-coin_slice_silver.webp', w: 160, h: 24 },
-  coin_slice_bronze: { file: 'fx/money-tile-coin_slice_bronze.webp', w: 160, h: 24 },
+/** Repeatable tiles (wallet coin columns): one strip of `slots` side by side, each w × h; name -> its slot. */
+export const MONEY_TILES: Record<string, { file: string; slot: number; slots: number; w: number; h: number }> = {
+  coin_slice_gold: { file: 'fx/money-tiles.webp', slot: 0, slots: 4, w: 256, h: 32 },
+  coin_slice_silver: { file: 'fx/money-tiles.webp', slot: 1, slots: 4, w: 256, h: 32 },
+  coin_slice_bronze: { file: 'fx/money-tiles.webp', slot: 2, slots: 4, w: 256, h: 32 },
 };

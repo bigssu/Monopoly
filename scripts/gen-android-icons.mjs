@@ -160,8 +160,11 @@ function assertSplashSafeZone(png) {
 if (!process.argv.includes('--no-android')) {
   if (!fs.existsSync(res)) throw new Error('android/ missing - run `npx cap add android` first');
   if (!splashOnly) {
-    const fg = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
-    const lg = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+    // Power-of-two sizes only (owner rule, docs/research/13-image-budget.md): each density gets the power of
+    // two at or below its Android size (108dp × density: 108/162/216/324/432, legacy 48dp: 48/72/96/144/192);
+    // the launcher scales it up to the bucket, so the larger densities are a little softer.
+    const fg = { mdpi: 64, hdpi: 128, xhdpi: 128, xxhdpi: 256, xxxhdpi: 256 };
+    const lg = { mdpi: 32, hdpi: 64, xhdpi: 64, xxhdpi: 128, xxxhdpi: 128 };
     for (const d of DENS) {
       write(path.join(res, `mipmap-${d}`, 'ic_launcher_foreground.png'), await foreground(fg[d]));
       write(path.join(res, `mipmap-${d}`, 'ic_launcher.png'), await legacy(lg[d], false));

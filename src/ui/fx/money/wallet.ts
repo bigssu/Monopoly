@@ -13,7 +13,7 @@
  */
 import type { Seat } from '@/engine';
 import { fmtMoney } from '@/i18n';
-import { atlasReady, frameBox, sliceUrl, topAnim } from './atlas';
+import { atlasReady, frameBox, sliceBg, topAnim } from './atlas';
 import type { Pt } from './coins';
 import { f } from './clock';
 import { columnOverflows, countMs, METALS, pileOf, pileValue, planMerge, visibleCoins, type Break, type Flight, type Merge, type Metal, type Pile } from './denom';
@@ -149,8 +149,10 @@ export class Wallet {
       c.left = `${g.pad + i * (g.coin + g.gap)}px`;
       c.bottom = `${g.label + g.pad * 0.6}px`;
       c.width = `${g.coin}px`;
-      c.backgroundImage = sliceUrl(m);
-      c.backgroundSize = `${g.coin}px ${g.slice}px`;
+      const bg = sliceBg(m, g.coin, g.slice);
+      c.backgroundImage = bg.image;
+      c.backgroundSize = bg.size;
+      c.backgroundPositionX = bg.x;
       c.setProperty('--cap-h', `${g.cap}px`);
       const b = atlasReady() ? frameBox(topAnim(m), 0, g.coin / 40) : null;
       if (b) {

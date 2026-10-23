@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Dealer sprites (docs/superpowers/specs/2026-10-04-dealer-voice-design.md): Gemini image edits of
- * the launcher boy on flat magenta → ffmpeg colour key → 320 px WebP in public/dealer/.
+ * the launcher boy on flat magenta → ffmpeg colour key → 320 px WebP sources in scripts/dealer/sprites/,
+ * packed for the app by scripts/dealer/pack-atlas.py (public/dealer/atlas.webp).
  *
  *   GOOGLE_API_KEY=… node scripts/dealer/gen-sprites.mjs [expr …] [--force]
  *
@@ -15,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CACHE = join(ROOT, 'scripts', 'dealer', '.cache', 'sprites');
-const OUT = join(ROOT, 'public', 'dealer');
+const OUT = join(ROOT, 'scripts', 'dealer', 'sprites');
 const REF = join(ROOT, 'docs', 'assets', 'play-icon-512.png');
 const MODEL = 'gemini-3-pro-image';
 

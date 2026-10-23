@@ -104,3 +104,36 @@ test('advanced rules: the double-up bonus completes from real clicks', async ({ 
   }
   await expect.poll(() => page.evaluate(() => window.__lotAndRoll!.getState()!.phase.kind), { timeout: 20_000 }).not.toBe('doubleUp');
 });
+
+test('the title screen switches Korean ↔ English in one tap, and the dealer follows', async ({ page }) => {
+  await boot(page, { lang: 'ko' });
+  const sw = page.locator('.title-lang');
+  await expect(sw).toBeVisible();
+  await sw.getByRole('radio', { name: 'English' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('.title-word')).toHaveText(/[A-Za-z]/);
+  await page.locator('.title-lang').getByRole('radio', { name: '한국어' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+});
+
+test('a voiced line: the body takes a pose and the mouth moves with the voice (dealer/acting.ts, cadence.ts)', async ({ page }) => {
+  // Sample the sprite and the body's animation from page load (the greeting's take is over in ~0.7 s).
+  await page.addInitScript(() => {
+    const w = window as unknown as { __dealer: { sprites: string[]; moved: boolean } };
+    w.__dealer = { sprites: [], moved: false };
+    const tick = () => {
+      const img = document.querySelector<HTMLElement>('.dealer-img');
+      const body = document.querySelector<HTMLElement>('.dealer-body');
+      if (img?.dataset.sprite) w.__dealer.sprites.push(img.dataset.sprite);
+      if (body?.getAnimations().length) w.__dealer.moved = true;
+    };
+    setInterval(tick, 30);
+  });
+  await boot(page, { sound: true });
+  await startGame(page);
+  await expect(page.locator('.dealer-bubble.is-in')).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __dealer: { sprites: string[] } }).__dealer.sprites.some((s) => s.startsWith('talk-'))), { timeout: 10_000 })
+    .toBe(true);
+  expect(await page.evaluate(() => (window as unknown as { __dealer: { moved: boolean } }).__dealer.moved)).toBe(true);
+});

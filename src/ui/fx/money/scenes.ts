@@ -1139,7 +1139,7 @@ interface SellArgs extends SceneOpts {
 
 /**
  * The sad dealer sprite in the sell hero (fractions of the hero box): big, lower left, its cut-off
- * waist faded out. Its eyes' lower lids, measured on public/dealer/sad.webp (320 × 320: dark pupil
+ * waist faded out. Its eyes' lower lids, measured on scripts/dealer/sprites/sad.webp (320 × 320: dark pupil
  * pixels, viewer's left eye ≈ x 38–43 %, y 34–40 %; right eye ≈ x 53–57 %, y 32–38 %), as fractions
  * of the sprite: the tears are placed in the sprite's own box, so they sit on the face at every
  * render tier and hero scale. He sobs with the baked frames of public/dealer/sad-sob.webp (`sob`):
@@ -1182,15 +1182,22 @@ function sellHero(x: Ctx, a: SellArgs): string {
     `<div class="mh-sell" style="--pc:${a.playerColor}">` +
     `<div class="mh-sold n${n}">${cards}<div class="mh-bankb">${bank()}</div></div>` +
     `<div class="mh-crier" style="left:${CRIER.left * 100}%;top:${CRIER.top * 100}%;width:${CRIER.size * 100}%;height:${CRIER.size * 100}%">` +
-    `<div class="mh-crier-sob" style="background-image:url(${SOB_SHEET});background-size:${SOB.cells * 100}% 100%;background-position:${sobAt(0)}"></div>` +
+    `<div class="mh-crier-sob" style="background-image:url(${SOB_SHEET});background-size:${sobSize()};background-position:${sobAt(0)}"></div>` +
     `<div class="mh-face" style="transform:${faceAt(0)}">${streams}${tears}</div></div>` +
     `</div>`
   );
 }
 
-/** The sheet cell of a sob phase (background-size cells × 100 %: cell p sits at p / (cells − 1)). */
-function sobAt(p: number): string {
-  return `${((p / (SOB.cells - 1)) * 100).toFixed(1)}% 0`;
+/** The sheet scaled so one tile fills the box (sheet / tile × 100 % on each axis). */
+function sobSize(): string {
+  const k = (n: number): string => `${((n / SOB.tile) * 100).toFixed(4)}%`;
+  return `${k(SOB.sheetW)} ${k(SOB.sheetH)}`;
+}
+
+/** The tile of a sob phase: column p % cols, row p ÷ cols; a background-position % is offset / (sheet − tile). */
+export function sobAt(p: number): string {
+  const at = (n: number, sheet: number): string => `${((n * SOB.tile * 100) / (sheet - SOB.tile)).toFixed(4)}%`;
+  return `${at(p % SOB.cols, SOB.sheetW)} ${at(Math.floor(p / SOB.cols), SOB.sheetH)}`;
 }
 
 /** The tears ride the head: its rigid move in that phase, as a % of the sprite box (= of the face box). */

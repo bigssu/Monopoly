@@ -2,14 +2,15 @@
  * Title screen: animated emblem + wordmark, new game / continue / how to play / settings.
  */
 import { icon, LOGO_SVG } from '@/content/icons';
-import { onLangChange, t } from '@/i18n';
+import { getLang, onLangChange, t, type Lang } from '@/i18n';
 import { registerScreen } from '@/ui/router';
 import { button, h, onTap } from '@/ui/shell/dom';
 import { iconEl } from '@/ui/game/util';
 import { confirmDialog, toast } from '@/ui/shell/dialog';
 import { go, setBackTarget } from '@/ui/shell/nav';
 import { clearSavedGame, loadSavedGame, savedGameSummary } from '@/ui/shell/persist';
-import { tokenAvatar } from '@/ui/shell/widgets';
+import { prefs } from '@/ui/shell/prefs';
+import { segmented, tokenAvatar } from '@/ui/shell/widgets';
 import { version } from '../../../package.json';
 
 /** Drifting background pieces (icon id, x%, y%, size em, duration s, delay s, rotation deg). */
@@ -140,6 +141,16 @@ function render(root: HTMLElement): void {
     bg,
     h('div', { class: 'title-main safe-pad' }, hero, menu),
     h('div', { class: 'title-foot num' }, `v${version}`),
+    // One tap between Korean and English (text and dealer voice); the whole screen re-renders on change.
+    segmented<Lang>(
+      [
+        { value: 'ko', label: '한', aria: t('lang.ko') },
+        { value: 'en', label: 'EN', aria: t('lang.en') },
+      ],
+      getLang(),
+      (v) => prefs.set({ lang: v }),
+      { label: t('settings.language'), cls: 'title-lang', focusKey: 'title-lang' },
+    ),
   );
   root.append(screen);
 }

@@ -15,7 +15,7 @@ function fakeContext() {
   const param = () => ({ value: 0, setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() });
   return {
     currentTime: 0,
-    decodeAudioData: async (b: ArrayBuffer) => ({ duration: 1.5, tag: new TextDecoder().decode(b) }),
+    decodeAudioData: async (b: ArrayBuffer) => ({ duration: 1.5, sampleRate: 24000, getChannelData: () => new Float32Array(36000), tag: new TextDecoder().decode(b) }),
     createBufferSource: () => {
       const node = {
         buffer: null as { tag: string } | null,
@@ -57,7 +57,7 @@ describe('voice', () => {
     stopVoice(); // the dealer interrupts with a higher-priority line…
     const b = playVoice('b', () => {});
     fetches.get('voice/b.ogg')!(true);
-    expect(await b).toBe(1500);
+    expect((await b)?.ms).toBe(1500);
     fetches.get('voice/a.ogg')!(true); // …and the old line arrives late
     expect(await a).toBeNull();
     expect(started).toEqual(['voice/b.ogg']);

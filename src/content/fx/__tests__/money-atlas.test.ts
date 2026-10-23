@@ -51,15 +51,20 @@ describe('money atlas (separate from the canvas-VFX atlases)', () => {
       }
   });
 
-  it('wallet tiles exist at their full baked box', () => {
+  it('wallet tiles share one power-of-two strip, a slot each', () => {
     const marked = MONEY_SPRITES.filter((d) => d.tile).map((d) => d.name).sort();
     expect(Object.keys(json.tiles).sort()).toEqual(marked);
+    const slots = new Set<number>();
     for (const n of marked) {
-      const t = json.tiles[n]!;
-      const buf = readFileSync(resolve(PUBLIC, 'fx', t.file));
-      expect(webpSize(buf), n).toEqual({ w: t.w, h: t.h });
-      expect(MONEY_TILES[n]!.file).toBe(`fx/${t.file}`);
+      const t = MONEY_TILES[n]!;
+      const buf = readFileSync(resolve(PUBLIC, t.file));
+      expect(webpSize(buf), n).toEqual({ w: t.w * t.slots, h: t.h });
+      for (const v of [t.w * t.slots, t.h]) expect(v & (v - 1), `${n}: ${v} is a power of two`).toBe(0);
+      expect(t.slot).toBeLessThan(t.slots);
+      slots.add(t.slot);
+      expect(t.file).toBe(`fx/${json.tiles[n]!.file}`);
     }
+    expect(slots.size).toBe(marked.length);
   });
 
   it('all FX bitmaps (VFX atlases + money atlas + tiles) stay within 500 KB', () => {

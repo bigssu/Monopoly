@@ -6,7 +6,8 @@
  * only changes `background-position`. It is separate from the canvas-VFX atlases: only the money
  * stage loads it.
  *
- * Wallet columns use the standalone repeatable tiles (`MONEY_TILES`, `background-repeat: repeat-y`).
+ * Wallet columns use the repeatable tiles (`MONEY_TILES`, `background-repeat: repeat-y`): one strip, a slot per
+ * metal side by side; the column shows its slot (`sliceBg`).
  * `loadMoneyAtlas()` fetches money.json once; until it resolves, elements fall back to plain CSS
  * (coloured discs), so nothing waits on the network.
  */
@@ -147,9 +148,14 @@ export function animSize(anim: MoneyAnimName): { w: number; h: number; n: number
   return { w: a.w, h: a.h, n: a.n };
 }
 
-/** URL of a wallet column's repeatable coin slice. */
-export function sliceUrl(metal: Metal): string {
-  return `url("${MONEY_TILES[`coin_slice_${metal}`]?.file ?? ''}")`;
+/**
+ * A wallet column's repeatable coin slice, `coin` × `slice` px: the strip's image, scaled so one slot is the
+ * column's width, shifted to the metal's slot (repeat-y repeats the strip's height, a slot's own column).
+ */
+export function sliceBg(metal: Metal, coin: number, slice: number): { image: string; size: string; x: string } {
+  const t = MONEY_TILES[`coin_slice_${metal}`];
+  if (!t) return { image: 'none', size: 'auto', x: '50%' };
+  return { image: `url("${t.file}")`, size: `${coin * t.slots}px ${slice}px`, x: `${-t.slot * coin}px` };
 }
 
 export const coinAnim = (m: Metal): MoneyAnimName => `coin_spin_${m}`;

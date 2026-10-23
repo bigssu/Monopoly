@@ -6,7 +6,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { chooseAction, createGame, defaultPlayers, defaultSettings, type GameEvent, type GameState } from '@/engine';
-import { DEALER_LINES, DEALER_SPRITES, SITUATIONS, VOICE_PENDING } from '../lines';
+import { actFor, DEALER_LINES, DEALER_SPRITES, SITUATIONS, VOICE_PENDING } from '../lines';
 import { DealerDirector, newMemo, pickLine, situationForEvent, situationForPrompt } from '../director';
 
 const PUB = join(__dirname, '..', '..', '..', '..', 'public');
@@ -46,7 +46,16 @@ describe('dealer catalog', () => {
   it.each(LANGS)('every shipped $lang recording says the line as it is written now (reworded lines go to VOICE_PENDING)', ({ lang, texts: f }) => {
     // A line reworded without re-recording would play other words.
     const texts = readTexts(f);
-    for (const l of DEALER_LINES) if (l.voice) expect(texts[l.id], `${l.id}: reworded? add it to VOICE_PENDING`).toBe(l[lang]);
+    for (const l of DEALER_LINES) if (l.voice) expect(texts[l.id], `${l.id}: reworded or redirected? add it to VOICE_PENDING`).toBe(l.say[lang]);
+  });
+
+  it('directs every situation, and the bubble never shows an audio tag', () => {
+    for (const s of Object.keys(SITUATIONS)) expect(actFor(s), s).toBeDefined();
+    for (const l of DEALER_LINES) {
+      expect(`${l.ko} ${l.en}`, l.id).not.toMatch(/[[\]]/);
+      expect(l.say.ko.startsWith('['), l.id).toBe(true);
+      expect(l.say.en.endsWith(l.en.slice(-4)), l.id).toBe(true);
+    }
   });
 
   it('uses no name from the reference games in what the dealer says (docs/research/02 §2)', () => {
@@ -57,7 +66,13 @@ describe('dealer catalog', () => {
   it('ships every sprite, including each expression a line uses', () => {
     const used = new Set(Object.values(SITUATIONS).map((s) => s.expr));
     for (const e of used) expect(DEALER_SPRITES).toContain(e);
-    for (const n of DEALER_SPRITES) expect(existsSync(join(PUB, 'dealer', `${n}.webp`)), n).toBe(true);
+    // Sources (scripts/dealer/sprites) and the one atlas the app loads: 4 × 4 cells of 256 px.
+    for (const n of DEALER_SPRITES) expect(existsSync(join(PUB, '..', 'scripts', 'dealer', 'sprites', `${n}.webp`)), n).toBe(true);
+    expect(DEALER_SPRITES.length).toBeLessThanOrEqual(16);
+    const atlas = readFileSync(join(PUB, 'dealer', 'atlas.webp'));
+    // VP8X canvas size: 24-bit width-1 / height-1 at bytes 24 and 27.
+    expect(atlas.readUIntLE(24, 3) + 1).toBe(1024);
+    expect(atlas.readUIntLE(27, 3) + 1).toBe(1024);
   });
 });
 

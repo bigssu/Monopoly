@@ -1,7 +1,7 @@
 {
 "v":1,"dpr":2,
 "atlas":{"file":"money.webp","w":1024,"h":512,"bytes":74046},
-"tiles":{"coin_slice_gold":{"file":"money-tile-coin_slice_gold.webp","w":160,"h":24,"bytes":1302},"coin_slice_silver":{"file":"money-tile-coin_slice_silver.webp","w":160,"h":24,"bytes":1184},"coin_slice_bronze":{"file":"money-tile-coin_slice_bronze.webp","w":160,"h":24,"bytes":1298}},
+"tiles":{"coin_slice_gold":{"file":"money-tiles.webp","slot":0,"slots":4,"w":256,"h":32,"bytes":3090},"coin_slice_silver":{"file":"money-tiles.webp","slot":1,"slots":4,"w":256,"h":32,"bytes":0},"coin_slice_bronze":{"file":"money-tiles.webp","slot":2,"slots":4,"w":256,"h":32,"bytes":0}},
 "anims":{
 "coin_spin_gold":{"n":8,"frames":["coin_spin_gold/0","coin_spin_gold/1","coin_spin_gold/2","coin_spin_gold/3","coin_spin_gold/4","coin_spin_gold/5","coin_spin_gold/6","coin_spin_gold/7"],"fps":20,"loop":true,"w":48,"h":48,"k":1.2,"scale":2.4,"fixedBox":true},
 "coin_spin_silver":{"n":8,"frames":["coin_spin_silver/0","coin_spin_silver/1","coin_spin_silver/2","coin_spin_silver/3","coin_spin_silver/4","coin_spin_silver/5","coin_spin_silver/6","coin_spin_silver/7"],"fps":20,"loop":true,"w":48,"h":48,"k":1.2,"scale":2.4,"fixedBox":true},
