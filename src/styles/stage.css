@@ -101,6 +101,10 @@
   align-items: center;
   justify-content: center;
   gap: calc(var(--u) * 0.3);
+  /* The resting dice sit 1.6u (~50 px at 1600 x 1000) right of centre, clear of the dealer standing
+     on the left (owner review 2026-10-24). Layout, not a transform: the throw measures the pair's
+     resting place from offsetLeft (Stage.measureArena). */
+  padding-left: calc(var(--u) * 3.2);
   /* No transition: animating the shrink promoted the dice area to a layer (and repainted it on
      promotion and demotion) at every prompt; an instant transform change costs no paint. */
   pointer-events: none;
