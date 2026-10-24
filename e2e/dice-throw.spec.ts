@@ -597,7 +597,10 @@ test.describe('dice throw', () => {
     // The fast one reaches the screen's right edge (within 10 %); the slow one stays short.
     expect(fast.reach, 'reaches the screen edge').toBeGreaterThan(VIEW.w * 0.9);
     expect(fast.reach, 'never off the screen').toBeLessThanOrEqual(VIEW.w);
-    expect(slow.reach, 'the slow one stays short').toBeLessThan(VIEW.w * 0.8);
+    // The slow one stays short: it never meets the wall, and its right edge stays well inside the
+    // screen (the resting dice sit 1.6u right of the stage's centre since 2026-10-24, ~3 % of it).
+    expect(slow.rec.clacks, 'the slow one never meets the wall').toBe(0);
+    expect(slow.reach, 'the slow one stays short').toBeLessThan(VIEW.w * 0.85);
     expect(fast.rec.clacks, 'off the wall').toBeGreaterThanOrEqual(1);
     expect(fast.rec.clacks).toBeLessThanOrEqual(4);
     await page.evaluate(() => window.__lotAndRoll!.whenIdle());
